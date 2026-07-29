@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 
 from app.core.course.segment_library import (
+    EVENT_KM_DECIMALS,
+    _polyline_length_km,
     build_course_segments_from_library,
     build_flow_csv_from_segments,
+    concat_recipe_coordinates,
     export_library_to_course,
     load_leg_library,
     load_manifest,
@@ -123,8 +126,10 @@ def test_build_course_segments_leg_reuse(manifest, legs_by_id):
     assert set(leg05[0]["events"]) == {"full", "half", "10k"}
     assert leg05[1]["events"] == ["full"]
     assert leg05[0]["full_to_km"] < leg05[1]["full_from_km"]
-    length = float(leg05[0]["length_km"])
-    assert leg05[0]["half_to_km"] == pytest.approx(leg05[0]["half_from_km"] + length, abs=0.05)
+    half_len = float(leg05[0]["half_to_km"]) - float(leg05[0]["half_from_km"])
+    assert half_len == pytest.approx(
+        _polyline_length_km(legs["05"]["coordinates"]), abs=0.02
+    )
     assert leg05[1]["half_from_km"] == 0.0
     assert leg05[1]["half_to_km"] == 0.0
 
@@ -153,7 +158,63 @@ def test_build_course_segments_follows_recipe_order_not_manifest_order(manifest,
     assert full_leg_order == ["01", "02", "03", "16", "04"]
     leg16 = next(s for s in segments if s["leg_id"] == "16")
     assert leg16["seg_id"] == "S4"
-    assert leg16["full_from_km"] == pytest.approx(9.87, abs=0.05)
-    assert leg16["full_to_km"] == pytest.approx(15.44, abs=0.05)
+    # Event kms follow stitched polyline, not overridden length_km bookkeeping.
+    traced = concat_recipe_coordinates(["01", "02", "03"], legs)
+    expect_from = round(_polyline_length_km(traced), EVENT_KM_DECIMALS)
+    traced_to_16 = concat_recipe_coordinates(["01", "02", "03", "16"], legs)
+    expect_to = round(_polyline_length_km(traced_to_16), EVENT_KM_DECIMALS)
+    assert leg16["full_from_km"] == pytest.approx(expect_from, abs=1e-6)
+    assert leg16["full_to_km"] == pytest.approx(expect_to, abs=1e-6)
     leg04 = next(s for s in segments if s["leg_id"] == "04")
-    assert leg04["full_from_km"] == pytest.approx(15.44, abs=0.05)
+    assert leg04["full_from_km"] == pytest.approx(expect_to, abs=1e-6)
+
+
+def test_event_kms_follow_stitched_polyline_not_sum_of_rounded_lengths():
+    """#786: boundary kms match Authority B even when rounded length_km sums drift."""
+    leg_a = {
+        "id": "A",
+        "coordinates": [
+            [-75.70, 45.40],
+            [-75.69, 45.40],
+            [-75.68, 45.40],
+        ],
+    }
+    leg_b = {
+        "id": "B",
+        "coordinates": [
+            [-75.68, 45.40],
+            [-75.67, 45.40],
+            [-75.66, 45.40],
+        ],
+    }
+    true_a = _polyline_length_km(leg_a["coordinates"])
+    true_b = _polyline_length_km(leg_b["coordinates"])
+    # Force bookkeeping drift: claim lengths that disagree with geometry.
+    leg_a["length_km"] = round(true_a, 2) + 0.05
+    leg_b["length_km"] = round(true_b, 2) + 0.05
+    bookkept_end = round(leg_a["length_km"] + leg_b["length_km"], 2)
+    traced_end = round(
+        _polyline_length_km(
+            concat_recipe_coordinates(["A", "B"], {"A": leg_a, "B": leg_b})
+        ),
+        EVENT_KM_DECIMALS,
+    )
+    assert abs(bookkept_end - traced_end) >= 0.05
+
+    manifest = {
+        "legs": [{"id": "A"}, {"id": "B"}],
+        "recipes": {"full": ["A", "B"], "half": [], "10k": []},
+    }
+    segments = build_course_segments_from_library(
+        manifest, {"A": leg_a, "B": leg_b}, event_ids=["full"]
+    )
+    assert len(segments) == 2
+    assert segments[0]["full_from_km"] == 0.0
+    assert segments[0]["full_to_km"] == pytest.approx(
+        round(true_a, EVENT_KM_DECIMALS), abs=1e-6
+    )
+    assert segments[1]["full_from_km"] == pytest.approx(
+        segments[0]["full_to_km"], abs=1e-6
+    )
+    assert segments[1]["full_to_km"] == pytest.approx(traced_end, abs=1e-6)
+    assert segments[1]["full_to_km"] != bookkept_end

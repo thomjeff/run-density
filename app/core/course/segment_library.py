@@ -26,6 +26,8 @@ from app.utils.constants import COURSE_EVENT_IDS
 GPX_NS = "http://www.topografix.com/GPX/1/1"
 EARTH_R = 6371000.0
 STITCH_TOLERANCE_M = 80.0
+# Along-course km on stitched event polylines (1 m); matches export formatting.
+EVENT_KM_DECIMALS = 3
 
 
 def normalize_library_manifest(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +72,18 @@ def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
         * math.sin(d_lon / 2) ** 2
     )
     return EARTH_R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _polyline_length_km(coords: Sequence[Sequence[float]]) -> float:
+    """Haversine length of [[lon, lat], ...] in kilometres."""
+    if len(coords) < 2:
+        return 0.0
+    total_m = 0.0
+    for i in range(1, len(coords)):
+        lon1, lat1 = float(coords[i - 1][0]), float(coords[i - 1][1])
+        lon2, lat2 = float(coords[i][0]), float(coords[i][1])
+        total_m += _haversine_m(lon1, lat1, lon2, lat2)
+    return total_m / 1000.0
 
 
 def load_manifest(path: Path) -> Dict[str, Any]:
@@ -285,24 +299,43 @@ def _build_event_occurrence_km(
     legs_by_id: Dict[str, Dict[str, Any]],
     event_ids: Sequence[str],
 ) -> Dict[str, Dict[LegOccurrence, Tuple[float, float]]]:
-    """Per-event km window for each (leg_id, 1-based occurrence) in that recipe."""
+    """
+    Per-event km window for each (leg_id, 1-based occurrence) in that recipe.
+
+    Distances are measured along the same stitched polyline used for event GPX
+    (``concat_recipe_coordinates``), not by summing per-leg ``length_km`` rounded
+    independently. That keeps ``from_km``/``to_km`` aligned with
+    ``slice_polyline_by_km`` in location reports (#786).
+    """
     result: Dict[str, Dict[LegOccurrence, Tuple[float, float]]] = {}
+    decimals = EVENT_KM_DECIMALS
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
         occ_counts: Dict[str, int] = {}
         cum = 0.0
+        prev_end: Optional[List[float]] = None
         event_map: Dict[LegOccurrence, Tuple[float, float]] = {}
         for raw_id in seq:
             cid = str(raw_id).strip()
             ch = legs_by_id.get(cid)
             if not ch:
                 continue
-            length = float(ch["length_km"])
+            part = ch.get("coordinates") or []
+            if len(part) < 2:
+                continue
             occ_counts[cid] = occ_counts.get(cid, 0) + 1
             occ = occ_counts[cid]
-            cum += length
-            event_map[(cid, occ)] = (round(cum - length, 2), round(cum, 2))
+            if prev_end is None:
+                contrib_km = _polyline_length_km(part)
+            else:
+                # Drop the join vertex, matching concat_recipe_coordinates.
+                contrib_km = _polyline_length_km([prev_end] + list(part[1:]))
+            from_km = round(cum, decimals)
+            cum += contrib_km
+            to_km = round(cum, decimals)
+            event_map[(cid, occ)] = (from_km, to_km)
+            prev_end = [float(part[-1][0]), float(part[-1][1])]
         result[eid.lower()] = event_map
     return result
 
@@ -458,10 +491,13 @@ def export_library_to_course(
     recipe_lengths: Dict[str, float] = {}
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
-        seq = recipes.get(key) or []
+        seq = [str(c).strip() for c in (recipes.get(key) or []) if str(c).strip() in legs_by_id]
+        if not seq:
+            recipe_lengths[eid] = 0.0
+            continue
         recipe_lengths[eid] = round(
-            sum(float(legs_by_id[c]["length_km"]) for c in seq if c in legs_by_id),
-            2,
+            _polyline_length_km(concat_recipe_coordinates(seq, legs_by_id)),
+            EVENT_KM_DECIMALS,
         )
 
     return {

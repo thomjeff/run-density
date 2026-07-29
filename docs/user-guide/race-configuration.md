@@ -267,4 +267,4 @@ No — keep each directional leg `overtake`/`uni` (or as its same-direction inte
 Both legs must appear in at least one recipe of events being analyzed, and the events' passes must overlap in time.
 
 **"A location at a turnaround gets odd first/last runner times."**
-Turn-point pins sit at segment boundaries and can be affected by small distance bookkeeping differences (see issue #786). Keep the pin physically accurate; do not nudge it to compensate.
+Turn-point pins sit at segment boundaries. Recipe event kms are reconciled to the stitched course GPX at apply/export (#786); keep the pin physically accurate and re-apply recipes if segments were built before that fix.

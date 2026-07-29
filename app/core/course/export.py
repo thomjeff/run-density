@@ -15,6 +15,8 @@ from app.utils.constants import COURSE_EVENT_IDS
 
 # GPX 1.1 namespace
 GPX_NS = "http://www.topografix.com/GPX/1/1"
+# Match segment_library EVENT_KM_DECIMALS (1 m along-course).
+KM_DECIMALS = 3
 
 
 def _event_id(e: Any) -> str:
@@ -41,11 +43,11 @@ def _segment_display_id(segment_index: int) -> str:
 
 
 def _format_km_pipeline(value: float) -> str:
-    """Format km like 2026_final segments.csv (0, 0.9 — not always two decimals)."""
-    v = round(float(value), 2)
+    """Format km for pipeline segments.csv (trim trailing zeros; up to 3 decimals)."""
+    v = round(float(value), KM_DECIMALS)
     if v == int(v):
         return str(int(v))
-    text = format(v, ".2f")
+    text = format(v, f".{KM_DECIMALS}f")
     return text.rstrip("0").rstrip(".")
 
 
@@ -110,8 +112,8 @@ def _segment_events_set(seg: Dict[str, Any], event_ids: List[str]) -> set:
 
 
 def _format_km(value: float) -> str:
-    """Format a distance value to exactly 2 decimal places for CSV output."""
-    return format(round(float(value), 2), ".2f")
+    """Format a distance value to fixed decimals for CSV output (1 m resolution)."""
+    return format(round(float(value), KM_DECIMALS), f".{KM_DECIMALS}f")
 
 
 def _stored_event_kms(
@@ -145,7 +147,7 @@ def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> L
     Recipe-built segments keep their stored per-event kms (recipe traversal order);
     other segments accumulate in list order.
     Returns list of dicts: result[i][eid] = (from_km, to_km) for segment i and event eid.
-    Accumulated values are rounded to 2 decimal places to avoid float drift.
+    Accumulated values are rounded to KM_DECIMALS to avoid float drift.
     """
     n = len(segments)
     result = [{} for _ in range(n)]
@@ -164,9 +166,9 @@ def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> L
                 continue
             from_km = float(seg.get("from_km") or 0)
             to_km = float(seg.get("to_km") or 0)
-            seg_len = round(to_km - from_km, 2)
-            from_accum = round(accumulated, 2)
-            to_accum = round(accumulated + seg_len, 2)
+            seg_len = round(to_km - from_km, KM_DECIMALS)
+            from_accum = round(accumulated, KM_DECIMALS)
+            to_accum = round(accumulated + seg_len, KM_DECIMALS)
             result[i][eid] = (from_accum, to_accum)
             accumulated = to_accum
     return result
@@ -186,8 +188,8 @@ def enrich_segments_event_distances(segments: List[Dict], event_ids: List[str] =
     for i, seg in enumerate(segments):
         for ei, eid in enumerate(event_ids_lower):
             from_km, to_km = distances[i].get(eid, (0.0, 0.0))
-            seg[f"{eid}_from_km"] = round(float(from_km), 2)
-            seg[f"{eid}_to_km"] = round(float(to_km), 2)
+            seg[f"{eid}_from_km"] = round(float(from_km), KM_DECIMALS)
+            seg[f"{eid}_to_km"] = round(float(to_km), KM_DECIMALS)
 
 
 def build_segments_csv(course: Dict[str, Any], fmt: str = "pipeline") -> str:
@@ -266,7 +268,7 @@ def build_segments_csv(course: Dict[str, Any], fmt: str = "pipeline") -> str:
             else:
                 ev_from, ev_to = event_distances[i].get(eid_lower, (0.0, 0.0))
                 event_km.extend([km_fmt(ev_from), km_fmt(ev_to)])
-        seg_len = round(to_km - from_km, 2)
+        seg_len = round(to_km - from_km, KM_DECIMALS)
         zero_km = km_fmt(0.0) if use_pipeline else _format_km(0.0)
         lengths = [km_fmt(seg_len) if eid.lower() in seg_events else zero_km for eid in event_ids]
         description = seg.get("description", "")

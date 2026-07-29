@@ -163,8 +163,10 @@
 ### UI Changes
 - **Loc Sheets removed from navigation**: one-pagers are linked from the Locations UI (route kept)
 
-### Known Issues
-- **#786**: segment km bookkeeping drifts from stitched course geometry (~100 m mid-course), which can still fail centerline projection for pins at turn points
+### Issue #786 — segment km vs stitched GPX
+- Per-event `from_km`/`to_km` are measured along the stitched recipe polyline (same geometry as event GPX), not sum-of-rounded per-leg `length_km`
+- Exported / enriched event kms use **3 decimals** (1 m)
+- Removes mid-course bookkeeping drift that broke turn-point location projection
 
 ## [v2.0.6] - 2026-01-12
 
