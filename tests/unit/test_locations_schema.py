@@ -66,8 +66,9 @@ def test_build_locations_csv_full_schema():
     csv_content = build_locations_csv(course, resource_codes=["fpf", "yssr", "awp", "vol"])
     reader = csv.DictReader(io.StringIO(csv_content))
     row = next(reader)
-    assert row["loc_id"] == "1"
-    assert row["location_key"] == "ABCDE"
+    assert row["pass_id"] == "1"
+    assert row["pass_key"] == "ABCDE"
+    assert row["loc_id"]  # human loc_id stamped
     assert row["notes"] == "Watch crossing"
     assert row["yssr_count"] == "2"
     assert row["fpf_count"] == "0"
@@ -88,7 +89,7 @@ def test_build_locations_csv_leg_loc_key_fallback():
     csv_content = build_locations_csv(course, resource_codes=["fpf"])
     reader = csv.DictReader(io.StringIO(csv_content))
     row = next(reader)
-    assert row["location_key"] == "XYZZY"
+    assert row["pass_key"] == "XYZZY"
 
 
 def test_suggest_location_events_from_segments():

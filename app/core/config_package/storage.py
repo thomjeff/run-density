@@ -52,7 +52,8 @@ INDEX_NAME = "index.json"
 PACKAGE_SIGNAL_FILES = (
     "segments.csv",
     "flow.csv",
-    "locations.csv",
+    "passes.csv",
+    "locations.csv",  # legacy signal during cutover
     COURSE_WORKSPACE_NAME,
     CONFIG_MANIFEST_NAME,
 )
@@ -115,14 +116,20 @@ def package_readiness(package_path: Path) -> Dict[str, Any]:
         if p.is_file() and not p.name.startswith(".")
     )
     missing = []
-    for required in ("segments.csv", "flow.csv", "locations.csv"):
+    has_passes = (package_path / "passes.csv").is_file() or (
+        package_path / "locations.csv"
+    ).is_file()
+    for required in ("segments.csv", "flow.csv"):
         if not (package_path / required).is_file():
             missing.append(required)
+    if not has_passes:
+        missing.append("passes.csv")
     has_runners = any(package_path.glob("*_runners.csv"))
     has_gpx = any(package_path.glob("*.gpx"))
     analyze_ready = (
         (package_path / "segments.csv").is_file()
         and (package_path / "flow.csv").is_file()
+        and has_passes
         and has_runners
         and has_gpx
     )
@@ -833,13 +840,24 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
 
     from app.core.config_package.legs import (
+        package_event_day,
         refresh_location_seg_ids_from_segments,
+        stamp_locations_with_package_day,
         validate_locations_for_export,
     )
+    from app.core.locations.identity import stamp_pass_identity
 
     locations = course.get("locations") or []
-    if refresh_location_seg_ids_from_segments(locations, segments):
-        course["locations"] = locations
+    day_stamped = stamp_locations_with_package_day(
+        locations, package_event_day(cid)
+    )
+    stamp_pass_identity(locations)
+    seg_refreshed = refresh_location_seg_ids_from_segments(locations, segments)
+    course["locations"] = locations
+    if day_stamped or seg_refreshed:
+        save_config_course(cid, course)
+    else:
+        # Always persist pass identity fields when stamped
         save_config_course(cid, course)
 
     loc_errors = validate_locations_for_export(course)
@@ -861,15 +879,27 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     target.write_text(csv_content, encoding="utf-8")
     _validate_exported_segments_file(target)
 
-    locations_target = package_path / "locations.csv"
+    locations_target = package_path / "passes.csv"
     locations_backup_path: Optional[Path] = None
     locations = course.get("locations") or []
     resource_codes = load_package_resource_codes(cid)
     locations_csv = build_locations_csv(course, resource_codes=resource_codes)
     if locations_target.is_file():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        locations_backup_path = package_path / f"locations.csv.bak.{stamp}"
+        locations_backup_path = package_path / f"passes.csv.bak.{stamp}"
         shutil.copy2(locations_target, locations_backup_path)
+    # Migrate legacy locations.csv → passes.csv once
+    legacy_locations = package_path / "locations.csv"
+    if legacy_locations.is_file() and not locations_target.is_file():
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        legacy_locations.rename(
+            package_path / f"locations.csv.bak.{stamp}"
+        )
+    elif legacy_locations.is_file():
+        # Keep a backup of the old name for operators; canonical file is passes.csv
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        shutil.copy2(legacy_locations, package_path / f"locations.csv.bak.{stamp}")
+        legacy_locations.unlink()
     locations_target.write_text(locations_csv, encoding="utf-8")
 
     from app.core.config_package.segment_recipes import export_package_flow_and_gpx_files
@@ -877,7 +907,7 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     flow_gpx = export_package_flow_and_gpx_files(cid)
 
     logger.info(
-        "Exported segments.csv (%s rows) and locations.csv (%s rows) for config package %s",
+        "Exported segments.csv (%s rows) and passes.csv (%s rows) for config package %s",
         len(segments),
         len(locations),
         cid,
@@ -889,6 +919,7 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         "segments_backup_path": str(backup_path) if backup_path else None,
         "segment_count": len(segments),
         "locations_path": str(locations_target),
+        "passes_path": str(locations_target),
         "locations_backup_path": str(locations_backup_path) if locations_backup_path else None,
         "location_count": len(locations),
         "flow_gpx": flow_gpx,

@@ -34,14 +34,22 @@ def ensure_location_key(
     loc: Dict[str, Any],
     used: Optional[Set[str]] = None,
 ) -> str:
-    """Ensure ``loc`` has a valid ``location_key``; return the key."""
+    """
+    Ensure ``loc`` has a valid ``location_key``; return the key.
+
+    Issue #810: a valid existing key is always preserved, even if already present
+    in ``used``. Paired reverse legs intentionally share one key for the same
+    physical Location. Newly allocated keys are added to ``used`` when provided.
+    """
     existing = str(loc.get("location_key") or "").strip()
-    taken = {str(k).strip() for k in (used or set()) if k}
-    if is_valid_location_key(existing) and existing not in taken:
+    taken = used if used is not None else set()
+    if is_valid_location_key(existing):
         loc["location_key"] = existing
-        taken.add(existing)
+        if used is not None:
+            used.add(existing)
         return existing
     key = generate_location_key(taken)
     loc["location_key"] = key
-    taken.add(key)
+    if used is not None:
+        used.add(key)
     return key

@@ -3620,6 +3620,25 @@
         });
         content.appendChild(opsRow);
 
+        var onepageWrap = document.createElement('div');
+        onepageWrap.className = 'leg-popup-field';
+        var onepageLbl = document.createElement('label');
+        onepageLbl.className = 'location-onepager-inline';
+        var onepageCb = document.createElement('input');
+        onepageCb.type = 'checkbox';
+        onepageCb.checked = String((opts.loc && opts.loc.onepage) || 'n').toLowerCase() === 'y';
+        onepageLbl.appendChild(onepageCb);
+        var onepageText = document.createElement('span');
+        onepageText.textContent = 'Create One-Pager';
+        onepageLbl.appendChild(onepageText);
+        onepageWrap.appendChild(onepageLbl);
+        var onepageHint = document.createElement('p');
+        onepageHint.className = 'leg-popup-hint';
+        onepageHint.style.marginTop = '0.25rem';
+        onepageHint.textContent = 'When set, analysis builds a loc sheet and links this location on the Locations report.';
+        onepageWrap.appendChild(onepageHint);
+        content.appendChild(onepageWrap);
+
         var notesInput = document.createElement('textarea');
         notesInput.rows = 2;
         notesInput.value = (opts.loc && opts.loc.notes) || '';
@@ -3630,6 +3649,7 @@
             var buf = parseInt(bufferInput.value, 10);
             target.buffer = isNaN(buf) ? 10 : Math.max(0, Math.min(999, buf));
             target.notes = notesInput.value.trim();
+            target.onepage = onepageCb.checked ? 'y' : 'n';
             target.resources = {};
             Object.keys(resourceInputs).forEach(function (code) {
                 var n = parseInt(resourceInputs[code].value, 10);
@@ -3697,7 +3717,9 @@
             redrawLegLocationMarkers(getSelectedLeg());
         }
 
-        btnPrimary.onclick = function () {
+        btnPrimary.onclick = function (ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (ev && ev.preventDefault) ev.preventDefault();
             var locLabel = (input.value && input.value.trim()) || 'Location';
             var locType = sel.value || 'course';
 
@@ -3759,13 +3781,16 @@
                 );
                 applyOpsFields(savedLoc);
                 locations[locIndex] = savedLoc;
+                // Close immediately so Save feels responsive; persist in background.
+                map.closePopup();
                 setLegStatus('Saving location…');
                 saveLegLocations(selectedLegId, locations)
                     .then(function () {
-                        closeAndRedraw();
+                        redrawLegLocationMarkers(getSelectedLeg());
                         setLegStatus('Location updated.');
                     })
                     .catch(function (err) {
+                        redrawLegLocationMarkers(getSelectedLeg());
                         setLegStatus(err.message || String(err), true);
                     });
             }

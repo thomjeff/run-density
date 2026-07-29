@@ -302,7 +302,8 @@ def build_locations_csv(
     course: Dict[str, Any],
     resource_codes: Optional[List[str]] = None,
 ) -> str:
-    """Build full locations.csv from course.locations (Issue #765 pipeline schema)."""
+    """Build passes.csv content from course.locations (2027 pass-level schema)."""
+    from app.core.locations.identity import stamp_pass_identity
     from app.core.locations.schema import (
         location_to_csv_row,
         locations_csv_columns,
@@ -319,14 +320,15 @@ def build_locations_csv(
     else:
         codes = [normalize_resource_code(c) for c in registry]
 
+    locations = [loc for loc in (course.get("locations") or []) if isinstance(loc, dict)]
+    stamp_pass_identity(locations)
+    course["locations"] = locations
+
     columns = locations_csv_columns(codes)
-    locations = course.get("locations") or []
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
     w.writeheader()
     for i, loc in enumerate(locations):
-        if not isinstance(loc, dict):
-            continue
         w.writerow(location_to_csv_row(loc, codes))
     return out.getvalue()
 

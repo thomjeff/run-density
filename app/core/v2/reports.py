@@ -36,17 +36,32 @@ def write_combined_locations_csv(run_dir: Path) -> Optional[Path]:
     Returns:
         Path to combined CSV, or None if no per-day reports existed.
     """
+    return _write_combined_day_report_csv(
+        run_dir, filename="Locations.csv", sort_col="loc_id"
+    )
+
+
+def write_combined_passes_csv(run_dir: Path) -> Optional[Path]:
+    """Merge ``{day}/reports/Passes.csv`` into ``run_dir/Passes.csv``."""
+    return _write_combined_day_report_csv(
+        run_dir, filename="Passes.csv", sort_col="pass_id"
+    )
+
+
+def _write_combined_day_report_csv(
+    run_dir: Path, *, filename: str, sort_col: str
+) -> Optional[Path]:
     import pandas as pd
 
     frames: List[pd.DataFrame] = []
     for day_code in DAY_ORDER:
-        path = run_dir / day_code / "reports" / "Locations.csv"
+        path = run_dir / day_code / "reports" / filename
         if not path.exists():
             continue
         try:
             df = pd.read_csv(path)
         except Exception as e:
-            logger.warning("Issue #749: Could not read %s: %s", path, e)
+            logger.warning("Could not read %s: %s", path, e)
             continue
         if df.empty:
             continue
@@ -60,14 +75,17 @@ def write_combined_locations_csv(run_dir: Path) -> Optional[Path]:
     combined["_sort_day"] = combined["day"].astype(str).str.lower().map(
         lambda d: DAY_ORDER.index(d) if d in DAY_ORDER else len(DAY_ORDER)
     )
-    combined["_sort_loc"] = pd.to_numeric(combined["loc_id"], errors="coerce")
+    if sort_col in combined.columns:
+        combined["_sort_id"] = pd.to_numeric(combined[sort_col], errors="coerce")
+    else:
+        combined["_sort_id"] = pd.to_numeric(combined.get("loc_id"), errors="coerce")
     combined = combined.sort_values(
-        by=["_sort_day", "_sort_loc"], ascending=[True, True], na_position="last"
+        by=["_sort_day", "_sort_id"], ascending=[True, True], na_position="last"
     )
-    combined = combined.drop(columns=["_sort_day", "_sort_loc"])
-    out_path = run_dir / "Locations.csv"
+    combined = combined.drop(columns=["_sort_day", "_sort_id"])
+    out_path = run_dir / filename
     combined.to_csv(out_path, index=False)
-    logger.info("Issue #749: Wrote combined locations report: %s (%s rows)", out_path, len(combined))
+    logger.info("Wrote combined %s: %s (%s rows)", filename, out_path, len(combined))
     return out_path
 
 
@@ -348,6 +366,7 @@ def generate_reports_per_day(
     try:
         from app.utils.run_id import get_run_directory
         write_combined_locations_csv(get_run_directory(run_id))
+        write_combined_passes_csv(get_run_directory(run_id))
     except Exception as e:
         logger.warning("Issue #749: Combined Locations.csv not written: %s", e)
     

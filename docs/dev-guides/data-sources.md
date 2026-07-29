@@ -398,19 +398,26 @@ runner_id,event,pace,distance,start_offset,day
 
 **Source**: `locations.csv`
 
-**Required Columns**:
-- `loc_id`: Location identifier
-- `location_key`: Optional but recommended stable authoring key; exported from config packages when present (immediately after `loc_id` in package `locations.csv` and in `Locations.csv` reports)
+**Required Columns** (package / pipeline **`passes.csv`** — one row per timed pass):
+- `pass_id`: Timed pass instance identifier
+- `loc_id`: Human Location number (shared by outbound/return passes)
+- `pass_key`: Opaque Crockford unifier for passes at the same Location (system join; not volunteer-facing)
 - `loc_label`: Human-readable label
 - `loc_type`: Location category; allowed values are **`LOCATION_TYPE_CHOICES`** in `app/utils/constants.py` (SSOT for Course Mapping and Locations UI).
 - `seg_id`: Associated segment ID(s); may be empty for off-course or proxy-only timing rows. After leg recipe changes, re-apply recipes so segment IDs stay aligned with `segments.csv` (Issue #774).
-- `proxy_loc_id`: Optional **integer** `loc_id` of another location (timing source). In config package authoring (#775), operators pick the source from a dropdown; export writes the numeric id at snapshot time. When set with **empty** `seg_id`, the locations report copies **operational** timing (`loc_end`, `duration`) from that `loc_id` for **all** `loc_type` values (`timing_source` becomes `proxy:<id>` in output). Issue #751. Alphanumeric proxy values are not supported in the analysis pipeline.
+- `proxy_pass_id`: Optional **integer** `pass_id` of another pass (timing source). Legacy column `proxy_loc_id` is still accepted on read.
 - `timing_source`: Optional advanced override (e.g. `proxy:n`) when present in input
 
-**Optional authoring columns** (passed through to the Locations report when present):
-- `location_key`: Stable 5-character key shared across paired reverse legs / course snapshots (helps match duplicate `loc_id`s for the same physical place)
+**Optional authoring columns** (passed through when present):
+- `location_key`: Legacy alias of `pass_key`
 
-**Locations report (`Locations.csv`)**: includes `location_key` immediately after `loc_id` when generating from package/input locations (empty string if the input row has no key).
+**Analysis reports**:
+- **`Passes.csv`**: one row per `pass_id` (bottom-up; agencies). Includes `loc_id`, `pass_key`, `pass`, `same_pass_as`.
+- **`Locations.csv`**: one row per human `loc_id` (UI mirror). Combined window = earliest first / latest last; `pass_ids` lists member passes; `pass_key` joins back to Passes.csv.
+
+**Issue #810 — paired reverse legs:** when two pass rows share a `pass_key`, they are passes at the same Location (outbound vs return). Volunteer UI and Locations.csv show one Location. Import timed staffing on **`pass_id`**.
+
+**`day` on package passes:** org/course legs are day-agnostic. When legs are merged into a package course or **Build race exports** runs, each pass’s `day` is stamped from the package manifest `event_day` (default `sun`).
 
 **Issue #751 — `proxy_loc_id` vs `seg_id` (locations report)**:
 - **`proxy_loc_id` set, `seg_id` empty:** skip runner arrival modeling for that row; apply operational window from the proxy location (same idea as former traffic-only behavior, now config-driven for every type).

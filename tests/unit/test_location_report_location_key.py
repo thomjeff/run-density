@@ -1,4 +1,4 @@
-"""Locations report includes stable location_key in Locations.csv."""
+"""Locations/Passes reports include pass_key and human loc_id."""
 
 from __future__ import annotations
 
@@ -7,48 +7,49 @@ from pathlib import Path
 import pandas as pd
 
 import app.location_report as location_report
+from app.io.loader import normalize_passes_input_dataframe
 
 
-def test_generate_location_report_includes_location_key(tmp_path, monkeypatch):
-    locations = pd.DataFrame(
-        [
-            {
-                "loc_id": 151,
-                "location_key": "D3UF4",
-                "loc_label": "Trail at George",
-                "loc_type": "course",
-                "lat": 45.95,
-                "lon": -66.63,
-                "seg_id": "S11",
-                "full": "y",
-                "half": "n",
-                "10k": "n",
-                "buffer": 10,
-                "interval": 5,
-                "zone": "",
-                "notes": "",
-            },
-            {
-                "loc_id": 148,
-                "leg_loc_key": "D3UF4",  # fallback when location_key absent
-                "loc_label": "Trail at George",
-                "loc_type": "course",
-                "lat": 45.95,
-                "lon": -66.63,
-                "seg_id": "S9",
-                "full": "y",
-                "half": "y",
-                "10k": "y",
-                "buffer": 10,
-                "interval": 5,
-                "zone": "",
-                "notes": "",
-            },
-        ]
+def test_generate_location_report_writes_passes_and_locations(tmp_path, monkeypatch):
+    locations = normalize_passes_input_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "loc_id": 151,
+                    "location_key": "D3UF4",
+                    "loc_label": "Trail at George",
+                    "loc_type": "course",
+                    "lat": 45.95,
+                    "lon": -66.63,
+                    "seg_id": "S11",
+                    "full": "y",
+                    "half": "n",
+                    "10k": "n",
+                    "buffer": 10,
+                    "interval": 5,
+                    "zone": "",
+                    "notes": "",
+                },
+                {
+                    "loc_id": 148,
+                    "leg_loc_key": "D3UF4",
+                    "loc_label": "Trail at George",
+                    "loc_type": "course",
+                    "lat": 45.95,
+                    "lon": -66.63,
+                    "seg_id": "S9",
+                    "full": "y",
+                    "half": "y",
+                    "10k": "y",
+                    "buffer": 10,
+                    "interval": 5,
+                    "zone": "",
+                    "notes": "",
+                },
+            ]
+        )
     )
-    runners = pd.DataFrame(
-        columns=["runner_id", "event", "pace", "start_offset"]
-    )
+    runners = pd.DataFrame(columns=["runner_id", "event", "pace", "start_offset"])
     segments = pd.DataFrame(
         [
             {
@@ -88,11 +89,25 @@ def test_generate_location_report_includes_location_key(tmp_path, monkeypatch):
         gpx_paths={"full": "full.gpx"},
     )
     assert result.get("ok") is True
-    report_path = Path(result["file_path"])
-    assert report_path.exists()
-    df = pd.read_csv(report_path)
-    assert "location_key" in df.columns
-    assert list(df.columns[:4]) == ["loc_id", "location_key", "loc_label", "day"]
-    by_id = df.set_index("loc_id")["location_key"].to_dict()
-    assert by_id[151] == "D3UF4"
-    assert by_id[148] == "D3UF4"
+
+    passes_path = Path(result["passes_path"])
+    locs_path = Path(result["file_path"])
+    assert passes_path.exists()
+    assert locs_path.exists()
+
+    passes = pd.read_csv(passes_path)
+    assert list(passes.columns[:5]) == [
+        "pass_id",
+        "loc_id",
+        "pass_key",
+        "pass",
+        "same_pass_as",
+    ]
+    assert set(passes["pass_key"].astype(str)) == {"D3UF4"}
+    assert passes["loc_id"].nunique() == 1
+    assert set(passes["pass"]) == {"outbound", "return"}
+
+    locs = pd.read_csv(locs_path)
+    assert "pass_key" in locs.columns
+    assert len(locs) == 1
+    assert int(locs.iloc[0]["pass_count"]) == 2

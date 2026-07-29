@@ -315,6 +315,28 @@ def test_merge_leg_locations_sets_seg_id_from_leg(tmp_path, monkeypatch):
     assert leg_locs[0]["leg_loc_key"] == "01:0"
     assert leg_locs[0]["full"] == "y"
     assert leg_locs[0]["half"] == "n"
+    assert leg_locs[0]["day"] == "sun"
+
+
+def test_stamp_locations_with_package_day_overwrites_blank_and_nan():
+    from app.core.config_package.legs import stamp_locations_with_package_day
+
+    locations = [
+        {"loc_label": "A", "day": ""},
+        {"loc_label": "B", "day": "nan"},
+        {"loc_label": "C", "day": "sat"},
+    ]
+    updated = stamp_locations_with_package_day(locations, "sun")
+    assert updated == 3
+    assert all(loc["day"] == "sun" for loc in locations)
+
+    fill_only = [{"loc_label": "D", "day": "sat"}, {"loc_label": "E", "day": ""}]
+    updated = stamp_locations_with_package_day(
+        fill_only, "sun", overwrite=False
+    )
+    assert updated == 1
+    assert fill_only[0]["day"] == "sat"
+    assert fill_only[1]["day"] == "sun"
 
 
 def test_merge_leg_locations_resolves_proxy_leg_loc_key(tmp_path, monkeypatch):

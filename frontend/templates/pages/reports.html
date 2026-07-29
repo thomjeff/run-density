@@ -6,7 +6,7 @@
 <div class="page-header">
     <h2>Reports</h2>
     <p style="margin: 0.35rem 0 0; color: #666; font-size: 0.9rem; max-width: 40rem;">
-        Generated Density, Flow, Locations, and finish-time wave reports (grouped by day).
+        Generated Density, Flow, Locations, Passes, and finish-time wave reports (grouped by day).
     </p>
     {% if meta %}
     {% endif %}
@@ -87,11 +87,12 @@
         
         // Filter and categorize files
         const relevantReports = reports.filter(r => {
-            // Include Density, Flow, Locations, finish_times, finish-area PDF (Issue #743)
+            // Include Density, Flow, Locations, Passes, finish_times, finish-area PDF (Issue #743)
             const isRelevantReport = (
                 r.name.includes('Density') ||
                 r.name.includes('Flow') ||
                 r.name.includes('Locations') ||
+                r.name.includes('Passes') ||
                 r.name === 'finish_times.csv' ||
                 r.name === 'finish_area_demand.pdf'
             ) && (r.name.endsWith('.md') || r.name.endsWith('.csv') || r.name === 'finish_area_demand.pdf');
@@ -187,8 +188,9 @@
                     if (name === 'Density.md') return 0;
                     if (name === 'Flow.csv') return 1;
                     if (name === 'Locations.csv') return 2;
-                    if (name === 'finish_times.csv') return 3;
-                    if (name === 'finish_area_demand.pdf') return 4;
+                    if (name === 'Passes.csv') return 3;
+                    if (name === 'finish_times.csv') return 4;
+                    if (name === 'finish_area_demand.pdf') return 5;
                     return 50;
                 };
                 dayReports.sort((a, b) => {

@@ -27,6 +27,7 @@ from app.core.config_package.segment_recipes import (
 )
 from app.core.config_package.storage import (
     load_config_course,
+    load_config_manifest,
     resolve_config_package_path,
     save_config_course,
     validate_config_id,
@@ -61,14 +62,17 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "lat",
     "lon",
     "placement",
-    "location_key",
+    "pass_key",
+    "location_key",  # legacy alias
+    "loc_id",
     "notes",
     "buffer",
     "interval",
     "zone",
     "equipment",
     "contact",
-    "proxy_loc_id",
+    "proxy_pass_id",
+    "proxy_loc_id",  # legacy alias
     "proxy_leg_loc_key",
     "day",
     "onepage",
@@ -89,8 +93,10 @@ _RACE_EXPORT_PRESERVE_FIELDS = (
     "zone",
     "equipment",
     "contact",
+    "proxy_pass_id",
     "proxy_loc_id",
     "proxy_leg_loc_key",
+    "loc_id",
     "day",
     "onepage",
     "resources",
@@ -98,8 +104,56 @@ _RACE_EXPORT_PRESERVE_FIELDS = (
 
 _LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS
 
+_BLANK_LOCATION_DAYS = frozenset({"", "nan", "none", "null"})
+
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
 LEG_EXPORT_VERSION = 2
+
+
+def package_event_day(config_id: str) -> str:
+    """Race day short code from package manifest (default ``sun``)."""
+    try:
+        manifest = load_config_manifest(config_id)
+    except FileNotFoundError:
+        return "sun"
+    day = str(manifest.get("event_day") or "").strip().lower()
+    if day in _BLANK_LOCATION_DAYS:
+        return "sun"
+    return day
+
+
+def stamp_locations_with_package_day(
+    locations: Sequence[Dict[str, Any]],
+    event_day: str,
+    *,
+    overwrite: bool = True,
+) -> int:
+    """
+    Stamp package ``event_day`` onto location rows.
+
+    Org/course legs are day-agnostic and reusable across sat/sun packages; the
+    package owns race day. Call this when merging legs into a package course or
+    exporting ``locations.csv``.
+
+    When ``overwrite`` is True (default), every location gets ``event_day``.
+    When False, only blank/``nan`` days are filled.
+    """
+    day = str(event_day or "").strip().lower()
+    if day in _BLANK_LOCATION_DAYS:
+        day = "sun"
+    updated = 0
+    for loc in locations:
+        if not isinstance(loc, dict):
+            continue
+        cur = str(loc.get("day") or "").strip().lower()
+        if overwrite:
+            if cur != day:
+                loc["day"] = day
+                updated += 1
+        elif cur in _BLANK_LOCATION_DAYS:
+            loc["day"] = day
+            updated += 1
+    return updated
 
 
 def _normalize_segment_schema(schema: Any) -> str:
@@ -1169,7 +1223,9 @@ def merge_leg_locations_into_course(
     for loc in course.get("locations") or []:
         if not isinstance(loc, dict) or loc.get("source") != "leg":
             continue
-        loc_key = str(loc.get("location_key") or "").strip()
+        from app.core.locations.identity import effective_pass_key
+
+        loc_key = effective_pass_key(loc)
         if loc_key:
             existing_by_loc_key[loc_key] = loc
         leg_key = str(loc.get("leg_loc_key") or "").strip()
@@ -1206,11 +1262,18 @@ def merge_leg_locations_into_course(
             )
         ):
             key = leg_loc_key(leg_id, i)
-            loc_key = str(loc.get("location_key") or "").strip()
+            loc_key = str(
+                loc.get("pass_key") or loc.get("location_key") or ""
+            ).strip()
             prev = existing_by_loc_key.get(loc_key) if loc_key else None
             if prev is None:
                 prev = existing_by_leg_loc_key.get(key)
             on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
+            inherited_key = ""
+            if prev:
+                inherited_key = str(
+                    prev.get("pass_key") or prev.get("location_key") or ""
+                ).strip()
             row: Dict[str, Any] = {
                 "loc_label": loc["loc_label"],
                 "loc_type": loc["loc_type"],
@@ -1218,20 +1281,26 @@ def merge_leg_locations_into_course(
                 "lon": loc["lon"],
                 "leg_id": leg_id,
                 "leg_loc_key": key,
-                "location_key": loc_key or (prev.get("location_key") if prev else ""),
+                "pass_key": loc_key or inherited_key,
+                "location_key": loc_key or inherited_key,
                 "placement": loc.get("placement", "along"),
                 "source": "leg",
                 "seg_id": seg_id if on_course else "",
             }
-            if not row["location_key"]:
+            if not row["pass_key"]:
                 ensure_location_key(row, used_loc_keys)
+                row["pass_key"] = row.get("location_key") or ""
             for ev, flag in event_flags.items():
                 row[ev] = flag
             for ev in COURSE_EVENT_IDS:
                 row.setdefault(ev, "n")
 
             for field in preserve_fields:
-                if on_course and field in ("proxy_loc_id", "proxy_leg_loc_key"):
+                if on_course and field in (
+                    "proxy_loc_id",
+                    "proxy_pass_id",
+                    "proxy_leg_loc_key",
+                ):
                     continue
                 if field in row and row[field] not in (None, ""):
                     continue
@@ -1244,16 +1313,23 @@ def merge_leg_locations_into_course(
                     row[field] = val
 
             if prev:
-                prev_id = parse_location_id(prev.get("id", prev.get("loc_id")))
+                prev_id = parse_location_id(prev.get("pass_id", prev.get("id")))
                 if prev_id is not None and prev_id > 0 and prev_id not in used_ids:
                     row["id"] = prev_id
+                    row["pass_id"] = prev_id
                     used_ids.add(prev_id)
                 else:
-                    row["id"] = allocate_location_id(used_ids)
+                    new_id = allocate_location_id(used_ids)
+                    row["id"] = new_id
+                    row["pass_id"] = new_id
                 for field in preserve_fields:
                     if field in _LEG_OWNED_PLACEMENT_FIELDS:
                         continue
-                    if on_course and field in ("proxy_loc_id", "proxy_leg_loc_key"):
+                    if on_course and field in (
+                        "proxy_loc_id",
+                        "proxy_pass_id",
+                        "proxy_leg_loc_key",
+                    ):
                         continue
                     if field not in prev:
                         continue
@@ -1265,7 +1341,9 @@ def merge_leg_locations_into_course(
                     if val not in (None, ""):
                         row[field] = val
             else:
-                row["id"] = allocate_location_id(used_ids)
+                new_id = allocate_location_id(used_ids)
+                row["id"] = new_id
+                row["pass_id"] = new_id
             _sanitize_location_proxy_timing(row)
             locations.append(row)
 
@@ -1273,6 +1351,10 @@ def merge_leg_locations_into_course(
     _resolve_location_proxy_leg_keys(locations)
     for loc in locations:
         _sanitize_location_proxy_timing(loc)
+    stamp_locations_with_package_day(locations, package_event_day(cid))
+    from app.core.locations.identity import stamp_pass_identity
+
+    stamp_pass_identity(locations)
     course["locations"] = locations
     save_config_course(cid, course)
 

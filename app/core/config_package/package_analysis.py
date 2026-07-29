@@ -187,9 +187,12 @@ def build_package_analyze_payload(
         f"{day}-all": ", ".join(names) for day, names in sorted(by_day.items())
     }
 
-    locations_file = "locations.csv"
+    locations_file = "passes.csv"
     if not (package_path / locations_file).is_file():
-        raise ValueError("Missing locations.csv in package root")
+        if (package_path / "locations.csv").is_file():
+            locations_file = "locations.csv"
+        else:
+            raise ValueError("Missing passes.csv (or legacy locations.csv) in package root")
 
     desc = str(description or manifest.get("label") or cid).strip()[:254]
 

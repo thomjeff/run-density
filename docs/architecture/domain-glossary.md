@@ -18,7 +18,8 @@
 | **Leg** | Reusable route unit in the org (or package) library; may appear in multiple courses/recipes |
 | **Segment** | Analysis interval along a course after export/build (artifact key: `seg_id`) |
 | **Zone** | Operational classification on a location after package build |
-| **Location** | Point of interest on a leg/course (`loc_id` crew-facing; stable `location_key` for authoring) |
+| **Location** | Point of interest on a course (`loc_id` human-facing; timed instances are passes) |
+| **Pass** | Timed instance at a Location (`pass_id`; outbound/return share one `loc_id`) |
 | **Configuration package** | Race package: assigned courses, runners, resources, analysis launch (`runflow/config/{config_id}/`) |
 | **Run** | One analysis execution under `runflow/analysis/{run_id}/` |
 
@@ -37,8 +38,10 @@
 |----------|---------|---------------------|
 | `leg_id` | Library route identity (legacy read: `chunk_id`) | `seg_id` — one leg can produce many analysis segments |
 | `seg_id` | Analysis segment identity in CSV / flow / audit | `segment_id` — bins/UI adapter alias of `seg_id` |
-| `loc_id` | Crew-facing numeric location id (CSV); package JSON often stores the same value as `id` | `location_key` — short authoring key, not crew CSV identity |
-| `location_key` | Stable 5-char authoring key (`leg_loc_key` on leg-scoped rows) | `loc_id` |
+| `loc_id` | Short human Location number (UI / phone / one-pager / Locations.csv) | `pass_id` — timed instance |
+| `pass_id` | Timed pass instance (Passes.csv; course.json often stores as `id`) | `loc_id` |
+| `pass_key` | Opaque Crockford unifier for passes at one Location (system join) | Do not verbalize; not volunteer UI |
+| `location_key` | Legacy alias of `pass_key` (still accepted on read) | — |
 
 ## Field alias map
 
@@ -47,7 +50,7 @@
 | `seg_id` | CSV/artifacts: `seg_id`. Bins / some JSON: `segment_id` | `seg_id`; local JS `segId` | Dual-read or rename **only** in bins/UI adapters. New CSV/exports stay `seg_id`. Do not invent new writers of `segment_id` as SSOT. | `app/core/artifacts/frontend.py`; `app/routes/api_density.py`; `app/core/v2/bins.py` |
 | `leg_id` | Package/org API `{leg_id}`; segment rows may carry `leg_id` | `legId`; `source_leg_id` | Distinct noun. Resolve `leg_id` → current `seg_id` at apply/export. Never rename legs to segments. | `app/core/course/segment_library.py`; `app/core/config_package/legs.py` |
 | `loc_id` | CSV: `loc_id`. Package JSON: numeric `id` (same value). Helpers may say `location_id` in function names | Map: `loc_id`; editor may use `id` | Export always `loc_id`. Function names may say `location_id` without changing the wire key. | `app/core/locations/schema.py`; `app/core/config_package/location_ids.py` |
-| `location_key` | Authoring key; `leg_loc_key` on leg rows | Grid “Key” | Keep separate from `loc_id`. Match course↔leg by key; crew reports keep numeric `loc_id`. | `app/core/config_package/location_keys.py` |
+| `pass_key` | Opaque Crockford unifier; `leg_loc_key` on leg rows | (hidden in volunteer UI) | Keep separate from `loc_id`. Match course↔leg by key; Locations report is human `loc_id`. | `app/core/locations/identity.py` |
 | Temporal bin width | Core: `dt_seconds`. Metadata: `effective_window_s`, `window_s`, `time_window_s`. Map API may use `window_seconds` for display length | Report MD context `window_s` | Prefer `*_seconds` in new core APIs. Adapters may accept `window_s`. Phase 5 removes fabricated `window_s=30`. | `app/density_report.py`; `app/api/models/report.py`; `app/new_density_report.py` |
 | `step_km` | Density config: `step_km`. v1 API: `stepKm`. Results often mirror as `bin_km` / `bin_size_km` | — | Canonical **config** name is `step_km`. Treat `bin_*` as boundary/result aliases until a dedicated rename. | `app/core/density/models.py`; `app/core/density/compute.py` |
 | `runflow` | Paths `runflow/…`, API `/runflow/v2`, env `RUNFLOW_*`, GCS bucket `runflow` | `window.runflowDay`, `runflow:context-ready` | Canonical runtime namespace. Do not add new `run-density` runtime IDs. | `app/utils/constants.py`; `app/main.py` |
@@ -59,7 +62,7 @@
 2. **Preserve legacy wire names only at adapters** (bins UI, map payloads, temporary report metadata).  
 3. **New core APIs** under `app/core/` should use unit-suffixed names (`*_seconds`, `*_minutes`, `*_km`).  
 4. **Product name is Runflow**; repository may stay `run-density`.  
-5. **`seg_id` ≠ `leg_id`**, **`location_key` ≠ `loc_id`**, **`actual_event_duration` ≠ `event_duration_minutes`**.  
+5. **`seg_id` ≠ `leg_id`**, **`pass_id` ≠ `loc_id`**, **`pass_key` ≠ `loc_id`**, **`actual_event_duration` ≠ `event_duration_minutes`**.  
 6. Start-time range is **not** full-day 0–1439 — use `app.core.v2.start_time`.  
 7. Cross-check [quick-reference.md](../reference/quick-reference.md) and [canonical-paths.md](canonical-paths.md).
 

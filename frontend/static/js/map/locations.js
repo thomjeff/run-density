@@ -17,20 +17,72 @@ const locationTypeColors = {
     'extract': '#9C27B0' // Purple — remote trail extract / stretcher access (Issue #747)
 };
 
+/** Resource *_count fields only — exclude pass_count and other non-org counts. */
+function isOrgResourceCountKey(key) {
+    if (!key || !String(key).endsWith('_count')) return false;
+    const base = String(key).slice(0, -'_count'.length).toLowerCase();
+    return base !== 'pass';
+}
+
+function formatPassLine(props) {
+    const key = (props.pass_key || props.location_key || '').toString().trim();
+    let ids = props.pass_ids;
+    if (Array.isArray(ids)) {
+        ids = ids.filter((v) => v != null && v !== '').join(',');
+    } else if (ids == null || ids === '') {
+        // Fall back to nested passes or single pass_id
+        if (Array.isArray(props.passes) && props.passes.length) {
+            ids = props.passes
+                .map((p) => (p.pass_id != null ? p.pass_id : null))
+                .filter((v) => v != null)
+                .join(',');
+        } else if (props.pass_id != null) {
+            ids = String(props.pass_id);
+        } else {
+            ids = '';
+        }
+    } else {
+        ids = String(ids).trim();
+    }
+    if (!key && !ids) return '';
+    if (key && ids) return `PASS: ${key} | ${ids}`;
+    if (key) return `PASS: ${key}`;
+    return `PASS: ${ids}`;
+}
+
+function formatPassLineHtml(props) {
+    const line = formatPassLine(props);
+    if (!line) return '';
+    return line.replace(/^PASS:\s*/, '<strong>PASS:</strong> ');
+}
+
 /**
  * Convert locations JSON data to GeoJSON format
+ * Issue #810: one feature per Location (collapse shared location_key)
  * @param {Array} locations - Array of location objects from API
  * @returns {Object} GeoJSON FeatureCollection
  */
 function convertToGeoJSON(locations) {
-    const features = locations
+    const collapsed = (window.LocationPairing && window.LocationPairing.collapseLocationsByKey)
+        ? window.LocationPairing.collapseLocationsByKey(locations)
+        : locations;
+
+    const features = collapsed
         .filter(loc => loc.lat != null && loc.lon != null && !isNaN(loc.lat) && !isNaN(loc.lon))
         .map(loc => {
-            // Issue #591: Include all resource count and mins fields dynamically
-            // Issue #598: Include flag fields
             const properties = {
-                loc_id: loc.loc_id,
-                location_key: loc.location_key,
+                loc_id: loc.primary_loc_id != null ? loc.primary_loc_id : loc.loc_id,
+                loc_ids: loc.loc_ids || [loc.loc_id],
+                pass_key: loc.pass_key || loc.location_key || '',
+                location_key: loc.pass_key || loc.location_key || '',
+                pass_ids: loc.pass_ids != null ? loc.pass_ids : (
+                    Array.isArray(loc.passes)
+                        ? loc.passes.map((p) => (p.pass_id != null ? p.pass_id : p.loc_id)).filter((v) => v != null)
+                        : []
+                ),
+                pass_id: loc.pass_id,
+                paired: !!loc.paired,
+                passes: loc.passes || null,
                 loc_label: loc.loc_label || 'Unknown',
                 loc_type: loc.loc_type || 'unknown',
                 loc_start: loc.loc_start,
@@ -41,23 +93,22 @@ function convertToGeoJSON(locations) {
                 zone: loc.zone,
                 timing_source: loc.timing_source,
                 notes: loc.notes,
-                first_runner: loc.first_runner,  // Issue #483: Include first_runner
-                last_runner: loc.last_runner,     // Issue #483: Include last_runner
-                flag: loc.flag,                   // Issue #598: Include flag
-                flagged_seg_id: loc.flagged_seg_id,  // Issue #598: Include flagged_seg_id
-                flag_severity: loc.flag_severity,     // Issue #598: Include flag_severity
-                flag_worst_los: loc.flag_worst_los,   // Issue #598: Include flag_worst_los
-                flag_note: loc.flag_note,             // Issue #598: Include flag_note
-                onepage: loc.onepage                // Issue #745: SSOT for loc sheet links (table)
+                first_runner: loc.first_runner,
+                last_runner: loc.last_runner,
+                flag: loc.flag,
+                flagged_seg_id: loc.flagged_seg_id,
+                flag_severity: loc.flag_severity,
+                flag_worst_los: loc.flag_worst_los,
+                flag_note: loc.flag_note,
+                onepage: loc.onepage
             };
-            
-            // Issue #591: Dynamically add all resource count and mins fields
+
             Object.keys(loc).forEach(key => {
-                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                if (isOrgResourceCountKey(key) || key.endsWith('_mins')) {
                     properties[key] = loc[key];
                 }
             });
-            
+
             return {
                 type: 'Feature',
                 geometry: {
@@ -67,7 +118,7 @@ function convertToGeoJSON(locations) {
                 properties: properties
             };
         });
-    
+
     return {
         type: 'FeatureCollection',
         features: features
@@ -108,8 +159,12 @@ function createLocationTooltip(properties) {
     const props = properties || {};
     const locType = props.loc_type || 'unknown';
     const locLabel = props.loc_label || 'Unknown';
-    const locId = props.loc_id != null ? String(props.loc_id) : null;
-    const heading = locId ? `${locId}-${locLabel}` : locLabel;
+    const locIds = Array.isArray(props.loc_ids) && props.loc_ids.length
+        ? props.loc_ids
+        : (props.loc_id != null ? [props.loc_id] : []);
+    const heading = props.paired && locIds.length > 1
+        ? `${locLabel} (${locIds.join(' / ')})`
+        : (locIds[0] != null ? `${locIds[0]}-${locLabel}` : locLabel);
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
     const locStartFormatted = formatTimeToHHMM(locStart);
@@ -129,6 +184,10 @@ function createLocationTooltip(properties) {
             <strong>${heading}</strong><br>
             <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
     `;
+
+    if (props.paired && Array.isArray(props.passes) && props.passes.length > 1) {
+        tooltip += `<br><strong>Passes:</strong> Outbound + Return`;
+    }
     
     if (locStartFormatted && locEndFormatted) {
         tooltip += `<br><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}`;
@@ -138,10 +197,10 @@ function createLocationTooltip(properties) {
         tooltip += `<br><strong>Duration:</strong> ${duration} min`;
     }
     
-    // Issue #592: Add resource counts to tooltip
+    // Org resource counts only (exclude pass_count)
     const resourceCounts = [];
     Object.keys(props).forEach(key => {
-        if (key.endsWith('_count')) {
+        if (isOrgResourceCountKey(key)) {
             const count = props[key];
             if (count && count > 0) {
                 const resource = key.replace('_count', '').toUpperCase();
@@ -149,6 +208,10 @@ function createLocationTooltip(properties) {
             }
         }
     });
+    const passLine = formatPassLine(props);
+    if (passLine) {
+        tooltip += `<br>${formatPassLineHtml(props)}`;
+    }
     if (resourceCounts.length > 0) {
         tooltip += `<br><strong>Resources:</strong> ${resourceCounts.join(', ')}`;
     }
@@ -176,8 +239,12 @@ function createLocationPopup(properties) {
     const props = properties || {};
     const locType = props.loc_type || 'unknown';
     const locLabel = props.loc_label || 'Unknown';
-    const locId = props.loc_id != null ? String(props.loc_id) : null;
-    const heading = locId ? `${locId}-${locLabel}` : locLabel;
+    const locIds = Array.isArray(props.loc_ids) && props.loc_ids.length
+        ? props.loc_ids
+        : (props.loc_id != null ? [props.loc_id] : []);
+    const heading = props.paired && locIds.length > 1
+        ? `${locLabel}`
+        : (locIds[0] != null ? `${locIds[0]}-${locLabel}` : locLabel);
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
     const locStartFormatted = formatTimeToHHMM(locStart);
@@ -207,7 +274,7 @@ function createLocationPopup(properties) {
     
     const resourceCounts = [];
     Object.keys(props).forEach(key => {
-        if (key.endsWith('_count')) {
+        if (isOrgResourceCountKey(key)) {
             const count = props[key];
             if (count && count > 0) {
                 const resource = key.replace('_count', '').toUpperCase();
@@ -230,12 +297,17 @@ function createLocationPopup(properties) {
         : "—";
 
     let popup = `
-        <div style="font-family: Arial, sans-serif; font-size: 14px; width: 260px;">
+        <div style="font-family: Arial, sans-serif; font-size: 14px; width: 280px;">
             <h3 style="margin: 0 0 0.5rem 0; font-size: 16px; color: #2c3e50;">${heading}</h3>
             <div style="margin-bottom: 0.5rem;">
                 <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
             </div>
     `;
+
+    const passLine = formatPassLine(props);
+    if (passLine) {
+        popup += `<div style="margin-bottom: 0.5rem;">${formatPassLineHtml(props)}</div>`;
+    }
 
     if (resourceCounts.length > 0) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Resources:</strong> ${resourceCounts.join(', ')}</div>`;
@@ -249,8 +321,20 @@ function createLocationPopup(properties) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Duration:</strong> ${duration} minutes</div>`;
     }
 
-    popup += `<div style="margin-bottom: 0.5rem;"><strong>First/last runner:</strong> ${firstLastRunner}</div>`;
-
+    if (props.paired && Array.isArray(props.passes) && props.passes.length > 1) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Combined first/last:</strong> ${firstLastRunner}</div>`;
+        props.passes.forEach((pass) => {
+            const role = pass.pass === 'return' ? 'Return' : 'Outbound';
+            const pf = (pass.first_runner && pass.first_runner !== 'NA')
+                ? (formatTimeToHHMM(pass.first_runner) || '—') : '—';
+            const pl = (pass.last_runner && pass.last_runner !== 'NA')
+                ? (formatTimeToHHMM(pass.last_runner) || '—') : '—';
+            const window = (pf !== '—' && pl !== '—') ? `${pf} → ${pl}` : '—';
+            popup += `<div style="margin-bottom: 0.35rem; padding-left: 0.25rem;"><strong>${role}</strong> (ID ${pass.loc_id}): ${window}</div>`;
+        });
+    } else {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>First/last runner:</strong> ${firstLastRunner}</div>`;
+    }
     if (peakStartFormatted && peakEndFormatted) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong> ${peakStartFormatted} → ${peakEndFormatted}</div>`;
     }
@@ -516,8 +600,16 @@ async function renderLocations(map) {
             }
         });
         
-        // Store marker reference
-        markersByLocId[props.loc_id] = marker;
+        // Store marker reference for every loc_id in the group (Issue #810)
+        const ids = Array.isArray(props.loc_ids) && props.loc_ids.length
+            ? props.loc_ids
+            : [props.loc_id];
+        ids.forEach((id) => {
+            if (id != null) markersByLocId[String(id)] = marker;
+        });
+        if (props.location_key) {
+            markersByLocId[`key:${props.location_key}`] = marker;
+        }
         
         // Add to layer
         marker.addTo(markersLayer);
@@ -718,11 +810,15 @@ function highlightLocationInTable(locId) {
         window.clearLocationTableHighlight();
     }
     
-    // Find and highlight the target row
+    // Find and highlight the target row (Issue #810: ID cell may be "117 / 129")
+    const target = String(locId);
     const rows = document.querySelectorAll('#locations-table tbody tr');
     rows.forEach(row => {
         const firstCell = row.querySelector('td');
-        if (firstCell && firstCell.textContent.trim() == locId) {
+        if (!firstCell) return;
+        const cellText = firstCell.textContent.trim();
+        const ids = cellText.split('/').map(s => s.trim());
+        if (cellText == target || ids.includes(target)) {
             row.classList.add('selected-row');
             row.style.backgroundColor = '#e3f2fd';
             row.style.cursor = 'pointer';

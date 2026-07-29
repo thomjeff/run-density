@@ -184,6 +184,8 @@ async def get_reports_list(
                 
                 filename = report_file.name
                 report_descriptions = {
+                    "Locations.csv": "Consolidated Location report (one row per loc_id; combined windows)",
+                    "Passes.csv": "Pass-level report (one row per pass_id; outbound/return detail)",
                     "finish_times.csv": "Predicted finisher counts by 20-minute clock window (per event and all)",
                     "finish_area_demand.pdf": "Finish-area operational PDF: bar chart, cumulative curve, demand table (event=all)",
                 }

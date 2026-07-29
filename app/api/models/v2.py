@@ -93,7 +93,7 @@ class V2AnalyzeRequest(BaseModel):
                 "description": "Scenario to test 10k on Saturday",
                 "data_dir": "/app/data",
                 "segments_file": "segments.csv",
-                "locations_file": "locations.csv",
+                "locations_file": "passes.csv",
                 "flow_file": "flow.csv",
                 "events": [
                     {
