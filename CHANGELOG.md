@@ -163,6 +163,11 @@
 ### UI Changes
 - **Loc Sheets removed from navigation**: one-pagers are linked from the Locations UI (route kept)
 
+### Issue #701 — dynamic event discovery
+- Analysis GeoJSON / GPX / location helpers discover event flags and spans from `analysis.json` ∩ `COURSE_EVENT_IDS` (no duplicated elite/open/10k/half/full loops)
+- Elite/open included in `segments_list` builders and GeoJSON event labels alongside full/half/10k
+- Shared helpers in `app/core/event_discovery.py`
+
 ### Issue #786 — segment km vs stitched GPX
 - Per-event `from_km`/`to_km` are measured along the stitched recipe polyline (same geometry as event GPX), not sum-of-rounded per-leg `length_km`
 - Exported / enriched event kms use **3 decimals** (1 m)

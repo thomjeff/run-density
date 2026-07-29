@@ -280,19 +280,14 @@ def generate_segment_coordinates(
         if not label:
             raise ValueError(f"Segment {seg_id} missing required segment_label for GPX coordinate generation.")
         
-        # Determine which event to use based on which events use this segment
-        # Priority: elite, open, 10k, half, full (covering sat/sun events)
-        # Issue #655: Only check for events that exist in the courses dict to avoid
-        # failures when segments reference events not in the current analysis
-        # Note: column names are lowercase in CSV
-        gpx_event = None
-        available_events = set(courses.keys())  # Only check events we have GPX data for
-        for event in ["elite", "open", "10k", "half", "full"]:
-            if event in available_events and segment.get(event, "").lower() == "y":
-                gpx_event = event
-                break
+        # Choose GPX/spans from analysis events present on this segment (#701).
+        # Issue #655: Only consider events that exist in the courses dict.
+        from app.core.event_discovery import pick_gpx_event
+
+        gpx_event = pick_gpx_event(segment, courses.keys())
         
         if gpx_event is None:
+            available_events = set(courses.keys())
             raise ValueError(
                 f"Segment {seg_id} does not match any available event with GPX data. "
                 f"Available events: {sorted(available_events)}. "

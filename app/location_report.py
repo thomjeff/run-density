@@ -473,16 +473,18 @@ def calculate_arrival_times_for_location(
     """
     arrival_times = []
     
-    # Get eligible events (where flag is 'y')
-    # Use lowercase event names (v2 standard)
-    # Issue #531: include elite/open for Saturday 5K events
-    eligible_events = []
-    for event in ["full", "half", "10k", "elite", "open"]:
-        if str(location.get(event, "")).lower() == "y":
-            eligible_events.append(event.lower())
-    
+    # Eligible events: product vocabulary ∩ (courses present or all COURSE_EVENT_IDS),
+    # discovered dynamically from location flags (#701 / #531 elite+open).
+    from app.core.event_discovery import active_events
+    from app.utils.constants import COURSE_EVENT_IDS
+
+    candidate_events = list(dict.fromkeys([*COURSE_EVENT_IDS, *courses.keys()]))
+    eligible_events = active_events(location, candidate_events)
+
     if not eligible_events:
-        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10k={location.get('10k')})")
+        logger.warning(
+            f"Location {location.get('loc_id')}: No eligible events among {candidate_events}"
+        )
         return arrival_times
     
     logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")

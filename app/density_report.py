@@ -2221,7 +2221,9 @@ def _add_geometries_to_bin_features(
             gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
         courses = load_all_courses(gpx_paths)
         
-        # Convert segments to dict format for GPX processor
+        # Convert segments to dict format for GPX processor (#701: all analysis events)
+        from app.core.event_discovery import build_segment_event_payload
+
         segments_list = []
         for _, segment in segments_df.iterrows():
             seg_id = segment.get("seg_id")
@@ -2230,24 +2232,14 @@ def _add_geometries_to_bin_features(
                 raise ValueError("segments.csv missing seg_id for bin geometry generation.")
             if not seg_label:
                 raise ValueError(f"Segment {seg_id} missing seg_label for bin geometry generation.")
-            segments_list.append({
+            entry = {
                 "seg_id": seg_id,
                 "segment_label": seg_label,
-                # Issue #548 Bug 1: Use lowercase '10k' to match CSV column format
-                "10k": segment.get('10k', segment.get('10K', 'n')),
-                "half": segment.get('half', 'n'),
-                "full": segment.get('full', 'n'),
-                # Issue #655: Fix 10k_from_km/to_km extraction bug - handle 0 values correctly
-                # Use 'is not None' check instead of 'or' to properly handle 0.0 values
-                "10k_from_km": segment.get('10k_from_km') if segment.get('10k_from_km') is not None else segment.get('10K_from_km'),
-                "10k_to_km": segment.get('10k_to_km') if segment.get('10k_to_km') is not None else segment.get('10K_to_km'),
-                "half_from_km": segment.get('half_from_km'),
-                "half_to_km": segment.get('half_to_km'),
-                "full_from_km": segment.get('full_from_km'),
-                "full_to_km": segment.get('full_to_km'),
                 "direction": segment.get("direction"),
                 "width_m": segment.get("width_m"),
-            })
+            }
+            entry.update(build_segment_event_payload(segment, gpx_paths.keys()))
+            segments_list.append(entry)
         
         # Generate segment centerlines from GPX
         segments_with_coords = generate_segment_coordinates(courses, segments_list)

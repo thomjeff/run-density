@@ -236,7 +236,9 @@ async def get_map_segments():
             gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
         courses = load_all_courses(gpx_paths)
         
-        # Convert to format for GPX processor
+        # Convert to format for GPX processor (#701: all analysis event flags/spans)
+        from app.core.event_discovery import build_segment_event_payload
+
         segments_list = []
         for _, seg in segments_df.iterrows():
             seg_id = seg.get("seg_id")
@@ -245,19 +247,12 @@ async def get_map_segments():
                 raise HTTPException(status_code=500, detail="Segments metadata missing seg_id")
             if not seg_label:
                 raise HTTPException(status_code=500, detail=f"Segment {seg_id} missing seg_label")
-            segments_list.append({
+            entry = {
                 "seg_id": seg_id,
                 "segment_label": seg_label,
-                "10k": seg.get('10k', seg.get('10K', 'n')),
-                "half": seg.get('half', 'n'),
-                "full": seg.get('full', 'n'),
-                "10k_from_km": seg.get('10k_from_km') or seg.get('10K_from_km'),
-                "10k_to_km": seg.get('10k_to_km') or seg.get('10K_to_km'),
-                "half_from_km": seg.get('half_from_km'),
-                "half_to_km": seg.get('half_to_km'),
-                "full_from_km": seg.get('full_from_km'),
-                "full_to_km": seg.get('full_to_km')
-            })
+            }
+            entry.update(build_segment_event_payload(seg, gpx_paths.keys()))
+            segments_list.append(entry)
         
         # Generate centerlines
         segments_with_coords = generate_segment_coordinates(courses, segments_list)
