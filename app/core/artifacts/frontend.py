@@ -618,24 +618,10 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
         raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
     schema_key = _resolve_schema_key(seg_id, schema_keys, dims)
     
-    # Issue #655: Calculate length_km from event-specific fields
-    length_km = None
-    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
-        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
-            length_km = float(dims[col])
-            break
-    
-    # Fallback: Calculate from event-specific from_km/to_km
-    if length_km is None or length_km == 0.0:
-        for event in ["elite", "open", "10k", "half", "full"]:
-            event_from = dims.get(f"{event}_from_km")
-            event_to = dims.get(f"{event}_to_km")
-            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
-                length_km = float(event_to) - float(event_from)
-                break
-    
-    if length_km is None or length_km == 0.0:
-        length_km = 0.0
+    # Issue #655 / #701: length from dynamic event length or span columns
+    from app.core.event_discovery import display_events_from_flags, length_km_from_event_fields
+
+    length_km = length_km_from_event_fields(dims)
     
     return {
         "type": "Feature",
@@ -649,7 +635,7 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
             "length_km": length_km,
             "width_m": float(width_val),
             "direction": direction,
-            "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+            "events": display_events_from_flags(dims),
             "schema": schema_key,
             "description": dims.get("description", "No description available")
         }
@@ -690,24 +676,10 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
         raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
     schema_key = _resolve_schema_key(seg_id, schema_keys, dims)
     
-    # Issue #655: Calculate length_km from event-specific fields
-    length_km = None
-    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
-        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
-            length_km = float(dims[col])
-            break
-    
-    # Fallback: Calculate from event-specific from_km/to_km
-    if length_km is None or length_km == 0.0:
-        for event in ["elite", "open", "10k", "half", "full"]:
-            event_from = dims.get(f"{event}_from_km")
-            event_to = dims.get(f"{event}_to_km")
-            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
-                length_km = float(event_to) - float(event_from)
-                break
-    
-    if length_km is None or length_km == 0.0:
-        length_km = 0.0
+    # Issue #655 / #701: length from dynamic event length or span columns
+    from app.core.event_discovery import display_events_from_flags, length_km_from_event_fields
+
+    length_km = length_km_from_event_fields(dims)
     
     return {
         "seg_id": seg_id,
@@ -715,8 +687,7 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
         "length_km": length_km,
         "width_m": float(width_val),
         "direction": direction,
-        "events": [event for event in ["Full", "Half", "10K"] 
-                   if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+        "events": display_events_from_flags(dims),
         "schema": schema_key,
         "description": dims.get("description", "No description available")
     }
@@ -822,6 +793,8 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
     
     # Load segments data to get segment definitions
     try:
+        from app.core.event_discovery import active_events, build_segment_event_payload
+
         segments_df = analysis_context.get_segments_df()
         segments_list = []
         for _, seg in segments_df.iterrows():
@@ -832,45 +805,21 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
             if not seg_label:
                 raise ValueError(f"Segment {seg_id} missing seg_label for generate_segments_geojson.")
             
-            # Issue #655: Filter segments to only include those that belong to events in the analysis
-            # Check if segment belongs to any available event (elite, open, 10k, half, full)
-            segment_events = []
-            if seg.get("elite", "").lower() == "y" and "elite" in available_event_names:
-                segment_events.append("elite")
-            if seg.get("open", "").lower() == "y" and "open" in available_event_names:
-                segment_events.append("open")
-            if (seg.get("10k", "") or seg.get("10K", "")).lower() == "y" and "10k" in available_event_names:
-                segment_events.append("10k")
-            if seg.get("half", "").lower() == "y" and "half" in available_event_names:
-                segment_events.append("half")
-            if seg.get("full", "").lower() == "y" and "full" in available_event_names:
-                segment_events.append("full")
+            # Issue #655 / #701: include segments for any analysis event with flag y
+            segment_events = active_events(seg, available_event_names)
             
             # Skip segments that don't belong to any available event
             if not segment_events:
                 continue  # Skip segments not in current analysis
             
-            segments_list.append({
+            entry = {
                 "seg_id": seg_id,
                 "segment_label": seg_label,
-                "elite": seg.get("elite", "n"),  # Issue #655: Add elite and open columns for Saturday events
-                "open": seg.get("open", "n"),
-                "10k": seg.get("10k") if seg.get("10k") is not None else seg.get("10K", "n"),
-                "half": seg.get("half", "n"),
-                "full": seg.get("full", "n"),
-                "elite_from_km": seg.get("elite_from_km"),  # Issue #655: Add elite and open from_km/to_km fields
-                "elite_to_km": seg.get("elite_to_km"),
-                "open_from_km": seg.get("open_from_km"),
-                "open_to_km": seg.get("open_to_km"),
-                "10k_from_km": seg.get("10k_from_km") if seg.get("10k_from_km") is not None else seg.get("10K_from_km"),
-                "10k_to_km": seg.get("10k_to_km") if seg.get("10k_to_km") is not None else seg.get("10K_to_km"),
-                "half_from_km": seg.get("half_from_km"),
-                "half_to_km": seg.get("half_to_km"),
-                "full_from_km": seg.get("full_from_km"),
-                "full_to_km": seg.get("full_to_km"),
                 "direction": seg.get("direction"),
                 "width_m": seg.get("width_m"),
-            })
+            }
+            entry.update(build_segment_event_payload(seg, available_event_names))
+            segments_list.append(entry)
             # Issue #655: Validate that direction is present - if missing, this is a data issue
             if not segments_list[-1].get("direction"):
                 raise ValueError(
@@ -939,40 +888,20 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
             # Update properties with dimensions
             props["label"] = seg_label
             
-            # Issue #655: Calculate length_km from event-specific fields or from_km/to_km
-            # Try event-specific length columns first (elite_length, open_length, etc.)
-            length_km = None
-            for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
-                if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
-                    length_km = float(dims[col])
-                    break
-            
-            # Fallback: Calculate from from_km/to_km if length column not found or is 0
-            if length_km is None or length_km == 0.0:
-                # Use from_km/to_km from the feature properties (already set by generate_segment_coordinates)
+            # Issue #655 / #701: Calculate length_km from dynamic event fields
+            from app.core.event_discovery import display_events_from_flags, length_km_from_event_fields
+
+            length_km = length_km_from_event_fields(dims)
+            if length_km == 0.0:
                 from_km = props.get("from_km")
                 to_km = props.get("to_km")
                 if from_km is not None and to_km is not None and pd.notna(from_km) and pd.notna(to_km):
                     length_km = float(to_km) - float(from_km)
-                else:
-                    # Last resort: Try event-specific from_km/to_km from dims
-                    feature_events = props.get("events", [])
-                    if feature_events:
-                        event = feature_events[0].lower()  # Use first event
-                        event_from = dims.get(f"{event}_from_km")
-                        event_to = dims.get(f"{event}_to_km")
-                        if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
-                            length_km = float(event_to) - float(event_from)
             
-            # Default to 0.0 if still no length found
-            if length_km is None or length_km == 0.0:
-                length_km = 0.0
-            
-            props["length_km"] = length_km
+            props["length_km"] = length_km if length_km else 0.0
             props["width_m"] = float(width_val)
             props["direction"] = direction
-            props["events"] = [event for event in ["Full", "Half", "10K"] 
-                              if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
+            props["events"] = display_events_from_flags(dims, available_event_names)
             props["schema"] = schema_key
             desc_val = dims.get("description", "")
             if desc_val is None or (isinstance(desc_val, float) and pd.isna(desc_val)):

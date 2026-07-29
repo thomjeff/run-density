@@ -767,12 +767,9 @@ def _format_bullets_html(text: str) -> str:
 
 
 def _extract_events(location: Dict[str, Any]) -> List[str]:
-    events = []
-    for name in ["full", "half", "10k", "elite", "open"]:
-        value = str(location.get(name, "")).strip().lower()
-        if value == "y":
-            events.append(name)
-    return events
+    from app.core.event_discovery import active_events
+
+    return active_events(location)
 
 
 def _is_proxy_location(location: Dict[str, Any]) -> bool:
