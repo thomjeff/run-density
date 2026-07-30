@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #815 — UX polish (Reports / Density / Build)
+- **Reports**: per-section file select + Download (day reports + data files); size/modified shown for the selected file only
+- **Density**: heatmap display ~30% smaller on laptop (`max-width: 70%`); full width under 768px
+- **Build vs Analysis**: hide Active run context strip on Build routes; rename analysis chrome link to **Open source package** (avoids clash with Build → Packages)
+
 ### 2027 location / pass identity
 - **`loc_id`**: short human Location number (phone / UI / one-pager)
 - **`pass_id`**: timed instance (outbound/return and unpaired rows)

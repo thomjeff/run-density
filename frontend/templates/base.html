@@ -91,7 +91,7 @@
                 <span id="rf-tabler-context-label" class="rf-tabler-context-label">—</span>
                 <span id="rf-tabler-context-id" class="rf-tabler-context-id"></span>
                 <span id="rf-tabler-context-day" class="rf-tabler-context-day" hidden></span>
-                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config" hidden>Package</a>
+                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config" hidden>Open source package</a>
             </div>
         </div>
         <div class="page-wrapper">
@@ -236,6 +236,9 @@
             const dayEl = document.getElementById("rf-tabler-context-day");
             const trigger = document.getElementById("rf-runs-trigger-label");
 
+            // Issue #815: Build mode does not need Active run chrome (avoids Package vs Packages clash)
+            const onBuild = isConfigRoutePath(window.location.pathname);
+
             if (!hasRun) {
                 if (strip) strip.hidden = true;
                 if (trigger) trigger.textContent = "Runs";
@@ -251,7 +254,7 @@
                 if (cached) label = cached;
             } catch (e) { /* ignore */ }
 
-            if (strip) strip.hidden = false;
+            if (strip) strip.hidden = onBuild;
             if (labelEl) labelEl.textContent = label;
             if (idEl) {
                 idEl.textContent = shortRunId(id);
@@ -271,7 +274,8 @@
                 const trunc = label.length > 28 ? label.slice(0, 26) + "…" : label;
                 trigger.textContent = trunc + " · " + shortRunId(id);
             }
-            syncTablerPackageLink(id);
+            // Package deep-link is analysis chrome only
+            syncTablerPackageLink(onBuild ? null : id);
             refreshRunsDropdown(id);
         }
 
@@ -302,7 +306,8 @@
                     }
                     localStorage.setItem("selected_config_id", configId);
                     link.href = "/config?config_id=" + encodeURIComponent(configId);
-                    link.title = "Open package " + configId;
+                    link.textContent = "Open source package";
+                    link.title = "Open source package " + configId;
                     link.hidden = false;
                 })
                 .catch(function () {
@@ -439,7 +444,7 @@
             if (configId) {
                 localStorage.setItem("selected_config_id", configId);
             }
-            // Keep Results nest visible while on Build/Package (Issue #796)
+            // Keep Results nest visible while on Build (Issue #796); Active run strip hidden on Build (#815)
             const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
             const storedDay = (localStorage.getItem("selected_day") || "").trim() || null;
             updateNavLinks(storedDay, storedRun);

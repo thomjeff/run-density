@@ -38,7 +38,7 @@
         </div>
         <div class="rf-results-actions">
             <a id="run-context-open-reports" href="/reports">Open reports</a>
-            <a id="run-context-open-package" href="/config" style="display: none;">Open package</a>
+            <a id="run-context-open-package" href="/config" style="display: none;">Open source package</a>
             <a id="run-context-change-run" href="/dashboard">Change run</a>
         </div>
     </div>
@@ -176,7 +176,8 @@
                 }
                 pkgLink.href = withTablerUi('/config?config_id=' + encodeURIComponent(configId));
                 pkgLink.style.display = '';
-                pkgLink.title = 'Open package ' + configId;
+                pkgLink.textContent = 'Open source package';
+                pkgLink.title = 'Open source package ' + configId;
             })
             .catch(function () {
                 pkgLink.style.display = 'none';
