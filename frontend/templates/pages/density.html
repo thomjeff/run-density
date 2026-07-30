@@ -123,10 +123,10 @@
             </div>
         </div>
         
-        <!-- Heatmap -->
+        <!-- Heatmap (Issue #815: ~30% smaller on laptop; full width on narrow viewports) -->
         <div id="heatmap-container" style="margin: 1.5rem 0;">
             <h4 style="margin-bottom: 0.75rem;">Density Heatmap</h4>
-            <img id="heatmap-image" src="" alt="Density heatmap" style="max-width: 100%; border-radius: 4px;" />
+            <img id="heatmap-image" class="rf-density-heatmap" src="" alt="Density heatmap" />
             <div id="heatmap-placeholder" class="placeholder">No heatmap data available for this segment.</div>
         </div>
         <p style="margin: -0.5rem 0 1.5rem; color: #666; font-size: 0.9rem;">
@@ -257,6 +257,19 @@
     .pagination-buttons button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+    }
+
+    /* Issue #815: ~30% smaller heatmap on laptop; full width on narrow screens */
+    .rf-density-heatmap {
+        max-width: 70%;
+        height: auto;
+        border-radius: 4px;
+        display: block;
+    }
+    @media (max-width: 768px) {
+        .rf-density-heatmap {
+            max-width: 100%;
+        }
     }
 </style>
 {% endblock %}
