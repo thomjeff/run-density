@@ -15,6 +15,7 @@
         pinMarker: null,
         segLayer: null,
         highlightLayer: null,
+        annotLayer: null,
         nearby: [],
         mapFeatures: [],
         nearbySortCol: 'seg_id',
@@ -23,6 +24,8 @@
         editingIxId: null,
         unloadBound: false,
         nearbyRequestSeq: 0,
+        // 'edit' = label all nearby; 'view' = Stream Interaction segs only (§2)
+        annotMode: 'edit',
     };
 
     function getConfigId() {
@@ -91,6 +94,7 @@
         }).addTo(state.map);
         state.segLayer = L.layerGroup().addTo(state.map);
         state.highlightLayer = L.layerGroup().addTo(state.map);
+        state.annotLayer = L.layerGroup().addTo(state.map);
         // Clicks on polylines must reach the map (interactive:false on lines below)
         state.map.on('click', onMapClick);
         return state.map;
@@ -259,9 +263,9 @@
             const segId = (f.properties && f.properties.seg_id) || '';
             const isHi = !!hi[segId];
             const line = L.polyline(latlngs, {
-                color: isHi ? '#c0392b' : '#8B7355',
-                weight: isHi ? 5 : 3,
-                opacity: isHi ? 0.95 : 0.7,
+                color: isHi ? '#2f9e44' : '#b8a990',
+                weight: isHi ? 5 : 2,
+                opacity: isHi ? 0.85 : 0.45,
                 interactive: false,
             });
             line.bindTooltip(segId + (f.properties.seg_label ? ' — ' + f.properties.seg_label : ''));
@@ -290,10 +294,373 @@
                 renderSegLines(nearbyIds, {
                     fit: nearbyIds.length ? 'nearby' : 'all',
                 });
+                renderAnnotations();
             })
             .catch(function () {
                 state.mapFeatures = [];
             });
+    }
+
+    function haversineM(a, b) {
+        const R = 6371000;
+        const lat1 = (Array.isArray(a) ? a[0] : a.lat) * Math.PI / 180;
+        const lat2 = (Array.isArray(b) ? b[0] : b.lat) * Math.PI / 180;
+        const dLat = lat2 - lat1;
+        const dLon = ((Array.isArray(b) ? b[1] : b.lng) - (Array.isArray(a) ? a[1] : a.lng)) *
+            Math.PI / 180;
+        const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+    }
+
+    function bearingDeg(a, b) {
+        const lat1 = (Array.isArray(a) ? a[0] : a.lat) * Math.PI / 180;
+        const lat2 = (Array.isArray(b) ? b[0] : b.lat) * Math.PI / 180;
+        const dLon = ((Array.isArray(b) ? b[1] : b.lng) - (Array.isArray(a) ? a[1] : a.lng)) *
+            Math.PI / 180;
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function destinationLatLng(lat, lng, bearing, distM) {
+        const R = 6371000;
+        const δ = distM / R;
+        const θ = bearing * Math.PI / 180;
+        const φ1 = lat * Math.PI / 180;
+        const λ1 = lng * Math.PI / 180;
+        const φ2 = Math.asin(
+            Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ)
+        );
+        const λ2 = λ1 + Math.atan2(
+            Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
+            Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+        );
+        return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+
+    function segLatLngs(segId) {
+        const feature = (state.mapFeatures || []).find(function (f) {
+            return f && f.properties && f.properties.seg_id === segId;
+        });
+        if (!feature || !feature.geometry) return [];
+        const coords = feature.geometry.coordinates || [];
+        return coords.map(function (c) { return [c[1], c[0]]; });
+    }
+
+    function pointAlongPath(latlngs, distM) {
+        if (!latlngs || latlngs.length < 2) return null;
+        let left = Math.max(0, distM);
+        for (let i = 0; i < latlngs.length - 1; i++) {
+            const d = haversineM(latlngs[i], latlngs[i + 1]);
+            if (d >= left) {
+                const t = d === 0 ? 0 : left / d;
+                const lat = latlngs[i][0] + t * (latlngs[i + 1][0] - latlngs[i][0]);
+                const lng = latlngs[i][1] + t * (latlngs[i + 1][1] - latlngs[i][1]);
+                return {
+                    lat: lat,
+                    lng: lng,
+                    bearing: bearingDeg(latlngs[i], latlngs[i + 1]),
+                };
+            }
+            left -= d;
+        }
+        const n = latlngs.length;
+        return {
+            lat: latlngs[n - 1][0],
+            lng: latlngs[n - 1][1],
+            bearing: bearingDeg(latlngs[n - 2], latlngs[n - 1]),
+        };
+    }
+
+    function pathFromPin(seg) {
+        const coords = segLatLngs(seg.seg_id);
+        if (coords.length < 2) {
+            // Fallback: straight line from pin-side endpoint away along start→end
+            if (seg.start_lat == null || seg.end_lat == null) return [];
+            const start = [seg.start_lat, seg.start_lon];
+            const end = [seg.end_lat, seg.end_lon];
+            if (seg.near_endpoint === 'end') return [end, start];
+            return [start, end];
+        }
+        if (seg.near_endpoint === 'end') return coords.slice().reverse();
+        return coords.slice();
+    }
+
+    function corridorKey(seg) {
+        const a = Number(seg.start_lat).toFixed(5) + ',' + Number(seg.start_lon).toFixed(5);
+        const b = Number(seg.end_lat).toFixed(5) + ',' + Number(seg.end_lon).toFixed(5);
+        return a < b ? a + '|' + b : b + '|' + a;
+    }
+
+    function annotEventText(events) {
+        return (events || []).map(function (e) {
+            return String(e).toLowerCase();
+        }).filter(Boolean).join(', ');
+    }
+
+    function annotLabelText(seg) {
+        const ev = annotEventText(seg.events);
+        return ev ? (seg.seg_id + ': ' + ev) : String(seg.seg_id || '');
+    }
+
+    function interactionSegIds(j) {
+        const ids = {};
+        ((j && j.interactions) || []).forEach(function (ix) {
+            if (!ix) return;
+            if (ix.from_seg_id) ids[ix.from_seg_id] = true;
+            if (ix.conflicts_with_seg_id) ids[ix.conflicts_with_seg_id] = true;
+            (ix.to_seg_ids || []).forEach(function (sid) {
+                if (sid) ids[sid] = true;
+            });
+        });
+        return ids;
+    }
+
+    function segmentsForAnnotations() {
+        const rows = state.nearby || [];
+        if (state.annotMode !== 'view') return rows;
+        const want = interactionSegIds(selectedJunction());
+        return rows.filter(function (s) { return want[s.seg_id]; });
+    }
+
+    function approachPointForSeg(seg, distM) {
+        const path = pathFromPin(seg);
+        if (!path.length) return null;
+        return pointAlongPath(path, distM == null ? 20 : distM);
+    }
+
+    function quadraticCurve(a, control, c, steps) {
+        const n = steps || 16;
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+            const t = i / n;
+            const u = 1 - t;
+            const lat = u * u * a[0] + 2 * u * t * control[0] + t * t * c[0];
+            const lng = u * u * a[1] + 2 * u * t * control[1] + t * t * c[1];
+            pts.push([lat, lng]);
+        }
+        return pts;
+    }
+
+    function addConnectorCurve(fromLL, viaLL, toLL) {
+        if (!state.annotLayer || !fromLL || !viaLL || !toLL) return;
+        const pts = quadraticCurve(
+            [fromLL.lat, fromLL.lng],
+            [viaLL.lat, viaLL.lng],
+            [toLL.lat, toLL.lng],
+            18
+        );
+        L.polyline(pts, {
+            color: '#c0392b',
+            weight: 2,
+            opacity: 0.75,
+            dashArray: '4 6',
+            interactive: false,
+            lineCap: 'round',
+            lineJoin: 'round',
+        }).addTo(state.annotLayer);
+    }
+
+    function renderConnectors() {
+        const j = selectedJunction();
+        if (!j || !state.annotLayer) return;
+        const byId = nearbyById();
+        const pin = (j.lat != null && j.lon != null)
+            ? { lat: Number(j.lat), lng: Number(j.lon) }
+            : null;
+        if (!pin || !isFinite(pin.lat) || !isFinite(pin.lng)) return;
+
+        (j.interactions || []).forEach(function (ix) {
+            if (!ix) return;
+            const fromSeg = byId[ix.from_seg_id];
+            // Keep connectors short near the pin so they don't read as travel arrows
+            const fromPt = fromSeg ? approachPointForSeg(fromSeg, 28) : null;
+            const toIds = ix.to_seg_ids || [];
+            toIds.forEach(function (tid) {
+                const toSeg = byId[tid];
+                const toPt = toSeg ? approachPointForSeg(toSeg, 28) : null;
+                if (fromPt && toPt) addConnectorCurve(fromPt, pin, toPt);
+            });
+            if (ix.type === 'cross' && ix.conflicts_with_seg_id) {
+                const cSeg = byId[ix.conflicts_with_seg_id];
+                const cPt = cSeg ? approachPointForSeg(cSeg, 28) : null;
+                if (cPt) {
+                    // Reflect across pin so the conflict stream reads as a through-crossing
+                    const far = {
+                        lat: pin.lat - (cPt.lat - pin.lat),
+                        lng: pin.lng - (cPt.lng - pin.lng),
+                    };
+                    addConnectorCurve(cPt, pin, far);
+                }
+            }
+        });
+    }
+
+    // Distance along corridor from pin-side endpoint; lane offset from path centerline
+    const ANNOT_PLACE_M = 100;
+    const ANNOT_LANE_M = 20;
+
+    function directedArrowSlice(seg) {
+        /**
+         * Place annotation on real corridor geometry (pathFromPin + pointAlongPath).
+         * Travel arrows use pin→mid radial bearing so in/out always read toward/away
+         * from the pin even when the corridor curves (local tangent can be ~perp).
+         * Fallback: straight pin → far-endpoint ray when polyline is missing.
+         */
+        const j = selectedJunction();
+        if (!j || j.lat == null || j.lon == null) return null;
+        const inbound = flowDirection(seg) === 'in';
+        const pinLL = [Number(j.lat), Number(j.lon)];
+
+        let mid = null;
+
+        const path = pathFromPin(seg);
+        const along = path.length >= 2 ? pointAlongPath(path, ANNOT_PLACE_M) : null;
+        if (along && isFinite(along.lat) && isFinite(along.lng)) {
+            mid = [along.lat, along.lng];
+        } else {
+            if (seg.start_lat == null || seg.end_lat == null) return null;
+            const far = inbound
+                ? [Number(seg.start_lat), Number(seg.start_lon)]
+                : [Number(seg.end_lat), Number(seg.end_lon)];
+            const rayBearing = bearingDeg(pinLL, far);
+            if (!isFinite(rayBearing)) return null;
+            mid = destinationLatLng(pinLL[0], pinLL[1], rayBearing, ANNOT_PLACE_M);
+        }
+
+        // Corridor axis = pin → label (radial), not local path tangent
+        const outwardBearing = bearingDeg(pinLL, mid);
+        if (!isFinite(outwardBearing)) return null;
+
+        const tipBearing = inbound
+            ? (outwardBearing + 180) % 360
+            : outwardBearing;
+
+        return {
+            tipBearing: tipBearing,
+            outwardBearing: outwardBearing,
+            mid: mid,
+            inbound: inbound,
+        };
+    }
+
+    function laneAnchor(slice, side) {
+        if (!slice) return null;
+        // Perp to local path tangent (not pin→far ray)
+        const axis = slice.outwardBearing;
+        const perp = (axis + (side > 0 ? 90 : -90) + 360) % 360;
+        const placed = destinationLatLng(slice.mid[0], slice.mid[1], perp, ANNOT_LANE_M);
+        return {
+            latlng: L.latLng(placed[0], placed[1]),
+            bearing: slice.tipBearing,
+        };
+    }
+
+    function normalizeAngle180(deg) {
+        return ((Number(deg) + 180) % 360 + 360) % 360 - 180;
+    }
+
+    function flowAnnotIcon(linesHtml, travelBearing) {
+        // Geographic bearing: 0=north. SVG arrow points east at rotate(0),
+        // so CSS rotation is geographic - 90°.
+        const bearing = ((Number(travelBearing) % 360) + 360) % 360;
+        const cssRot = bearing - 90;
+        // Flip text only when the wrap rotation itself would invert letters
+        // (|cssRot| > 90). Do NOT key off geographic bearing — that double-
+        // flips SE-ish labels that are already upright after cssRot.
+        const flipText = Math.abs(normalizeAngle180(cssRot)) > 90;
+        const rowDir = flipText ? 'flex-direction:row-reverse;' : '';
+        const textFlip = flipText ? 'transform:rotate(180deg);' : '';
+        const svg =
+            '<svg class="junctions-annot-svg" viewBox="0 0 20 10" width="18" height="9" aria-hidden="true">' +
+            '<path d="M0 5h14M14 5l-3.2-3.2M14 5l-3.2 3.2" fill="none" stroke="#a0522d" ' +
+            'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+        // Zero-size icon + translate(-50%,-50%) so the visual center (arrow+label)
+        // sits on the latlng regardless of text length / rotation.
+        return L.divIcon({
+            className: 'junctions-annot',
+            html:
+                '<div class="junctions-annot-wrap" style="transform:translate(-50%,-50%) rotate(' +
+                cssRot.toFixed(1) + 'deg)">' +
+                '<div class="junctions-annot-row" style="' + rowDir + '">' + svg +
+                '<div class="junctions-annot-text" style="' + textFlip + '">' +
+                linesHtml + '</div></div></div>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+        });
+    }
+
+    function flowDirection(seg) {
+        // end-at-pin → arriving; start-at-pin → leaving
+        return seg.near_endpoint === 'end' ? 'in' : 'out';
+    }
+
+    function flowGroupKey(seg) {
+        return corridorKey(seg) + '|' + flowDirection(seg);
+    }
+
+    function sortSegsById(rows) {
+        return rows.slice().sort(function (a, b) {
+            const ka = segIdSortKey(a.seg_id);
+            const kb = segIdSortKey(b.seg_id);
+            for (let i = 0; i < 3; i++) {
+                if (ka[i] < kb[i]) return -1;
+                if (ka[i] > kb[i]) return 1;
+            }
+            return 0;
+        });
+    }
+
+    function renderStreamLabels() {
+        const map = ensureMap();
+        if (!map || !state.annotLayer) return;
+        const segs = segmentsForAnnotations();
+        if (!segs.length) return;
+
+        // Mock style: one arrow+label per (corridor × travel direction).
+        const flowGroups = {};
+        segs.forEach(function (seg) {
+            if (!seg || !seg.seg_id) return;
+            const key = flowGroupKey(seg);
+            if (!flowGroups[key]) flowGroups[key] = [];
+            flowGroups[key].push(seg);
+        });
+
+        Object.keys(flowGroups).forEach(function (key) {
+            const members = sortSegsById(flowGroups[key]);
+            const rep = members[0];
+            const slice = directedArrowSlice(rep);
+            if (!slice) return;
+
+            const side = slice.inbound ? -1 : 1;
+            const anchor = laneAnchor(slice, side);
+            if (!anchor) return;
+
+            const linesHtml = members.map(function (s) {
+                return '<div class="junctions-annot-line">' +
+                    escapeHtml(annotLabelText(s)) + '</div>';
+            }).join('');
+
+            L.marker(anchor.latlng, {
+                icon: flowAnnotIcon(linesHtml, anchor.bearing),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 900,
+            }).addTo(state.annotLayer);
+        });
+    }
+
+    function renderAnnotations() {
+        ensureMap();
+        if (!state.annotLayer) return;
+        state.annotLayer.clearLayers();
+        if (!(state.nearby || []).length) return;
+        renderStreamLabels();
+        // Connectors on after travel arrows look right
+        // renderConnectors();
     }
 
     function classifyNearbyRow(seg) {
@@ -398,6 +765,7 @@
             const legend = document.getElementById('junctions-segments-legend');
             if (legend) legend.textContent = '';
             renderSegLines([]);
+            renderAnnotations();
             return;
         }
         sortNearbyRows();
@@ -430,6 +798,7 @@
             legend.textContent = state.nearby.length + ' within ' + state.proximityM + ' m';
         }
         renderSegLines(state.nearby.map(function (s) { return s.seg_id; }), { fit: 'nearby' });
+        renderAnnotations();
     }
 
     function nearbyById() {
@@ -765,6 +1134,8 @@
                 applyAutoDescriptionIfUnlocked(live, typedBefore, autoBefore, descEl);
                 if (field === 'type') {
                     renderInteractions();
+                } else if (field === 'from' || field === 'to' || field === 'conflicts') {
+                    renderAnnotations();
                 }
             });
         });
@@ -802,6 +1173,7 @@
             tbody.innerHTML =
                 '<tr><td colspan="8" class="text-secondary">' +
                 'No interactions yet. Add a cross or merge.</td></tr>';
+            renderAnnotations();
             return;
         }
         (j.interactions || []).forEach(function (ix, idx) {
@@ -863,6 +1235,7 @@
             tbody.appendChild(tr);
             wireInteractionRow(tr, ix);
         });
+        renderAnnotations();
     }
 
     function renderList() {

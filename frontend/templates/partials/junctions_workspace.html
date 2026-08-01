@@ -56,6 +56,44 @@
 .leaflet-marker-dragging .junctions-pin-dot {
     cursor: grabbing;
 }
+.junctions-annot {
+    background: transparent !important;
+    border: none !important;
+    pointer-events: none;
+}
+.junctions-annot-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    height: auto;
+    transform-origin: center center;
+    white-space: nowrap;
+}
+.junctions-annot-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    width: max-content;
+}
+.junctions-annot-svg {
+    flex: 0 0 auto;
+    display: block;
+    overflow: visible;
+}
+.junctions-annot-text {
+    color: #a0522d;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-align: left;
+    text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px 0 0 #fff;
+}
+.junctions-annot-line + .junctions-annot-line {
+    margin-top: 1px;
+}
 </style>
 <div id="junctions-authoring-root" class="junctions-authoring">
     <div class="junctions-toolbar" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; margin-bottom:1rem;">
@@ -103,6 +141,7 @@
                     Click <strong>Place pin on map</strong> (button highlights), then click the map — including on course lines.
                     Lat/lon fill automatically; then matching segments load.
                     <strong>Drag the pin</strong> anytime to reposition — nearby segments refresh after the move.
+                    Stream labels and interaction connectors draw on the map from nearby segments.
                 </p>
             </div>
         </div>
