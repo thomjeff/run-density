@@ -15,6 +15,7 @@
         pinMarker: null,
         segLayer: null,
         highlightLayer: null,
+        endpointLayer: null,
         annotLayer: null,
         nearby: [],
         mapFeatures: [],
@@ -94,6 +95,7 @@
         }).addTo(state.map);
         state.segLayer = L.layerGroup().addTo(state.map);
         state.highlightLayer = L.layerGroup().addTo(state.map);
+        state.endpointLayer = L.layerGroup().addTo(state.map);
         state.annotLayer = L.layerGroup().addTo(state.map);
         // Clicks on polylines must reach the map (interactive:false on lines below)
         state.map.on('click', onMapClick);
@@ -219,6 +221,8 @@
         }
         map.panTo([j.lat, j.lon]);
         if (fromUser) markDirty();
+        // Refresh in-proximity endpoint styling immediately (before discover returns)
+        renderEndpointMarkers();
     }
 
     function fitMapToNearby() {
@@ -272,6 +276,7 @@
             (isHi ? state.highlightLayer : state.segLayer).addLayer(line);
             latlngs.forEach(function (ll) { allBounds.push(ll); });
         });
+        renderEndpointMarkers();
         if (options.fit === 'nearby' && (highlightIds || []).length) {
             fitMapToNearby();
         } else if (options.fit === 'all' && allBounds.length) {
@@ -280,6 +285,60 @@
                 map.fitBounds(allBounds, { padding: [24, 24], maxZoom: 15 });
             } catch (e) { /* ignore */ }
         }
+    }
+
+    function endpointKey(lat, lng) {
+        return Number(lat).toFixed(5) + ',' + Number(lng).toFixed(5);
+    }
+
+    function renderEndpointMarkers() {
+        if (!state.endpointLayer) return;
+        state.endpointLayer.clearLayers();
+        const pin = state.pinMarker ? state.pinMarker.getLatLng() : null;
+        const byKey = {};
+
+        (state.mapFeatures || []).forEach(function (f) {
+            const coords = (f.geometry && f.geometry.coordinates) || [];
+            if (coords.length < 2) return;
+            const segId = (f.properties && f.properties.seg_id) || '';
+            const ends = [coords[0], coords[coords.length - 1]];
+            ends.forEach(function (c) {
+                if (!c || c.length < 2) return;
+                const lat = c[1];
+                const lng = c[0];
+                if (!isFinite(lat) || !isFinite(lng)) return;
+                const key = endpointKey(lat, lng);
+                if (!byKey[key]) {
+                    byKey[key] = { lat: lat, lng: lng, segIds: [] };
+                }
+                if (segId && byKey[key].segIds.indexOf(segId) < 0) {
+                    byKey[key].segIds.push(segId);
+                }
+            });
+        });
+
+        Object.keys(byKey).forEach(function (key) {
+            const ep = byKey[key];
+            let inProx = false;
+            if (pin) {
+                inProx = haversineM([pin.lat, pin.lng], [ep.lat, ep.lng]) <= state.proximityM;
+            }
+            const marker = L.circleMarker([ep.lat, ep.lng], {
+                radius: inProx ? 7 : 4,
+                color: inProx ? '#1b6b2a' : '#555',
+                weight: inProx ? 2 : 1,
+                fillColor: inProx ? '#2f9e44' : '#777',
+                fillOpacity: inProx ? 0.95 : 0.75,
+                opacity: inProx ? 1 : 0.7,
+                interactive: true,
+                bubblingMouseEvents: true,
+            });
+            const tip =
+                (ep.segIds.length ? ep.segIds.join(', ') : 'Segment endpoint') +
+                (inProx ? (' · within ' + state.proximityM + ' m of pin') : '');
+            marker.bindTooltip(tip, { direction: 'top', sticky: true, opacity: 0.9 });
+            state.endpointLayer.addLayer(marker);
+        });
     }
 
     function loadMapSegments() {
@@ -1416,6 +1475,8 @@
                 if (res.d.radius_m != null) state.proximityM = res.d.radius_m;
                 const proxLabel = document.getElementById('junctions-proximity-label');
                 if (proxLabel) proxLabel.textContent = String(state.proximityM);
+                const proxHint = document.getElementById('junctions-prox-hint');
+                if (proxHint) proxHint.textContent = String(state.proximityM);
                 target.nearby_seg_ids = state.nearby.map(function (s) { return s.seg_id; });
                 target.nearby_segments = state.nearby.slice();
                 renderNearby();
@@ -1497,6 +1558,8 @@
                 if (data.proximity_m != null) state.proximityM = data.proximity_m;
                 const proxLabel = document.getElementById('junctions-proximity-label');
                 if (proxLabel) proxLabel.textContent = String(state.proximityM);
+                const proxHint = document.getElementById('junctions-prox-hint');
+                if (proxHint) proxHint.textContent = String(state.proximityM);
                 state.dirty = false;
                 renderList();
                 if (state.doc.junctions.length) {
