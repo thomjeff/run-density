@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}Junctions{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Junction Flow</h2>
+    <p class="text-secondary" style="margin-top: 0.25rem;">
+        Cross and merge participation at authored junctions (dwell co-presence at the node).
+    </p>
+</div>
+{% include "partials/run_context.html" %}
+
+<div id="junctions-empty" class="card" style="display:none;">
+    <p class="text-secondary mb-0">
+        No Junction Flow artifact for this run. Author junctions on the package, then re-run analysis.
+    </p>
+</div>
+
+<div id="junctions-root"></div>
+
+<!-- Junction Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Junction Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Definitions for Junction Flow analysis. Junctions are authored on the package;
+        metrics are computed for the selected run.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Term</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Junction</strong></td>
+                <td>A pin where course streams meet. Nearby segments are discovered from segment endpoints near the pin. Interactions (cross / merge) are declared by operators.</td>
+            </tr>
+            <tr>
+                <td><strong>Cross</strong></td>
+                <td>One stream turns across another (From → To conflicts with a Conflicts stream). <em>Crossing</em> runners are on the turning path; <em>crossed</em> runners are on the conflict stream at the node.</td>
+            </tr>
+            <tr>
+                <td><strong>Merge</strong></td>
+                <td>A joining stream enters one or more through (To) streams in the same direction. <em>Joining</em> runners arrive on From; <em>through</em> partners for counts are <strong>full and half</strong> on the To streams (same-event trail traffic does not unlock a merge count).</td>
+            </tr>
+            <tr>
+                <td><strong>Node / dwell</strong></td>
+                <td>Presence is estimated at the junction endpoint (segment km at the pin) using gun time + start offset + pace × km. Each runner is treated as at the node for a short dwell (±15 s, 30 s total).</td>
+            </tr>
+            <tr>
+                <td><strong>Co-presence</strong></td>
+                <td>A runner counts only if a partner-stream runner is also at the node within dwell of their transit — not merely because both appear somewhere in the involvement window.</td>
+            </tr>
+            <tr>
+                <td><strong>Involvement window</strong></td>
+                <td>First to last minute where both roles have concurrent presence at the node. Used for timeline span and peak concurrent; unique headlines use co-presence.</td>
+            </tr>
+            <tr>
+                <td><strong>Pace quintiles</strong></td>
+                <td>Event-relative field bands from runner pace: <strong>Q1 = lead (fastest)</strong> … <strong>Q5 = rear (slowest)</strong>. The crosstab shows unique primary runners by their quintile × nearest co-present partner’s quintile.</td>
+            </tr>
+            <tr>
+                <td><strong>How to read</strong></td>
+                <td>Headline numbers are co-present uniques. Charts show concurrent count over time (hover for minute values). Crosstab cells answer “where in each field did mixing happen?” — e.g. rear 10k meeting lead full.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const charts = [];
+
+    function resolveRunId() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("run_id")
+            || (window.runflowDay && window.runflowDay.runId)
+            || localStorage.getItem("runflow_run_id")
+            || null;
+    }
+
+    function resolveDay() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("day")
+            || (window.runflowDay && window.runflowDay.day)
+            || null;
+    }
+
+    function headlineUniques(ix) {
+        const u = ix.unique_by_role_event || {};
+        if (ix.type === "merge") {
+            return {
+                primaryLabel: "Joining (co-present)",
+                primary: (u.joining_with_full_half_copresence || {}).all ?? "—",
+                secondaryLabel: "Through full+half",
+                secondary: (u.through_full_half_with_joining_copresence || {}).all ?? "—",
+            };
+        }
+        return {
+            primaryLabel: "Crossing (co-present)",
+            primary: (u.crossing_with_copresence || {}).all ?? "—",
+            secondaryLabel: "Crossed (co-present)",
+            secondary: (u.crossed_with_copresence || {}).all ?? "—",
+        };
+    }
+
+    function primarySecondaryKeys(ix) {
+        const row = (ix.minute_rows || [])[0] || {};
+        const keys = Object.keys(row).filter((k) => k.endsWith("_count"));
+        if (keys.length >= 2) return [keys[0], keys[1]];
+        if (ix.type === "merge") return ["joining_count", "through_full_half_count"];
+        return ["crossing_count", "crossed_count"];
+    }
+
+    function seriesLabels(priKey, secKey) {
+        const map = {
+            crossing_count: "Crossing",
+            crossed_count: "Crossed",
+            joining_count: "Joining",
+            through_full_half_count: "Through full+half",
+            through_count: "Through",
+        };
+        return [map[priKey] || priKey, map[secKey] || secKey];
+    }
+
+    function buildCrosstabTable(ct) {
+        const mat = {};
+        (ct || []).forEach((r) => {
+            const qa = Number(r.crossing_or_joining_quintile);
+            const qb = Number(r.crossed_or_through_quintile);
+            mat[`${qa}-${qb}`] = Number(r.unique_crossing_or_joining_runners) || 0;
+        });
+        const colTot = [0, 0, 0, 0, 0, 0];
+        let grand = 0;
+        let html = '<table class="table table-sm table-vcenter"><thead><tr><th>Q↓ / partner →</th>';
+        for (let qb = 1; qb <= 5; qb++) html += `<th class="text-end">Q${qb}</th>`;
+        html += '<th class="text-end">Total</th></tr></thead><tbody>';
+        for (let qa = 1; qa <= 5; qa++) {
+            let rowTot = 0;
+            html += `<tr><td>Q${qa}${qa === 1 ? " lead" : qa === 5 ? " rear" : ""}</td>`;
+            for (let qb = 1; qb <= 5; qb++) {
+                const n = mat[`${qa}-${qb}`] || 0;
+                rowTot += n;
+                colTot[qb] += n;
+                html += `<td class="text-end">${n || "·"}</td>`;
+            }
+            grand += rowTot;
+            html += `<td class="text-end"><strong>${rowTot || "·"}</strong></td></tr>`;
+        }
+        html += '<tr><td><strong>Total</strong></td>';
+        for (let qb = 1; qb <= 5; qb++) {
+            html += `<td class="text-end"><strong>${colTot[qb] || "·"}</strong></td>`;
+        }
+        html += `<td class="text-end"><strong>${grand || "·"}</strong></td></tr>`;
+        html += "</tbody></table>";
+        return html;
+    }
+
+    function renderChart(canvas, ix) {
+        const rows = ix.minute_rows || [];
+        if (!rows.length || typeof Chart === "undefined") return;
+        const [priKey, secKey] = primarySecondaryKeys(ix);
+        const [priName, secName] = seriesLabels(priKey, secKey);
+        // Downsample long series for readability
+        const step = rows.length > 80 ? 3 : rows.length > 40 ? 2 : 1;
+        const sampled = rows.filter((_, i) => i % step === 0 || i === rows.length - 1);
+        const labels = sampled.map((r) => r.minute_start);
+        const a = sampled.map((r) => Number(r[priKey]) || 0);
+        const b = sampled.map((r) => Number(r[secKey]) || 0);
+        charts.push(
+            new Chart(canvas.getContext("2d"), {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: priName,
+                            data: a,
+                            borderColor: "#206bc4",
+                            backgroundColor: "rgba(32,107,196,0.15)",
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointStyle: "circle",
+                        },
+                        {
+                            label: secName,
+                            data: b,
+                            borderColor: "#f76707",
+                            backgroundColor: "rgba(247,103,7,0.12)",
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointStyle: "circle",
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: {
+                            position: "bottom",
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: "circle",
+                                boxWidth: 8,
+                                boxHeight: 8,
+                                padding: 16,
+                            },
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title(items) {
+                                    return items[0] ? `Minute ${items[0].label}` : "";
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: "Time" },
+                            ticks: { maxTicksLimit: 10 },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: "Concurrent at node" },
+                        },
+                    },
+                },
+            })
+        );
+    }
+
+    function renderInteraction(j, ix) {
+        const h = headlineUniques(ix);
+        const peaks = ix.peak_concurrent || {};
+        const peakVals = Object.entries(peaks)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(" · ");
+        const card = document.createElement("div");
+        card.className = "card mb-3";
+        card.innerHTML = `
+            <div class="card-header">
+                <div>
+                    <span class="badge ${ix.type === "merge" ? "bg-green-lt" : "bg-blue-lt"} me-2">${ix.type}</span>
+                    <strong>${ix.label || ""}</strong>
+                    <span class="text-secondary ms-2">${ix.window_start || "—"}–${ix.window_end || "—"}
+                    (${ix.window_minutes || 0} min)</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-4">
+                        <div class="text-secondary">${h.primaryLabel}</div>
+                        <div class="h2 mb-0">${h.primary}</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="text-secondary">${h.secondaryLabel}</div>
+                        <div class="h2 mb-0">${h.secondary}</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="text-secondary">Peak concurrent</div>
+                        <div class="mt-1">${peakVals || "—"}</div>
+                    </div>
+                </div>
+                <h4 class="mb-2">Concurrent at node</h4>
+                <div style="height:220px;"><canvas></canvas></div>
+                <p class="text-secondary small mt-2 mb-3">Hover for minute counts. Source: junctions UI metrics · Q1=lead / Q5=rear.</p>
+                <h4 class="mb-2">Field position (pace quintile crosstab)</h4>
+                <div class="table-responsive crosstab-wrap"></div>
+            </div>
+        `;
+        card.querySelector(".crosstab-wrap").innerHTML = buildCrosstabTable(ix.field_crosstab);
+        const canvas = card.querySelector("canvas");
+        // Defer chart until in DOM
+        setTimeout(() => renderChart(canvas, ix), 0);
+        return card;
+    }
+
+    function render(payload) {
+        charts.forEach((c) => c.destroy());
+        charts.length = 0;
+        const root = document.getElementById("junctions-root");
+        const empty = document.getElementById("junctions-empty");
+        root.innerHTML = "";
+        const junctions = payload.junctions || [];
+        if (!junctions.length) {
+            empty.style.display = "";
+            return;
+        }
+        empty.style.display = "none";
+        junctions.forEach((j) => {
+            const section = document.createElement("div");
+            section.className = "mb-4";
+            section.innerHTML = `<h3 class="mb-3">${j.junction_label || j.junction_id || "Junction"}</h3>`;
+            root.appendChild(section);
+            (j.interactions || []).forEach((ix) => {
+                section.appendChild(renderInteraction(j, ix));
+            });
+        });
+    }
+
+    async function load() {
+        const runId = resolveRunId();
+        const day = resolveDay();
+        const params = new URLSearchParams();
+        if (runId) params.set("run_id", runId);
+        if (day) params.set("day", day);
+        try {
+            const res = await fetch(`/api/junctions?${params.toString()}`);
+            const data = await res.json();
+            render(data);
+        } catch (err) {
+            console.error(err);
+            document.getElementById("junctions-empty").style.display = "";
+            document.getElementById("junctions-empty").textContent =
+                "Failed to load Junction Flow data.";
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+    window.addEventListener("runflow-context-ready", load);
+})();
+</script>
+{% endblock %}
