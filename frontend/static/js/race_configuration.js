@@ -39,6 +39,7 @@
     function getTab() {
         const raw = getQuery().get('tab');
         if (raw === 'runners') return 'runners';
+        if (raw === 'junctions') return 'junctions';
         if (raw === 'legs') return 'course'; // Legs moved to global hub
         return 'course';
     }
@@ -305,6 +306,19 @@
         return window.configPackageCourse && window.configPackageCourse.isDirty();
     }
 
+    function isJunctionsDirty() {
+        return !!(window.junctionsAuthoring && window.junctionsAuthoring.isDirty());
+    }
+
+    /** Confirm before leaving Junctions with unsaved edits (does not auto-save). */
+    function confirmLeaveDirtyJunctions() {
+        if (!isJunctionsDirty()) return true;
+        return window.confirm(
+            'You have unsaved junction changes. Leave without saving?\n\n' +
+                'Use Save junctions to write junctions.json.'
+        );
+    }
+
     function showWorkspace(manifest, configId) {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
@@ -357,13 +371,18 @@
             btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
         const workspacePanel = document.getElementById('race-config-tab-workspace');
+        const junctionsPanel = document.getElementById('race-config-tab-junctions');
         const runnersPanel = document.getElementById('race-config-tab-runners');
         const isWorkspace = tab === 'course';
         if (workspacePanel) workspacePanel.style.display = isWorkspace ? 'block' : 'none';
+        if (junctionsPanel) junctionsPanel.style.display = tab === 'junctions' ? 'block' : 'none';
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         syncConfigPackagePanels(tab);
         if (tab === 'runners' && window.initRunnersBaseline) {
             window.initRunnersBaseline();
+        }
+        if (tab === 'junctions' && window.initJunctionsAuthoring) {
+            window.initJunctionsAuthoring();
         }
     }
 
@@ -881,6 +900,7 @@
                 if (!cid || !tab) return;
                 if (tab === getTab()) return;
                 e.preventDefault();
+                if (getTab() === 'junctions' && !confirmLeaveDirtyJunctions()) return;
                 if (isPackageWorkspaceDirty() && window.configPackageCourse && window.configPackageCourse.saveAll) {
                     window.configPackageCourse
                         .saveAll()

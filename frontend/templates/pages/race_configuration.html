@@ -279,6 +279,7 @@
             </div>
             <nav class="subnav-tabs" role="tablist" aria-label="Package authoring">
                 <button type="button" class="subnav-tab active" data-tab="course" role="tab" aria-selected="true">Courses</button>
+                <button type="button" class="subnav-tab" data-tab="junctions" role="tab" aria-selected="false">Junctions</button>
                 <button type="button" class="subnav-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
             </nav>
         </div>
@@ -286,6 +287,10 @@
         <div class="tab-panel-card content-card">
             <div id="race-config-tab-workspace" role="tabpanel">
                 {% include 'partials/course_mapping_workspace.html' %}
+            </div>
+
+            <div id="race-config-tab-junctions" role="tabpanel" style="display: none;">
+                {% include 'partials/junctions_workspace.html' %}
             </div>
 
             <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
@@ -316,5 +321,6 @@
 <script src="/static/js/map/segment_recipes.js?v=810-onepage-close"></script>
 <script src="/static/js/map/saved_courses.js?v=791p2"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
-<script src="/static/js/race_configuration.js?v=791p2"></script>
+<script src="/static/js/map/junctions_authoring.js?v=817m"></script>
+<script src="/static/js/race_configuration.js?v=817f"></script>
 {% endblock %}

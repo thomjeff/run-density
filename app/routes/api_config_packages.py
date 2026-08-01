@@ -121,6 +121,21 @@ class SaveConfigCourseRequest(BaseModel):
     course: Dict[str, Any]
 
 
+class SaveConfigJunctionsRequest(BaseModel):
+    """Issue #817: package junctions.json document."""
+
+    junctions: Optional[List[Dict[str, Any]]] = None
+    version: Optional[int] = 1
+    # Allow full document or {junctions: [...]}
+    updated: Optional[str] = None
+
+
+class JunctionNearbyRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: Optional[float] = None
+
+
 class SavePackageResourcesRequest(BaseModel):
     resources: List[PackageResourceEntry]
 
@@ -396,11 +411,138 @@ async def api_save_config_course(
         )
 
 
+@router.get("/api/config/packages/{config_id}/junctions")
+async def api_load_config_junctions(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Load junctions.json for a config package (Issue #817)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.junctions import load_config_junctions
+        from app.utils.constants import JUNCTION_SEGMENT_PROXIMITY_M
+
+        doc = load_config_junctions(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "config_id": config_id,
+                "proximity_m": JUNCTION_SEGMENT_PROXIMITY_M,
+                **doc,
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/junctions")
+async def api_save_config_junctions(
+    request: Request,
+    config_id: str,
+    body: SaveConfigJunctionsRequest,
+) -> JSONResponse:
+    """Save junctions.json for a config package (Issue #817)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.junctions import (
+            load_config_junctions,
+            save_config_junctions,
+        )
+
+        payload = {
+            "version": body.version or 1,
+            "junctions": body.junctions or [],
+            "updated": body.updated,
+        }
+        save_config_junctions(config_id, payload)
+        doc = load_config_junctions(config_id)
+        return JSONResponse(content={"ok": True, "config_id": config_id, **doc})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save config package junctions")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save junctions: {e}",
+        )
+
+
+@router.post("/api/config/packages/{config_id}/junctions/nearby")
+async def api_junction_nearby_segments(
+    request: Request,
+    config_id: str,
+    body: JunctionNearbyRequest,
+) -> JSONResponse:
+    """List course segments whose start/end is within proximity of a pin (#817)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.junctions import find_nearby_segments
+        from app.utils.constants import JUNCTION_SEGMENT_PROXIMITY_M
+
+        nearby = find_nearby_segments(
+            config_id, body.lat, body.lon, radius_m=body.radius_m
+        )
+        return JSONResponse(
+            content={
+                "ok": True,
+                "config_id": config_id,
+                "lat": body.lat,
+                "lon": body.lon,
+                "radius_m": body.radius_m
+                if body.radius_m is not None
+                else JUNCTION_SEGMENT_PROXIMITY_M,
+                "segments": nearby,
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/junctions/map-segments")
+async def api_junction_map_segments(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """GeoJSON features for course segment legs (Junctions map, Issue #817)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.junctions import course_segment_line_features
+
+        features = course_segment_line_features(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "config_id": config_id,
+                "type": "FeatureCollection",
+                "features": features,
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.get("/api/config/packages/{config_id}/segment-library")
 async def api_get_segment_library(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
+    """Load segment library legs, recipes, and per-event km totals."""
+    require_auth(request)
+    try:
+        state = get_package_segment_library_state(config_id)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     """Load segment library legs, recipes, and per-event km totals."""
     require_auth(request)
     try:
