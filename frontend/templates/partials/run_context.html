@@ -2,7 +2,7 @@
   Results chrome (Issue #791 Phase 1)
 
   Shared sub-nav + run context banner on Results pages
-  (Segments, Density, Flow, Locations, Reports). Not used on Runs.
+  (Segments, Density, Flow, Junctions, Locations, Reports). Not used on Runs.
 
   When no run is selected, shows a CTA to choose a run on the Runs page.
 
@@ -17,13 +17,14 @@
         <a href="/segments" data-results-path="/segments">Segments</a>
         <a href="/density" data-results-path="/density">Density</a>
         <a href="/flow" data-results-path="/flow">Flow</a>
+        <a href="/junctions" data-results-path="/junctions">Junctions</a>
         <a href="/locations" data-results-path="/locations">Locations</a>
         <a href="/reports" data-results-path="/reports">Reports</a>
     </nav>
 
     <div id="run-context-missing" class="run-context-missing" style="display: none;" role="status">
         <strong>No analysis run selected.</strong>
-        Choose a run to view Segments, Density, Flow, Locations, and Reports.
+        Choose a run to view Segments, Density, Flow, Junctions, Locations, and Reports.
         <a id="run-context-choose-link" href="/dashboard">Choose a run</a>
     </div>
 

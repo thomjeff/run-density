@@ -23,6 +23,7 @@ from app.core.v2.density import (
     filter_runners_by_day,
 )
 from app.core.v2.flow import analyze_temporal_flow_segments_v2
+from app.core.v2.junction_flow import analyze_junction_flow_v2, persist_junction_flow_day
 from app.core.v2.reports import generate_reports_per_day
 from app.core.v2.overlaps import generate_bidirectional_overlap_reports
 from app.core.v2.bins import generate_bins_v2
@@ -88,11 +89,13 @@ PHASE_MAPPING = {
     "phase_3_2_density_compute": {"number": "Phase 3.2", "description": "Density Per-Day Compute"},
     "phase_4_1_flow_build_segments": {"number": "Phase 4.1", "description": "Flow Build Segments"},
     "phase_4_2_flow_compute": {"number": "Phase 4.2", "description": "Flow Per-Day Compute"},
+    "phase_4_3_junction_flow": {"number": "Phase 4.3", "description": "Junction Flow Compute"},
     "phase_5_1_bin_generation": {"number": "Phase 5.1", "description": "Bin Generation"},
     "phase_5_2_bin_validation": {"number": "Phase 5.2", "description": "Bin Validation"},
     "phase_6_1_persist_density": {"number": "Phase 6.1", "description": "Persist Density Results"},
     "phase_6_2_persist_flow": {"number": "Phase 6.2", "description": "Persist Flow Results"},
     "phase_6_3_persist_locations": {"number": "Phase 6.3", "description": "Persist Locations Results"},
+    "phase_6_4_persist_junction_flow": {"number": "Phase 6.4", "description": "Persist Junction Flow Results"},
     "phase_7_ui_artifacts": {"number": "Phase 7", "description": "UI Artifacts Generation"},
     "phase_8_derived_metrics": {"number": "Phase 8", "description": "Derived Metrics Calculation"},
     "phase_9_map_data": {"number": "Phase 9", "description": "Map Data Generation"},
@@ -885,6 +888,20 @@ def create_full_analysis_pipeline(
         )
         flow_days = len(flow_results)
         logger.info(f"[Phase 4] Flow analysis complete: {flow_days} days")
+
+        # Phase 4.3: Junction Flow (Issue #818) — core path
+        logger.info("[Phase 4.3] Processing junction flow analysis...")
+        junction_flow_results = analyze_junction_flow_v2(
+            events=events,
+            events_by_day=events_by_day,
+            all_runners_df=all_runners_df,
+            data_dir=data_dir,
+            perf_monitor=perf_monitor,
+        )
+        logger.info(
+            "[Phase 4.3] Junction Flow complete: %s days",
+            len(junction_flow_results),
+        )
         
         # Phase 6.1: Persist Density Results
         density_persistence_metrics = perf_monitor.start_phase(
@@ -1217,6 +1234,40 @@ def create_full_analysis_pipeline(
                 phase_description="Persist Locations Results",
                 summary_stats={"locations": locations_count, "days": len(events_by_day)}
             )
+
+        # Phase 6.4: Persist Junction Flow (computation + UI metrics + reports)
+        junction_persist_metrics = perf_monitor.start_phase(
+            "phase_6_4_persist_junction_flow",
+            phase_number="Phase 6.4",
+            phase_description="Persist Junction Flow Results",
+        )
+        junction_files = []
+        for day, _day_events in events_by_day.items():
+            day_code = day.value
+            day_path = run_path / day_code
+            day_result = junction_flow_results.get(day) or {
+                "ok": True,
+                "method": {},
+                "junctions": [],
+            }
+            written = persist_junction_flow_day(
+                day_path=day_path,
+                day_code=day_code,
+                day_result=day_result,
+            )
+            junction_files.extend(written.values())
+            logger.info(
+                "[Phase 6.4] Persisted junction flow for %s: %s",
+                day_code,
+                ", ".join(written.values()),
+            )
+        junction_persist_metrics.finish(memory_mb=get_memory_usage_mb())
+        perf_monitor.complete_phase(
+            junction_persist_metrics,
+            phase_number="Phase 6.4",
+            phase_description="Persist Junction Flow Results",
+            summary_stats={"artifacts": len(junction_files)},
+        )
         
         # Phase 7: UI Artifacts Generation
         artifacts_metrics = perf_monitor.start_phase(

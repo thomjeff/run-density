@@ -312,6 +312,24 @@ async def flow(request: Request):
     )
 
 
+@router.get("/junctions", response_class=HTMLResponse)
+async def junctions(request: Request):
+    """
+    Junction Flow results page (Issue #818).
+
+    Authored package junctions analyzed for the selected run/day.
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/junctions.html",
+        context={"request": request, "meta": meta},
+    )
+
+
 @router.get("/locations", response_class=HTMLResponse)
 async def locations(request: Request):
     """
