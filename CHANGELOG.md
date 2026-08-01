@@ -2,11 +2,31 @@
 
 ## [Unreleased]
 
+## [v2.0.12] - 2026-08-01
+
+### Summary
+- **Junction Flow** end-to-end: Build authoring (#817) + analysis pipeline / Results page (#818 / #821)
+- **Flow overlap charts** match Junctions hover + circle legends (#822)
+- **2027 location / pass identity** and paired reverse-leg Locations UX (#810 / #811)
+- Maintainability cutover: Tabler-only chrome, path settings, race templates, density report package (#798)
+- Dynamic event discovery (#701) and stitched-course km reconciliation (#786)
+- Reports / Density / Build UX polish (#815)
+
+### Issue #822 — Flow overlap chart interaction
+- Replace static SVG bidirectional-overlap chart with Chart.js (same stack as Junctions)
+- Index-mode hover tooltips: minute + both events’ concurrent counts
+- Circle legend markers; destroy/recreate cleanly when switching overlap rows
+- Per-minute detail table unchanged (no min-overlap fill band in v1)
+
+### Issue #818 / #821 — Junction Flow analysis
+- Core pipeline computes cross/merge co-presence, concurrent timelines, and field crosstabs from authored `junctions.json`
+- Results **Junctions** page with Chart.js concurrent charts and pace-quintile crosstabs
+- Artifacts under day reports / UI for the selected run
+
 ### Issue #817 — Junction Flow authoring
 - Package Build **Junctions** tab (after Courses): map pin, nearby segments by endpoint proximity (`JUNCTION_SEGMENT_PROXIMITY_M`, default 10 m), declared cross/merge interactions
 - Persist `junctions.json` at package root (streams derived from segment refs; Locations/Segments schemas unchanged)
 - API: `GET/PUT /api/config/packages/{id}/junctions`, `POST …/junctions/nearby`, `GET …/junctions/map-segments`
-- Analysis/compute deferred to #818
 
 ### Issue #815 — UX polish (Reports / Density / Build)
 - **Reports**: per-section file select + Download (day reports + data files); size/modified shown for the selected file only
@@ -30,71 +50,22 @@
 - Build race exports / location merge stamps package `event_day` onto course locations (org legs stay day-agnostic)
 - Package export includes `pass_key` / `loc_id` / `pass_id` on pass rows
 
-### Locations report — include `location_key`
-- (Superseded by 2027 identity: prefer `pass_key` + human `loc_id`; legacy `location_key` still accepted on read)
+### Issue #701 — dynamic event discovery
+- Analysis GeoJSON / GPX / location helpers discover event flags and spans from `analysis.json` ∩ `COURSE_EVENT_IDS` (no duplicated elite/open/10k/half/full loops)
+- Elite/open included in `segments_list` builders and GeoJSON event labels alongside full/half/10k
+- Shared helpers in `app/core/event_discovery.py`
 
-### Issue #798 closeout — tests & Tabler docs
-- Fix Phase 1 router test: allow legitimate `GET /reports` UI page; walk nested FastAPI routers
-- Update obsolete flow ordering tests to the fail-fast `events` contract (no pair-fallback helper)
-- Align developer guide + `tabler_spike.css` with Tabler-only chrome; stop appending `?ui=tabler`
+### Issue #786 — segment km vs stitched GPX
+- Per-event `from_km`/`to_km` are measured along the stitched recipe polyline (same geometry as event GPX), not sum-of-rounded per-leg `length_km`
+- Exported / enriched event kms use **3 decimals** (1 m)
+- Removes mid-course bookkeeping drift that broke turn-point location projection
 
-### Issue #798 Phase 9 — Large-module decomposition (stretch)
-- Extracted bin hotspot coarsening helpers to `app/core/bin/hotspots.py`
-- `app.density_report` re-exports the same callables (no behavior change)
-- Regression: `tests/unit/test_issue798_phase9_hotspots_extract.py`
-
-### Issue #798 Phase 8 — Race defaults → package templates
-- Added `app/core/race_templates/` (`sample_fredericton` + `RACE_TEMPLATE` env)
-- Moved suggested schedules, hotspot segment IDs, map center, and v1 durations out of “universal” constants semantics
-- Doc: `docs/architecture/race-templates.md`
-- Regression: `tests/unit/test_issue798_phase8_race_templates.py`
-
-### Issue #798 Phase 7 — Tabler-only frontend chrome
-- `frontend/templates/base.html` always loads Tabler CDN CSS/JS + `common.css` + `tabler_spike.css` (`html.rf-tabler`)
-- Removed Classic dual-chrome branch (inline classic styles, classic header/nav/main/footer) and the Classic UI exit control
-- Nav hrefs no longer require `?ui=tabler`; pages work without the query param
-- Docs: `docs/dev-guides/frontend-ui.md`; deprecation ledger Classic UI row FIXED/removed
-- Regression: `tests/unit/test_issue798_phase7_tabler_only.py`
-
-### Issue #798 Phase 6 — Normalize live density report package
-- Moved live stack to `app/core/reports/density/` (`report`, `flagging`, `template_engine`)
-- Renamed public APIs (`generate_density_report`, `apply_flagging`, `DensityReportTemplateEngine`, …)
-- Left `app/new_*` as DeprecationWarning re-export shims; façade alias retained
-- Regression: `tests/unit/test_issue798_phase6_density_report_rename.py`
-
-### Issue #798 Phase 5 — Report configuration provenance
-- Density report `window_s` / `bin_km` resolved from `bins.parquet` (`app.core.bin.provenance`)
-- Removed fabricated `30` / `0.2` TODOs from `new_density_report` / template defaults
-- Regression: `tests/unit/test_issue798_phase5_bin_provenance.py`
-
-### Issue #798 Phase 4 — Typed path / deployment settings
-- Added `app.utils.path_mapper` (env-backed `RUNFLOW_ROOT` / `RUNFLOW_ROOT_HOST` / `RUNFLOW_ROOT_CONTAINER`)
-- Removed machine-specific `/Users/.../runflow` literals from app, Makefile, compose, and scripts
-- Compose volume + rewrite use `${RUNFLOW_ROOT}` (see `.env.example`); local `.env` is gitignored
-- Regression: `tests/unit/test_issue798_phase4_path_mapper.py`
-
-### Issue #798 Phase 3 — Domain glossary & naming alignment
-- Expanded `docs/architecture/domain-glossary.md` with field alias map and agent guidance
-- FastAPI app title set to **Runflow** (stop new `run-density` runtime identity)
-- Light regression: `tests/unit/test_issue798_phase3_glossary.py`
-
-### Issue #798 Phase 2 — Canonical start-time contract
-- Added `app/core/v2/start_time.py` (300–1200 operating hours, 05:00–20:00)
-- Wired validators / Pydantic models / package analysis / `Event` to the shared helper
-- Fixed tests that incorrectly accepted 0–1439; regression: `tests/unit/test_issue798_phase2_start_time.py`
-
-### Issue #798 Phase 1 — Dead routers & unused flow audit helpers
-- Compose flow/bidirectional routers from `app.api.*` (deleted wildcard shims)
-- Removed empty `app/routes/reports.py` registration
-- Removed unused `_ShardWriter` / `_write_index_csv` / `_write_topk_csv` from `flow.py`
-- Regression tests: `tests/unit/test_issue798_phase1_routers.py`
-- Updated deprecation ledger completed rows
-
-### Issue #798 Phase 0 — Canonical paths & deprecation ledger
-- Added `docs/architecture/canonical-paths.md` (v2 analysis, density/flow report graphs, HTTP composition, frontend/Build)
-- Added `docs/architecture/deprecation-ledger.md` with dispositions for `new_*`, shims, host paths, Classic UI, etc.
-- Stub `docs/architecture/domain-glossary.md` (Runflow vs run-density; core nouns)
-- Indexed architecture docs from `docs/README.md`
+### Issue #798 — maintainability (Phases 0–9 + closeout)
+- Canonical paths & deprecation ledger; start-time contract; domain glossary; env-backed path mapper
+- Live density report package under `app/core/reports/density/`; bin/window provenance from artifacts
+- Tabler-only frontend chrome (Classic dual-chrome removed)
+- Race-specific defaults moved to `app/core/race_templates/`
+- Bin hotspot helpers extracted; tests/docs closeout
 
 ## [v2.0.11] - 2026-07-22
 
@@ -173,16 +144,6 @@
 
 ### UI Changes
 - **Loc Sheets removed from navigation**: one-pagers are linked from the Locations UI (route kept)
-
-### Issue #701 — dynamic event discovery
-- Analysis GeoJSON / GPX / location helpers discover event flags and spans from `analysis.json` ∩ `COURSE_EVENT_IDS` (no duplicated elite/open/10k/half/full loops)
-- Elite/open included in `segments_list` builders and GeoJSON event labels alongside full/half/10k
-- Shared helpers in `app/core/event_discovery.py`
-
-### Issue #786 — segment km vs stitched GPX
-- Per-event `from_km`/`to_km` are measured along the stitched recipe polyline (same geometry as event GPX), not sum-of-rounded per-leg `length_km`
-- Exported / enriched event kms use **3 decimals** (1 m)
-- Removes mid-course bookkeeping drift that broke turn-point location projection
 
 ## [v2.0.6] - 2026-01-12
 
