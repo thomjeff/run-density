@@ -1,0 +1,126 @@
+{# Issue #817: Junction Flow authoring (package-scoped) #}
+<style>
+.junctions-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.junctions-field-label { font-size: 0.75rem; color: #666; font-weight: 600; letter-spacing: 0.02em; }
+#junctions-segments-table th,
+#junctions-segments-table td,
+#junctions-ix-table th,
+#junctions-ix-table td {
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+}
+#junctions-segments-table td.junctions-row-second-pass { background: rgba(240, 173, 78, 0.2); }
+#junctions-segments-table tr.junctions-row-second-pass td { background: rgba(240, 173, 78, 0.2); }
+#junctions-segments-table tr.junctions-row-spur td { background: rgba(91, 192, 222, 0.2); }
+#junctions-ix-table td.course-map-action-cell {
+    text-align: center;
+    white-space: nowrap;
+    width: 5.5rem;
+}
+</style>
+<div id="junctions-authoring-root" class="junctions-authoring">
+    <div class="junctions-toolbar" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; margin-bottom:1rem;">
+        <h3 style="margin:0; flex:1 1 auto;">Junctions</h3>
+        <button type="button" id="junctions-btn-new" class="course-btn primary">New junction</button>
+        <button type="button" id="junctions-btn-save" class="course-btn">Save junctions</button>
+        <span id="junctions-status" class="text-secondary" style="font-size:0.875rem;"></span>
+    </div>
+    <p style="margin:0 0 1rem; color:#666; font-size:0.9rem; max-width:48rem;">
+        Place a pin on the courses map. Segments whose <strong>start or end</strong> is within
+        <span id="junctions-proximity-label">10</span>&nbsp;m are listed. Author stream interactions
+        (cross / merge) between streams at the pin. Requires course segments from recipes.
+    </p>
+
+    <div id="junctions-gate" class="placeholder" style="display:none; padding:1rem; border:1px solid #e0e0e0; border-radius:4px;">
+        Build race exports / apply recipes so this package has course segments before authoring junctions.
+    </div>
+
+    <div id="junctions-workspace" style="display:none;">
+        <div style="display:grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap:1rem; margin-bottom:1rem;">
+            <div>
+                <h4 class="card-title" style="margin:0 0 0.5rem;">Saved</h4>
+                <ul id="junctions-list" style="list-style:none; margin:0; padding:0; border:1px solid #e0e0e0; border-radius:4px; max-height:280px; overflow:auto;"></ul>
+            </div>
+            <div>
+                <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:flex-end; margin-bottom:0.75rem;">
+                    <label style="flex:1 1 12rem;">
+                        <span style="display:block; font-size:0.8rem; color:#666;">Label</span>
+                        <input type="text" id="junction-label" class="config-package-input" style="width:100%;" />
+                    </label>
+                    <label>
+                        <span style="display:block; font-size:0.8rem; color:#666;">Lat</span>
+                        <input type="number" step="any" id="junction-lat" class="config-package-input" style="width:8rem;" />
+                    </label>
+                    <label>
+                        <span style="display:block; font-size:0.8rem; color:#666;">Lon</span>
+                        <input type="number" step="any" id="junction-lon" class="config-package-input" style="width:8rem;" />
+                    </label>
+                    <button type="button" id="junctions-btn-place" class="course-btn">Place pin on map</button>
+                    <button type="button" id="junctions-btn-discover" class="course-btn">Find nearby</button>
+                    <button type="button" id="junctions-btn-delete" class="course-btn" style="color:#c0392b;">Delete</button>
+                </div>
+                <div id="junctions-map" style="height:360px; border:1px solid #e0e0e0; border-radius:4px; background:#f8f9fa;"></div>
+                <p style="margin:0.35rem 0 0; font-size:0.8rem; color:#666;">
+                    Click <strong>Place pin on map</strong> (button highlights), then click the map — including on course lines.
+                    Lat/lon fill automatically; then matching segments load.
+                </p>
+            </div>
+        </div>
+
+        <section class="course-derived-section" style="margin-bottom:1.25rem;">
+            <div class="card-header" style="padding-left:0; padding-right:0;">
+                <h4 class="card-title" style="margin:0;">Segments</h4>
+                <span id="junctions-segments-legend" class="text-secondary" style="font-size:0.8rem;"></span>
+            </div>
+            <div class="scrollable-table-container course-derived-table-scroll">
+                <table id="junctions-segments-table" class="table-sticky-header" style="width:100%; font-size:0.875rem;">
+                    <thead>
+                        <tr id="junctions-segments-thead-row"></tr>
+                    </thead>
+                    <tbody id="junctions-segments-tbody"></tbody>
+                </table>
+            </div>
+            <p style="margin:0.5rem 0 0; font-size:0.8rem; color:#666;">
+                <span style="display:inline-block; width:0.75rem; height:0.75rem; background:#f0ad4e; margin-right:0.25rem;"></span>
+                Full 2nd corridor pass (same geometry, later race km)
+                &nbsp;&nbsp;
+                <span style="display:inline-block; width:0.75rem; height:0.75rem; background:#5bc0de; margin-right:0.25rem;"></span>
+                Spur leave/return (e.g. 10k university)
+            </p>
+        </section>
+
+        <section class="course-derived-section">
+            <div class="card-header" style="padding-left:0; padding-right:0;">
+                <h4 class="card-title" style="margin:0;">Stream Interactions</h4>
+                <div class="card-actions">
+                    <button type="button" id="junctions-btn-add-ix" class="course-btn">Add interaction</button>
+                </div>
+            </div>
+            <div class="scrollable-table-container course-derived-table-scroll">
+                <table id="junctions-ix-table" class="table-sticky-header" style="width:100%; font-size:0.875rem;">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Turn</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Conflicts with</th>
+                            <th>Events</th>
+                            <th class="rf-table-actions course-map-action-cell">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="junctions-ix-tbody"></tbody>
+                </table>
+            </div>
+            <p style="margin:0.5rem 0 0; font-size:0.8rem; color:#666;">
+                Table is read-only until you edit a row.
+                <strong>Cross:</strong> From → To + Conflicts with.
+                <strong>Merge:</strong> From → one or more To segments (multi-select); Conflicts unused.
+                <strong>Turn:</strong> left/right as the runner turns.
+                <strong>Events:</strong> all events involved in the conflict.
+                Changes stay local until <strong>Save junctions</strong>.
+            </p>
+        </section>
+    </div>
+</div>

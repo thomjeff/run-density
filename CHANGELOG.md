@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #817 — Junction Flow authoring
+- Package Build **Junctions** tab (after Courses): map pin, nearby segments by endpoint proximity (`JUNCTION_SEGMENT_PROXIMITY_M`, default 10 m), declared cross/merge interactions
+- Persist `junctions.json` at package root (streams derived from segment refs; Locations/Segments schemas unchanged)
+- API: `GET/PUT /api/config/packages/{id}/junctions`, `POST …/junctions/nearby`, `GET …/junctions/map-segments`
+- Analysis/compute deferred to #818
+
 ### Issue #815 — UX polish (Reports / Density / Build)
 - **Reports**: per-section file select + Download (day reports + data files); size/modified shown for the selected file only
 - **Density**: heatmap display ~30% smaller on laptop (`max-width: 70%`); full width under 768px

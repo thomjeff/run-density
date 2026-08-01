@@ -201,6 +201,10 @@ LOCATION_SETUP_BUFFER_MINUTES = 45  # Minutes before earliest runner start for l
 # segment end are clamped to the boundary and accepted.
 LOCATION_SEGMENT_CLAMP_M = 50.0
 
+# Junction Flow authoring (Issue #817): segment start/end within this distance
+# of a junction pin is treated as meeting at the junction.
+JUNCTION_SEGMENT_PROXIMITY_M = 10.0
+
 # Course Mapping location types (Issue #732 / #747) — alphabetical for UI dropdown
 LOCATION_TYPE_CHOICES = [
     "aid",
