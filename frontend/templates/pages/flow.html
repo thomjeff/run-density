@@ -39,6 +39,7 @@
         <h4 style="margin: 1rem 0 0.5rem 0;">Bidirectional Overlap</h4>
         <div id="overlap-detail-meta" style="margin-bottom: 0.75rem; color: #2c3e50;"></div>
         <div id="overlap-chart" class="overlap-chart"></div>
+        <p class="text-secondary" style="font-size:0.8rem; margin:0.35rem 0 0;">Hover for minute concurrent counts (both events).</p>
         <div class="scrollable-table-container overlap-detail-table-container" style="margin-top: 0.75rem;">
             <table id="overlap-detail-table" class="table-sticky-header">
                 <thead>
@@ -124,10 +125,12 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
     let flowData = {};
     let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc' (Issue #596: Fix - moved outside DOMContentLoaded)
     let overlapSummary = null;
+    let overlapChart = null;
     
     // Load flow data on page load
     document.addEventListener('DOMContentLoaded', function() {
@@ -560,6 +563,7 @@
         tbody.innerHTML = '';
         if (!rows || rows.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3" class="placeholder">No per-minute overlap data available</td></tr>';
+            destroyOverlapChart();
             chart.innerHTML = '';
             return;
         }
@@ -574,7 +578,7 @@
             tbody.appendChild(tr);
         });
 
-        chart.innerHTML = buildOverlapChart(rows, segment, eventKeyA, eventKeyB);
+        renderOverlapChart(rows, eventKeyA, eventKeyB);
     }
 
     function buildOverlapMeta(segment) {
@@ -586,83 +590,103 @@
         return `<div class="overlap-title">${escapeHtml(title)}</div><div class="overlap-time">${escapeHtml(timeRange)}</div>`;
     }
 
-    function buildOverlapChart(rows, segment, eventKeyA, eventKeyB) {
-        const width = 1050;
-        const height = 210;
-        const padding = 39;
-        const eventA = segment.event_a;
-        const eventB = segment.event_b;
-        const countsA = rows.map(r => r[`${eventKeyA}_count`] || 0);
-        const countsB = rows.map(r => r[`${eventKeyB}_count`] || 0);
-        const overlapCounts = countsA.map((val, idx) => Math.min(val, countsB[idx]));
-        const maxCount = Math.max(1, ...countsA, ...countsB);
-        const xStep = rows.length > 1 ? (width - padding * 2) / (rows.length - 1) : 0;
-        const axisY = height - padding;
-        const axisX = padding;
-        const labelY = height - 12;
+    function destroyOverlapChart() {
+        if (overlapChart) {
+            overlapChart.destroy();
+            overlapChart = null;
+        }
+    }
 
-        const points = (counts, color) => {
-            const path = counts.map((val, idx) => {
-                const x = padding + idx * xStep;
-                const y = height - padding - (val / maxCount) * (height - padding * 2);
-                return `${idx === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(' ');
-            return `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" />`;
-        };
+    function renderOverlapChart(rows, eventKeyA, eventKeyB) {
+        destroyOverlapChart();
+        const host = document.getElementById('overlap-chart');
+        if (!host) return;
+        if (!rows || !rows.length || typeof Chart === 'undefined') {
+            host.innerHTML = '';
+            return;
+        }
 
-        const area = (counts, color) => {
-            const top = counts.map((val, idx) => {
-                const x = padding + idx * xStep;
-                const y = height - padding - (val / maxCount) * (height - padding * 2);
-                return `${x.toFixed(1)},${y.toFixed(1)}`;
-            });
-            const bottom = counts.map((_, idx) => {
-                const x = padding + (counts.length - 1 - idx) * xStep;
-                return `${x.toFixed(1)},${axisY.toFixed(1)}`;
-            });
-            const path = `M${top.join(' L')} L${bottom.join(' L')} Z`;
-            return `<path d="${path}" fill="${color}" opacity="0.25" />`;
-        };
+        // Same Chart.js stack / interaction as Junctions (#822)
+        host.innerHTML = '<div class="overlap-chart-canvas-wrap"><canvas id="overlap-chart-canvas" aria-label="Bidirectional overlap concurrent chart"></canvas></div>';
+        const canvas = document.getElementById('overlap-chart-canvas');
+        if (!canvas) return;
 
-        const startLabel = rows[0] ? rows[0].minute_start : '';
-        const totalSpan = rows.length - 1;
-        const midIndex = Math.floor(totalSpan / 2);
-        const q1Index = Math.floor(totalSpan / 4);
-        const q3Index = Math.floor((totalSpan * 3) / 4);
-        const midLabel = rows[midIndex] ? rows[midIndex].minute_start : '';
-        const q1Label = rows[q1Index] ? rows[q1Index].minute_start : '';
-        const q3Label = rows[q3Index] ? rows[q3Index].minute_start : '';
-        const endLabel = rows[rows.length - 1] ? rows[rows.length - 1].minute_end : '';
-        const xStart = padding;
-        const xQ1 = padding + q1Index * xStep;
-        const xMid = padding + midIndex * xStep;
-        const xQ3 = padding + q3Index * xStep;
-        const xEnd = padding + totalSpan * xStep;
+        const step = rows.length > 80 ? 3 : rows.length > 40 ? 2 : 1;
+        const sampled = rows.filter(function (_, i) {
+            return i % step === 0 || i === rows.length - 1;
+        });
+        const labels = sampled.map(function (r) { return r.minute_start; });
+        const countsA = sampled.map(function (r) {
+            return Number(r[eventKeyA + '_count']) || 0;
+        });
+        const countsB = sampled.map(function (r) {
+            return Number(r[eventKeyB + '_count']) || 0;
+        });
 
-        return `
-            <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-                <rect x="0" y="0" width="${width}" height="${height}" fill="#fff" />
-                <line x1="${axisX}" y1="${axisY}" x2="${width - padding}" y2="${axisY}" stroke="#e0e0e0" />
-                <line x1="${axisX}" y1="${padding}" x2="${axisX}" y2="${axisY}" stroke="#e0e0e0" />
-                ${area(overlapCounts, '#9ec5fe')}
-                ${points(countsA, '#1f77b4')}
-                ${points(countsB, '#ff7f0e')}
-                <text x="${axisX}" y="${padding - 8}" font-size="10" fill="#555">Concurrent runners</text>
-                <text x="${axisX + 160}" y="${padding - 8}" font-size="10" fill="#1f77b4">${eventKeyA} concurrent</text>
-                <text x="${axisX + 320}" y="${padding - 8}" font-size="10" fill="#ff7f0e">${eventKeyB} concurrent</text>
-                <text x="${axisX + 500}" y="${padding - 8}" font-size="10" fill="#4c7bd9">Overlap</text>
-                <line x1="${xStart}" y1="${axisY}" x2="${xStart}" y2="${axisY + 4}" stroke="#9ca3af" />
-                <line x1="${xQ1}" y1="${axisY}" x2="${xQ1}" y2="${axisY + 4}" stroke="#9ca3af" />
-                <line x1="${xMid}" y1="${axisY}" x2="${xMid}" y2="${axisY + 4}" stroke="#9ca3af" />
-                <line x1="${xQ3}" y1="${axisY}" x2="${xQ3}" y2="${axisY + 4}" stroke="#9ca3af" />
-                <line x1="${xEnd}" y1="${axisY}" x2="${xEnd}" y2="${axisY + 4}" stroke="#9ca3af" />
-                <text x="${xStart - 8}" y="${labelY}" font-size="10" fill="#555">${startLabel}</text>
-                <text x="${xQ1 - 8}" y="${labelY}" font-size="10" fill="#555">${q1Label}</text>
-                <text x="${xMid - 8}" y="${labelY}" font-size="10" fill="#555">${midLabel}</text>
-                <text x="${xQ3 - 8}" y="${labelY}" font-size="10" fill="#555">${q3Label}</text>
-                <text x="${xEnd - 8}" y="${labelY}" font-size="10" fill="#555">${endLabel}</text>
-            </svg>
-        `;
+        overlapChart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: eventKeyA + ' concurrent',
+                        data: countsA,
+                        borderColor: '#206bc4',
+                        backgroundColor: 'rgba(32,107,196,0.15)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointStyle: 'circle',
+                    },
+                    {
+                        label: eventKeyB + ' concurrent',
+                        data: countsB,
+                        borderColor: '#f76707',
+                        backgroundColor: 'rgba(247,103,7,0.12)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointStyle: 'circle',
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            boxWidth: 8,
+                            boxHeight: 8,
+                            padding: 16,
+                        },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function (items) {
+                                return items[0] ? ('Minute ' + items[0].label) : '';
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time' },
+                        ticks: { maxTicksLimit: 10 },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Concurrent runners' },
+                    },
+                },
+            },
+        });
     }
 
     function showOverlapError() {
@@ -788,6 +812,11 @@
         border-radius: 4px;
         padding: 0.5rem;
         background: #fff;
+    }
+
+    .overlap-chart-canvas-wrap {
+        height: 220px;
+        position: relative;
     }
 
     .overlap-title {
