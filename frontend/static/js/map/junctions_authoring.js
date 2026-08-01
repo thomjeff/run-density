@@ -454,14 +454,17 @@
         );
         L.polyline(pts, {
             color: '#c0392b',
-            weight: 2,
-            opacity: 0.75,
-            dashArray: '4 6',
+            weight: 3,
+            opacity: 0.9,
+            dashArray: '6 5',
             interactive: false,
             lineCap: 'round',
             lineJoin: 'round',
         }).addTo(state.annotLayer);
     }
+
+    // Short connector stubs near the pin (labels sit farther out at ANNOT_PLACE_M)
+    const CONNECTOR_APPROACH_M = 48;
 
     function renderConnectors() {
         const j = selectedJunction();
@@ -476,16 +479,16 @@
             if (!ix) return;
             const fromSeg = byId[ix.from_seg_id];
             // Keep connectors short near the pin so they don't read as travel arrows
-            const fromPt = fromSeg ? approachPointForSeg(fromSeg, 28) : null;
+            const fromPt = fromSeg ? approachPointForSeg(fromSeg, CONNECTOR_APPROACH_M) : null;
             const toIds = ix.to_seg_ids || [];
             toIds.forEach(function (tid) {
                 const toSeg = byId[tid];
-                const toPt = toSeg ? approachPointForSeg(toSeg, 28) : null;
+                const toPt = toSeg ? approachPointForSeg(toSeg, CONNECTOR_APPROACH_M) : null;
                 if (fromPt && toPt) addConnectorCurve(fromPt, pin, toPt);
             });
             if (ix.type === 'cross' && ix.conflicts_with_seg_id) {
                 const cSeg = byId[ix.conflicts_with_seg_id];
-                const cPt = cSeg ? approachPointForSeg(cSeg, 28) : null;
+                const cPt = cSeg ? approachPointForSeg(cSeg, CONNECTOR_APPROACH_M) : null;
                 if (cPt) {
                     // Reflect across pin so the conflict stream reads as a through-crossing
                     const far = {
@@ -658,9 +661,9 @@
         if (!state.annotLayer) return;
         state.annotLayer.clearLayers();
         if (!(state.nearby || []).length) return;
+        // Connectors under labels so From→To arcs sit near the pin without covering text
+        renderConnectors();
         renderStreamLabels();
-        // Connectors on after travel arrows look right
-        // renderConnectors();
     }
 
     function classifyNearbyRow(seg) {
