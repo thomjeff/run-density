@@ -115,6 +115,31 @@
         if (state.map) state.map.getContainer().style.cursor = '';
     }
 
+    function junctionPinIcon() {
+        return L.divIcon({
+            className: 'junctions-pin-icon',
+            html: '<span class="junctions-pin-dot" aria-hidden="true"></span>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+        });
+    }
+
+    function bindPinDragHandlers(marker) {
+        if (!marker || marker._junctionsDragBound) return;
+        marker._junctionsDragBound = true;
+        marker.on('dragstart', function () {
+            stopPlaceMode();
+            if (state.map) state.map.getContainer().style.cursor = 'grabbing';
+        });
+        marker.on('dragend', function (e) {
+            if (state.map) state.map.getContainer().style.cursor = '';
+            const ll = e.target.getLatLng();
+            setPin(ll.lat, ll.lng, true);
+            discoverNearby();
+            status('Pin moved — finding nearby segments…');
+        });
+    }
+
     function ensureDraftJunction() {
         if (selectedJunction()) return selectedJunction();
         const id = 'junc_' + Date.now().toString(36);
@@ -167,17 +192,26 @@
         if (lonEl) lonEl.value = String(j.lon);
         const map = ensureMap();
         if (!map) return;
+        // Replace non-draggable legacy circleMarker if present
+        if (state.pinMarker && !state.pinMarker.dragging) {
+            map.removeLayer(state.pinMarker);
+            state.pinMarker = null;
+        }
         if (state.pinMarker) {
             state.pinMarker.setLatLng([j.lat, j.lon]);
+            bindPinDragHandlers(state.pinMarker);
+            if (state.pinMarker.dragging && !state.pinMarker.dragging.enabled()) {
+                state.pinMarker.dragging.enable();
+            }
         } else {
-            state.pinMarker = L.circleMarker([j.lat, j.lon], {
-                radius: 10,
-                color: '#111',
-                weight: 2,
-                fillColor: '#111',
-                fillOpacity: 0.45,
-                interactive: false,
+            state.pinMarker = L.marker([j.lat, j.lon], {
+                icon: junctionPinIcon(),
+                draggable: true,
+                autoPan: true,
+                zIndexOffset: 1200,
+                title: 'Drag to reposition junction',
             }).addTo(map);
+            bindPinDragHandlers(state.pinMarker);
         }
         map.panTo([j.lat, j.lon]);
         if (fromUser) markDirty();

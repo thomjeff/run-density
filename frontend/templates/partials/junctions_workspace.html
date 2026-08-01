@@ -37,6 +37,25 @@
     line-height: 1.35;
     padding: 0.35rem 0.45rem;
 }
+.junctions-pin-icon {
+    background: transparent;
+    border: none;
+}
+.junctions-pin-dot {
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin: 2px;
+    border-radius: 50%;
+    background: rgba(17, 17, 17, 0.45);
+    border: 2px solid #111;
+    box-sizing: border-box;
+    cursor: grab;
+}
+.junctions-pin-icon:active .junctions-pin-dot,
+.leaflet-marker-dragging .junctions-pin-dot {
+    cursor: grabbing;
+}
 </style>
 <div id="junctions-authoring-root" class="junctions-authoring">
     <div class="junctions-toolbar" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; margin-bottom:1rem;">
@@ -83,6 +102,7 @@
                 <p style="margin:0.35rem 0 0; font-size:0.8rem; color:#666;">
                     Click <strong>Place pin on map</strong> (button highlights), then click the map — including on course lines.
                     Lat/lon fill automatically; then matching segments load.
+                    <strong>Drag the pin</strong> anytime to reposition — nearby segments refresh after the move.
                 </p>
             </div>
         </div>
