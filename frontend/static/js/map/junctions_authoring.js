@@ -398,6 +398,135 @@
         renderSegLines(state.nearby.map(function (s) { return s.seg_id; }), { fit: 'nearby' });
     }
 
+    function nearbyById() {
+        const byId = {};
+        // Prefer live discovery; fall back to selected junction cache
+        const rows = (state.nearby && state.nearby.length)
+            ? state.nearby
+            : ((selectedJunction() || {}).nearby_segments || []);
+        rows.forEach(function (s) { byId[s.seg_id] = s; });
+        return byId;
+    }
+
+    function formatEventList(events) {
+        const order = ['full', 'half', '10k', 'elite', 'open'];
+        const labels = {
+            full: 'Full',
+            half: 'Half',
+            '10k': '10k',
+            elite: 'Elite',
+            open: 'Open',
+        };
+        const lower = {};
+        (events || []).forEach(function (e) {
+            if (e) lower[String(e).toLowerCase()] = true;
+        });
+        const seen = [];
+        order.forEach(function (k) {
+            if (lower[k]) seen.push(labels[k]);
+        });
+        Object.keys(lower).sort().forEach(function (k) {
+            if (order.indexOf(k) < 0) {
+                seen.push(k.charAt(0).toUpperCase() + k.slice(1));
+            }
+        });
+        return seen.length ? seen.join('+') : 'runners';
+    }
+
+    function namedSeg(segId, byId) {
+        const row = byId[segId] || {};
+        const label = String(row.seg_label || row.name || '').trim();
+        if (!label || label === segId) return '(' + segId + ')';
+        return label + ' (' + segId + ')';
+    }
+
+    function segEvents(segId, byId) {
+        const row = byId[segId] || {};
+        if (row.events && row.events.length) {
+            return row.events.map(function (e) { return String(e).toLowerCase(); });
+        }
+        const ek = row.event_kms || {};
+        return Object.keys(ek).map(function (e) { return String(e).toLowerCase(); });
+    }
+
+    function interactionDescription(ix) {
+        const byId = nearbyById();
+        const fromId = String(ix.from_seg_id || '').trim();
+        const toIds = (ix.to_seg_ids || []).map(function (s) {
+            return String(s || '').trim();
+        }).filter(Boolean);
+        if (!fromId || !toIds.length) return '';
+
+        const scoped = {};
+        (ix.events || []).forEach(function (e) {
+            if (e) scoped[String(e).toLowerCase()] = true;
+        });
+        const hasScope = Object.keys(scoped).length > 0;
+
+        if (ix.type === 'cross') {
+            const conflicts = String(ix.conflicts_with_seg_id || '').trim();
+            const fromEv = segEvents(fromId, byId);
+            const toEv = segEvents(toIds[0], byId);
+            let crossing = fromEv.filter(function (e) { return toEv.indexOf(e) >= 0; });
+            if (!crossing.length) crossing = fromEv.slice();
+            let crossed = segEvents(conflicts, byId);
+            if (hasScope) {
+                const c1 = crossing.filter(function (e) { return scoped[e]; });
+                const c2 = crossed.filter(function (e) { return scoped[e]; });
+                if (c1.length) crossing = c1;
+                if (c2.length) crossed = c2;
+            }
+            const side = String(ix.side || '').toLowerCase();
+            const mid = (side === 'left' || side === 'right') ? (' ' + side + ' to ') : ' to ';
+            return (
+                formatEventList(crossing) + ' runners from ' + namedSeg(fromId, byId) +
+                ' crossing ' + formatEventList(crossed) + ' runners from ' +
+                (conflicts ? namedSeg(conflicts, byId) : 'the conflict stream') +
+                mid + namedSeg(toIds[0], byId)
+            );
+        }
+
+        // merge
+        let joining = segEvents(fromId, byId);
+        let through = [];
+        toIds.forEach(function (tid) {
+            segEvents(tid, byId).forEach(function (e) {
+                if ((e === 'full' || e === 'half') && through.indexOf(e) < 0) through.push(e);
+            });
+        });
+        if (hasScope) {
+            const j1 = joining.filter(function (e) { return scoped[e]; });
+            const t1 = through.filter(function (e) { return scoped[e]; });
+            if (j1.length) joining = j1;
+            if (t1.length) through = t1;
+        }
+        const toPart = toIds.map(function (tid) { return namedSeg(tid, byId); }).join(', ');
+        const throughBit = through.length
+            ? (formatEventList(through) + ' traffic')
+            : 'through traffic';
+        return (
+            formatEventList(joining) + ' runners from ' + namedSeg(fromId, byId) +
+            ' merging into ' + throughBit + ' on ' + toPart
+        );
+    }
+
+    function displayDescription(ix) {
+        const authored = String(ix.description || '').trim();
+        if (authored) return authored;
+        return interactionDescription(ix);
+    }
+
+    function applyAutoDescriptionIfUnlocked(ix, typedBefore, autoBefore, descEl) {
+        const suggested = interactionDescription(ix);
+        if (!typedBefore || typedBefore === autoBefore) {
+            ix.description = suggested;
+            ix._lastAutoDescription = suggested;
+            if (descEl) descEl.value = suggested;
+            return suggested;
+        }
+        return String(ix.description || '').trim();
+    }
+
     function deriveEvents(fromId, toIds) {
         const byId = {};
         state.nearby.forEach(function (s) { byId[s.seg_id] = s; });
@@ -532,6 +661,10 @@
         ix.to_seg_ids = toSegs;
         ix.conflicts_with_seg_id = conflicts;
         ix.events = events;
+        const descEl = tr.querySelector('[data-f=description]');
+        if (descEl) {
+            ix.description = String(descEl.value || '').trim();
+        }
         j.nearby_seg_ids = state.nearby.map(function (s) { return s.seg_id; });
         j.nearby_segments = state.nearby.slice();
     }
@@ -576,11 +709,27 @@
     }
 
     function wireInteractionRow(tr, ix) {
-        tr.querySelectorAll('select').forEach(function (el) {
-            el.addEventListener('change', function () {
+        tr.querySelectorAll('select, textarea, input').forEach(function (el) {
+            const evtName = el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ? 'input' : 'change';
+            el.addEventListener(evtName, function () {
+                const field = el.getAttribute('data-f');
+                const descEl = tr.querySelector('[data-f=description]');
+                const typedBefore = descEl
+                    ? String(descEl.value || '').trim()
+                    : String(ix.description || '').trim();
+                const autoBefore = ix._lastAutoDescription || interactionDescription(ix);
                 syncEditingInteractionFromDom();
                 markDirty();
-                if (el.getAttribute('data-f') === 'type') {
+                if (field === 'description') {
+                    return;
+                }
+                const j = selectedJunction();
+                const live = j && (j.interactions || []).find(function (x) {
+                    return x.id === ix.id;
+                });
+                if (!live) return;
+                applyAutoDescriptionIfUnlocked(live, typedBefore, autoBefore, descEl);
+                if (field === 'type') {
                     renderInteractions();
                 }
             });
@@ -617,7 +766,7 @@
         if (!j) return;
         if (!(j.interactions || []).length) {
             tbody.innerHTML =
-                '<tr><td colspan="7" class="text-secondary">' +
+                '<tr><td colspan="8" class="text-secondary">' +
                 'No interactions yet. Add a cross or merge.</td></tr>';
             return;
         }
@@ -629,6 +778,11 @@
             const editing = state.editingIxId === id;
             const isMerge = ix.type === 'merge';
             const toIds = ix.to_seg_ids || [];
+            if (!String(ix.description || '').trim()) {
+                ix.description = interactionDescription(ix);
+                ix._lastAutoDescription = ix.description;
+            }
+            const desc = displayDescription(ix);
 
             if (!editing) {
                 tr.innerHTML =
@@ -637,6 +791,8 @@
                     '<td>' + escapeHtml(displayText(ix.from_seg_id)) + '</td>' +
                     '<td>' + escapeHtml(displayText(toIds)) + '</td>' +
                     '<td>' + escapeHtml(isMerge ? '—' : displayText(ix.conflicts_with_seg_id)) + '</td>' +
+                    '<td class="junctions-ix-desc-col" title="' + escapeHtml(desc) + '">' +
+                    escapeHtml(desc || '—') + '</td>' +
                     '<td>' + escapeHtml(eventsDisplayList(ix.events || [])) + '</td>';
                 tbody.appendChild(tr);
                 wireInteractionRow(tr, ix);
@@ -664,6 +820,10 @@
                 '<td>' + segSelectHtml('from', ix.from_seg_id || '', true) + '</td>' +
                 '<td>' + toCell + '</td>' +
                 '<td>' + conflictsCell + '</td>' +
+                '<td class="junctions-ix-desc-col">' +
+                '<textarea data-f="description" class="config-package-input junctions-ix-desc-input" ' +
+                'rows="3" placeholder="Plain-language description for race directors">' +
+                escapeHtml(desc) + '</textarea></td>' +
                 '<td>' + multiSelectHtml('events', packageEventIds(), ix.events || []) + '</td>';
 
             tbody.appendChild(tr);
@@ -989,7 +1149,12 @@
                     to_seg_ids: [(state.nearby[1] && state.nearby[1].seg_id) || ''],
                     conflicts_with_seg_id: (state.nearby[2] && state.nearby[2].seg_id) || '',
                     events: [],
+                    description: '',
                 });
+                const created = j.interactions[j.interactions.length - 1];
+                created.events = deriveEvents(created.from_seg_id, created.to_seg_ids);
+                created.description = interactionDescription(created);
+                created._lastAutoDescription = created.description;
                 state.editingIxId = newId;
                 renderInteractions();
                 markDirty();

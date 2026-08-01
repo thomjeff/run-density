@@ -158,6 +158,7 @@ def persist_junction_flow_day(
                         "type": ix.get("type"),
                         "side": ix.get("side"),
                         "label": ix.get("label"),
+                        "description": ix.get("description"),
                         "events": ix.get("events"),
                         "window_start": ix.get("window_start"),
                         "window_end": ix.get("window_end"),
@@ -165,6 +166,7 @@ def persist_junction_flow_day(
                         "unique_by_role_event": ix.get("unique_by_role_event"),
                         "peak_concurrent": ix.get("peak_concurrent"),
                         "field_crosstab": ix.get("field_crosstab"),
+                        "headline_labels": ix.get("headline_labels") or {},
                     }
                     for ix in (j.get("interactions") or [])
                 ],

@@ -18,6 +18,25 @@
     white-space: nowrap;
     width: 5.5rem;
 }
+#junctions-ix-table .junctions-ix-desc-col {
+    width: auto;
+    min-width: 14rem;
+    white-space: normal;
+    line-height: 1.35;
+    font-size: 0.8125rem;
+    color: #333;
+}
+#junctions-ix-table th.junctions-ix-desc-col {
+    font-weight: 600;
+}
+#junctions-ix-table textarea.junctions-ix-desc-input {
+    width: 100%;
+    min-height: 4.25rem;
+    resize: vertical;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    padding: 0.35rem 0.45rem;
+}
 </style>
 <div id="junctions-authoring-root" class="junctions-authoring">
     <div class="junctions-toolbar" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; margin-bottom:1rem;">
@@ -98,16 +117,17 @@
                 </div>
             </div>
             <div class="scrollable-table-container course-derived-table-scroll">
-                <table id="junctions-ix-table" class="table-sticky-header" style="width:100%; font-size:0.875rem;">
+                <table id="junctions-ix-table" class="table-sticky-header junctions-ix-table" style="width:100%; font-size:0.875rem; table-layout:fixed;">
                     <thead>
                         <tr>
-                            <th>Type</th>
-                            <th>Turn</th>
-                            <th>From</th>
-                            <th>To</th>
-                            <th>Conflicts with</th>
-                            <th>Events</th>
-                            <th class="rf-table-actions course-map-action-cell">Actions</th>
+                            <th style="width:5.5rem;">Type</th>
+                            <th style="width:4.5rem;">Turn</th>
+                            <th style="width:4rem;">From</th>
+                            <th style="width:4.5rem;">To</th>
+                            <th style="width:5.5rem;">Conflicts with</th>
+                            <th class="junctions-ix-desc-col">Description</th>
+                            <th style="width:6rem;">Events</th>
+                            <th class="rf-table-actions course-map-action-cell" style="width:5.5rem;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="junctions-ix-tbody"></tbody>
@@ -118,6 +138,7 @@
                 <strong>Cross:</strong> From → To + Conflicts with.
                 <strong>Merge:</strong> From → one or more To segments (multi-select); Conflicts unused.
                 <strong>Turn:</strong> left/right as the runner turns.
+                <strong>Description:</strong> editable plain-language summary (auto-filled from streams; edit while the row is in edit mode, then Save junctions).
                 <strong>Events:</strong> all events involved in the conflict.
                 Changes stay local until <strong>Save junctions</strong>.
             </p>
