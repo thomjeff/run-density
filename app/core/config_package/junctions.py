@@ -96,7 +96,8 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
     itype = str(raw.get("type") or "").strip().lower()
     if itype not in _INTERACTION_TYPES:
         raise ValueError(
-            f"interactions[{index}].type must be one of {sorted(_INTERACTION_TYPES)}"
+            f"interactions[{index}].type must be one of "
+            f"{sorted(_INTERACTION_TYPES)}"
         )
     side = str(raw.get("side") or "").strip().lower()
     if side not in _SIDES:
@@ -111,16 +112,22 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
     if to_raw is None and raw.get("to_seg_id"):
         to_raw = [raw.get("to_seg_id")]
     if not isinstance(to_raw, list) or not to_raw:
-        raise ValueError(f"interactions[{index}].to_seg_ids must be a non-empty list")
+        raise ValueError(
+            f"interactions[{index}].to_seg_ids must be a non-empty list"
+        )
     to_segs: List[str] = []
     for t in to_raw:
         sid = str(t or "").strip()
         if sid and sid not in to_segs:
             to_segs.append(sid)
     if not to_segs:
-        raise ValueError(f"interactions[{index}].to_seg_ids must include a segment id")
+        raise ValueError(
+            f"interactions[{index}].to_seg_ids must include a segment id"
+        )
     if itype == "cross" and len(to_segs) != 1:
-        raise ValueError(f"interactions[{index}]: cross allows exactly one to_seg_id")
+        raise ValueError(
+            f"interactions[{index}]: cross allows exactly one to_seg_id"
+        )
 
     conflicts = str(raw.get("conflicts_with_seg_id") or "").strip()
     if itype == "cross" and not conflicts:
@@ -168,7 +175,7 @@ def _derive_streams(junction: Dict[str, Any]) -> List[Dict[str, Any]]:
     streams: List[Dict[str, Any]] = []
     for sid in ordered:
         near = endpoint_by_seg.get(sid) or ""
-        # Travel implication at the pin: start nearby → leaving via end; end nearby → arriving from start
+        # At pin: start nearby → leave via end; end nearby → arrive from start
         if near == "start":
             direction = "from_start"
         elif near == "end":
@@ -230,7 +237,9 @@ def validate_junctions_doc(data: Dict[str, Any]) -> Dict[str, Any]:
     junctions_raw = data.get("junctions") or []
     if not isinstance(junctions_raw, list):
         raise ValueError("junctions must be a list")
-    junctions = [_normalize_junction(j, i) for i, j in enumerate(junctions_raw)]
+    junctions = [
+        _normalize_junction(j, i) for i, j in enumerate(junctions_raw)
+    ]
     seen: Set[str] = set()
     for j in junctions:
         if j["id"] in seen:
@@ -247,7 +256,9 @@ def new_junction_id() -> str:
     return generate_run_id()
 
 
-def _leg_gpx_path(lib_dir: Path, leg_manifest: Dict[str, Any], leg_id: str) -> Optional[Path]:
+def _leg_gpx_path(
+    lib_dir: Path, leg_manifest: Dict[str, Any], leg_id: str
+) -> Optional[Path]:
     lid = str(leg_id or "").strip()
     if not lid:
         return None
@@ -341,15 +352,17 @@ def find_nearby_segments(
     radius_m: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Return course segments whose leg start and/or end is within radius_m of the pin.
+    Return course segments whose leg start/end is within radius_m of the pin.
 
     Each row includes distance_m, near_endpoint (start|end|both), events, and
     per-event km for UI hover tiles.
     """
     cid = validate_config_id(config_id)
-    # Keep endpoint cache across nearby lookups in the same process; clear explicitly
-    # when leg GPX/course inputs change (tests call clear_leg_endpoint_cache()).
-    radius = float(radius_m if radius_m is not None else JUNCTION_SEGMENT_PROXIMITY_M)
+    # Keep endpoint cache across nearby lookups; tests clear via
+    # clear_leg_endpoint_cache().
+    radius = float(
+        radius_m if radius_m is not None else JUNCTION_SEGMENT_PROXIMITY_M
+    )
     if radius <= 0:
         raise ValueError("radius_m must be positive")
 
@@ -393,7 +406,9 @@ def find_nearby_segments(
         results.append(
             {
                 "seg_id": seg_id,
-                "seg_label": seg.get("seg_label") or seg.get("description") or seg_id,
+                "seg_label": (
+                    seg.get("seg_label") or seg.get("description") or seg_id
+                ),
                 "leg_id": leg_id,
                 "length_km": seg.get("length_km"),
                 "width_m": seg.get("width_m"),
