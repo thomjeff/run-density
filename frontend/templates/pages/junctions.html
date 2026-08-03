@@ -60,11 +60,15 @@
             </tr>
             <tr>
                 <td><strong>Pace quintiles</strong></td>
-                <td>Event-relative field bands from runner pace: <strong>Q1 = lead (fastest)</strong> … <strong>Q5 = rear (slowest)</strong>. The crosstab shows unique primary runners by their quintile × nearest co-present partner’s quintile.</td>
+                <td>Event-relative field bands from runner pace: <strong>Q1 = lead (fastest)</strong> … <strong>Q5 = rear (slowest)</strong>. Quintiles are computed <em>within each event</em> (a Q1 10k is among the fastest 10k runners, not the whole race).</td>
+            </tr>
+            <tr>
+                <td><strong>Field crosstab</strong></td>
+                <td><strong>Rows</strong> = crossing / joining runners’ own quintile. <strong>Columns</strong> = nearest co-present partner’s quintile (crossed / through). <strong>Cell</strong> = unique crossing/joining runners in that row whose nearest partner within dwell was in that column. Example: row Q5 × column Q1 ≈ rear of the crossing field meeting lead of the crossed field.</td>
             </tr>
             <tr>
                 <td><strong>How to read</strong></td>
-                <td>Headline numbers are co-present uniques. Charts show concurrent count over time (hover for minute values). Crosstab cells answer “where in each field did mixing happen?” — e.g. rear 10k meeting lead full.</td>
+                <td>Headline numbers are co-present uniques, labeled by event. Charts show concurrent count over time (hover for minute values). Crosstab answers “where in each field did mixing happen?”</td>
             </tr>
         </tbody>
     </table>
@@ -109,7 +113,7 @@
         [...lower].sort().forEach((k) => {
             if (!order.includes(k)) seen.push(k.charAt(0).toUpperCase() + k.slice(1));
         });
-        return seen.length ? seen.join("+") : "runners";
+        return seen.length ? seen.join("+") : "";
     }
 
     function eventsFromBucket(bucket) {
@@ -119,9 +123,33 @@
             .sort();
     }
 
+    function roleEvents(ix) {
+        const hl = ix.headline_labels || {};
+        if (Array.isArray(hl.primary_events) || Array.isArray(hl.secondary_events)) {
+            return {
+                primary: (hl.primary_events || []).map((e) => String(e).toLowerCase()),
+                secondary: (hl.secondary_events || []).map((e) => String(e).toLowerCase()),
+            };
+        }
+        const u = ix.unique_by_role_event || {};
+        if (ix.type === "merge") {
+            return {
+                primary: eventsFromBucket(u.joining_with_full_half_copresence),
+                secondary: eventsFromBucket(u.through_full_half_with_joining_copresence),
+            };
+        }
+        return {
+            primary: eventsFromBucket(u.crossing_with_copresence),
+            secondary: eventsFromBucket(u.crossed_with_copresence),
+        };
+    }
+
     function headlineUniques(ix) {
         const u = ix.unique_by_role_event || {};
         const hl = ix.headline_labels || {};
+        const roles = roleEvents(ix);
+        const priEv = formatEventList(roles.primary);
+        const secEv = formatEventList(roles.secondary);
         if (hl.primary_label && hl.secondary_label) {
             return {
                 primaryLabel: hl.primary_label,
@@ -132,25 +160,27 @@
                 secondary: ix.type === "merge"
                     ? (u.through_full_half_with_joining_copresence || {}).all ?? "—"
                     : (u.crossed_with_copresence || {}).all ?? "—",
+                primaryEvents: roles.primary,
+                secondaryEvents: roles.secondary,
             };
         }
         if (ix.type === "merge") {
-            const joining = eventsFromBucket(u.joining_with_full_half_copresence);
-            const through = eventsFromBucket(u.through_full_half_with_joining_copresence);
             return {
-                primaryLabel: `${formatEventList(joining)} Joining (co-present)`,
+                primaryLabel: `${priEv ? priEv + " " : ""}Joining (co-present)`.trim(),
                 primary: (u.joining_with_full_half_copresence || {}).all ?? "—",
-                secondaryLabel: `${formatEventList(through)} Through (co-present)`,
+                secondaryLabel: `${secEv ? secEv + " " : ""}Through (co-present)`.trim(),
                 secondary: (u.through_full_half_with_joining_copresence || {}).all ?? "—",
+                primaryEvents: roles.primary,
+                secondaryEvents: roles.secondary,
             };
         }
-        const crossing = eventsFromBucket(u.crossing_with_copresence);
-        const crossed = eventsFromBucket(u.crossed_with_copresence);
         return {
-            primaryLabel: `${formatEventList(crossing)} Crossing (co-present)`,
+            primaryLabel: `${priEv ? priEv + " " : ""}Crossing (co-present)`.trim(),
             primary: (u.crossing_with_copresence || {}).all ?? "—",
-            secondaryLabel: `${formatEventList(crossed)} Crossed (co-present)`,
+            secondaryLabel: `${secEv ? secEv + " " : ""}Crossed (co-present)`.trim(),
             secondary: (u.crossed_with_copresence || {}).all ?? "—",
+            primaryEvents: roles.primary,
+            secondaryEvents: roles.secondary,
         };
     }
 
@@ -162,28 +192,45 @@
         return ["crossing_count", "crossed_count"];
     }
 
-    function seriesLabels(priKey, secKey) {
-        const map = {
-            crossing_count: "Crossing",
-            crossed_count: "Crossed",
-            joining_count: "Joining",
-            through_full_half_count: "Through full+half",
-            through_count: "Through",
+    function seriesLabels(ix, priKey, secKey) {
+        const h = headlineUniques(ix);
+        const priEv = formatEventList(h.primaryEvents);
+        const secEv = formatEventList(h.secondaryEvents);
+        if (ix.type === "merge") {
+            return [
+                priEv ? `${priEv} Joining` : "Joining",
+                secEv ? `${secEv} Through` : "Through full+half",
+            ];
+        }
+        const mapFallback = {
+            crossing_count: priEv ? `${priEv} Crossing` : "Crossing",
+            crossed_count: secEv ? `${secEv} Crossed` : "Crossed",
+            joining_count: priEv ? `${priEv} Joining` : "Joining",
+            through_full_half_count: secEv ? `${secEv} Through` : "Through full+half",
+            through_count: secEv ? `${secEv} Through` : "Through",
         };
-        return [map[priKey] || priKey, map[secKey] || secKey];
+        return [mapFallback[priKey] || priKey, mapFallback[secKey] || secKey];
     }
 
-    function buildCrosstabTable(ct) {
+    function buildCrosstabTable(ix) {
+        const ct = ix.field_crosstab || [];
+        const h = headlineUniques(ix);
+        const rowEv = formatEventList(h.primaryEvents) || (ix.type === "merge" ? "Joining" : "Crossing");
+        const colEv = formatEventList(h.secondaryEvents) || (ix.type === "merge" ? "Through" : "Crossed");
         const mat = {};
-        (ct || []).forEach((r) => {
+        ct.forEach((r) => {
             const qa = Number(r.crossing_or_joining_quintile);
             const qb = Number(r.crossed_or_through_quintile);
             mat[`${qa}-${qb}`] = Number(r.unique_crossing_or_joining_runners) || 0;
         });
         const colTot = [0, 0, 0, 0, 0, 0];
         let grand = 0;
-        let html = '<table class="table table-sm table-vcenter"><thead><tr><th>Q↓ / partner →</th>';
-        for (let qb = 1; qb <= 5; qb++) html += `<th class="text-end">Q${qb}</th>`;
+        let html = `<p class="text-secondary small mb-2">Rows = <strong>${rowEv}</strong> pace quintile (Q1 lead … Q5 rear). Columns = nearest co-present <strong>${colEv}</strong> partner’s quintile. Cell = unique ${rowEv} runners in that mix.</p>`;
+        html += '<table class="table table-sm table-vcenter"><thead><tr>';
+        html += `<th>${rowEv} ↓ \\ ${colEv} →</th>`;
+        for (let qb = 1; qb <= 5; qb++) {
+            html += `<th class="text-end">Q${qb}${qb === 1 ? " lead" : qb === 5 ? " rear" : ""}</th>`;
+        }
         html += '<th class="text-end">Total</th></tr></thead><tbody>';
         for (let qa = 1; qa <= 5; qa++) {
             let rowTot = 0;
@@ -210,7 +257,7 @@
         const rows = ix.minute_rows || [];
         if (!rows.length || typeof Chart === "undefined") return;
         const [priKey, secKey] = primarySecondaryKeys(ix);
-        const [priName, secName] = seriesLabels(priKey, secKey);
+        const [priName, secName] = seriesLabels(ix, priKey, secKey);
         // Downsample long series for readability
         const step = rows.length > 80 ? 3 : rows.length > 40 ? 2 : 1;
         const sampled = rows.filter((_, i) => i % step === 0 || i === rows.length - 1);
@@ -288,8 +335,15 @@
     function renderInteraction(j, ix) {
         const h = headlineUniques(ix);
         const peaks = ix.peak_concurrent || {};
+        const peakMap = {
+            crossing: seriesLabels(ix, "crossing_count", "crossed_count")[0],
+            crossed: seriesLabels(ix, "crossing_count", "crossed_count")[1],
+            joining: seriesLabels(ix, "joining_count", "through_full_half_count")[0],
+            through_full_half: seriesLabels(ix, "joining_count", "through_full_half_count")[1],
+            through: seriesLabels(ix, "joining_count", "through_count")[1],
+        };
         const peakVals = Object.entries(peaks)
-            .map(([k, v]) => `${k}: ${v}`)
+            .map(([k, v]) => `${peakMap[k] || k}: ${v}`)
             .join(" · ");
         const card = document.createElement("div");
         card.className = "card mb-3";
@@ -320,12 +374,12 @@
                 </div>
                 <h4 class="mb-2">Concurrent at node</h4>
                 <div style="height:220px;"><canvas></canvas></div>
-                <p class="text-secondary small mt-2 mb-3">Hover for minute counts. Source: junctions UI metrics · Q1=lead / Q5=rear.</p>
+                <p class="text-secondary small mt-2 mb-3">Hover for minute counts. Q1=lead (fastest) / Q5=rear (slowest) within each event.</p>
                 <h4 class="mb-2">Field position (pace quintile crosstab)</h4>
                 <div class="table-responsive crosstab-wrap"></div>
             </div>
         `;
-        card.querySelector(".crosstab-wrap").innerHTML = buildCrosstabTable(ix.field_crosstab);
+        card.querySelector(".crosstab-wrap").innerHTML = buildCrosstabTable(ix);
         const canvas = card.querySelector("canvas");
         // Defer chart until in DOM
         setTimeout(() => renderChart(canvas, ix), 0);
