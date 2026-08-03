@@ -138,6 +138,7 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
         conflicts = ""
 
     iid = str(raw.get("id") or "").strip() or f"ix_{index + 1}"
+    description = str(raw.get("description") or "").strip()
     return {
         "id": iid,
         "type": itype,
@@ -146,6 +147,7 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
         "to_seg_ids": to_segs,
         "conflicts_with_seg_id": conflicts,
         "events": _normalize_events(raw.get("events")),
+        "description": description,
     }
 
 

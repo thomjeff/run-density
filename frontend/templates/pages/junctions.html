@@ -75,6 +75,14 @@
 (function () {
     const charts = [];
 
+    function escapeHtml(str) {
+        return String(str == null ? "" : str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
     function resolveRunId() {
         const params = new URLSearchParams(window.location.search);
         return params.get("run_id")
@@ -90,20 +98,58 @@
             || null;
     }
 
+    function formatEventList(events) {
+        const order = ["full", "half", "10k", "elite", "open"];
+        const labels = { full: "Full", half: "Half", "10k": "10k", elite: "Elite", open: "Open" };
+        const lower = new Set((events || []).map((e) => String(e).toLowerCase()).filter(Boolean));
+        const seen = [];
+        order.forEach((k) => {
+            if (lower.has(k)) seen.push(labels[k]);
+        });
+        [...lower].sort().forEach((k) => {
+            if (!order.includes(k)) seen.push(k.charAt(0).toUpperCase() + k.slice(1));
+        });
+        return seen.length ? seen.join("+") : "runners";
+    }
+
+    function eventsFromBucket(bucket) {
+        return Object.keys(bucket || {})
+            .filter((k) => k !== "all")
+            .map((k) => String(k).toLowerCase())
+            .sort();
+    }
+
     function headlineUniques(ix) {
         const u = ix.unique_by_role_event || {};
-        if (ix.type === "merge") {
+        const hl = ix.headline_labels || {};
+        if (hl.primary_label && hl.secondary_label) {
             return {
-                primaryLabel: "Joining (co-present)",
+                primaryLabel: hl.primary_label,
+                primary: ix.type === "merge"
+                    ? (u.joining_with_full_half_copresence || {}).all ?? "—"
+                    : (u.crossing_with_copresence || {}).all ?? "—",
+                secondaryLabel: hl.secondary_label,
+                secondary: ix.type === "merge"
+                    ? (u.through_full_half_with_joining_copresence || {}).all ?? "—"
+                    : (u.crossed_with_copresence || {}).all ?? "—",
+            };
+        }
+        if (ix.type === "merge") {
+            const joining = eventsFromBucket(u.joining_with_full_half_copresence);
+            const through = eventsFromBucket(u.through_full_half_with_joining_copresence);
+            return {
+                primaryLabel: `${formatEventList(joining)} Joining (co-present)`,
                 primary: (u.joining_with_full_half_copresence || {}).all ?? "—",
-                secondaryLabel: "Through full+half",
+                secondaryLabel: `${formatEventList(through)} Through (co-present)`,
                 secondary: (u.through_full_half_with_joining_copresence || {}).all ?? "—",
             };
         }
+        const crossing = eventsFromBucket(u.crossing_with_copresence);
+        const crossed = eventsFromBucket(u.crossed_with_copresence);
         return {
-            primaryLabel: "Crossing (co-present)",
+            primaryLabel: `${formatEventList(crossing)} Crossing (co-present)`,
             primary: (u.crossing_with_copresence || {}).all ?? "—",
-            secondaryLabel: "Crossed (co-present)",
+            secondaryLabel: `${formatEventList(crossed)} Crossed (co-present)`,
             secondary: (u.crossed_with_copresence || {}).all ?? "—",
         };
     }
@@ -257,13 +303,14 @@
                 </div>
             </div>
             <div class="card-body">
+                ${ix.description ? `<p class="text-secondary mb-3" style="max-width:48rem;">${escapeHtml(ix.description)}</p>` : ""}
                 <div class="row g-3 mb-3">
                     <div class="col-sm-4">
-                        <div class="text-secondary">${h.primaryLabel}</div>
+                        <div class="text-secondary">${escapeHtml(h.primaryLabel)}</div>
                         <div class="h2 mb-0">${h.primary}</div>
                     </div>
                     <div class="col-sm-4">
-                        <div class="text-secondary">${h.secondaryLabel}</div>
+                        <div class="text-secondary">${escapeHtml(h.secondaryLabel)}</div>
                         <div class="h2 mb-0">${h.secondary}</div>
                     </div>
                     <div class="col-sm-4">

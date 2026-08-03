@@ -15,6 +15,8 @@
         pinMarker: null,
         segLayer: null,
         highlightLayer: null,
+        endpointLayer: null,
+        annotLayer: null,
         nearby: [],
         mapFeatures: [],
         nearbySortCol: 'seg_id',
@@ -23,6 +25,8 @@
         editingIxId: null,
         unloadBound: false,
         nearbyRequestSeq: 0,
+        // 'edit' = label all nearby; 'view' = Stream Interaction segs only (§2)
+        annotMode: 'edit',
     };
 
     function getConfigId() {
@@ -91,6 +95,8 @@
         }).addTo(state.map);
         state.segLayer = L.layerGroup().addTo(state.map);
         state.highlightLayer = L.layerGroup().addTo(state.map);
+        state.endpointLayer = L.layerGroup().addTo(state.map);
+        state.annotLayer = L.layerGroup().addTo(state.map);
         // Clicks on polylines must reach the map (interactive:false on lines below)
         state.map.on('click', onMapClick);
         return state.map;
@@ -113,6 +119,31 @@
             btn.style.background = '';
         }
         if (state.map) state.map.getContainer().style.cursor = '';
+    }
+
+    function junctionPinIcon() {
+        return L.divIcon({
+            className: 'junctions-pin-icon',
+            html: '<span class="junctions-pin-dot" aria-hidden="true"></span>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+        });
+    }
+
+    function bindPinDragHandlers(marker) {
+        if (!marker || marker._junctionsDragBound) return;
+        marker._junctionsDragBound = true;
+        marker.on('dragstart', function () {
+            stopPlaceMode();
+            if (state.map) state.map.getContainer().style.cursor = 'grabbing';
+        });
+        marker.on('dragend', function (e) {
+            if (state.map) state.map.getContainer().style.cursor = '';
+            const ll = e.target.getLatLng();
+            setPin(ll.lat, ll.lng, true);
+            discoverNearby();
+            status('Pin moved — finding nearby segments…');
+        });
     }
 
     function ensureDraftJunction() {
@@ -167,20 +198,31 @@
         if (lonEl) lonEl.value = String(j.lon);
         const map = ensureMap();
         if (!map) return;
+        // Replace non-draggable legacy circleMarker if present
+        if (state.pinMarker && !state.pinMarker.dragging) {
+            map.removeLayer(state.pinMarker);
+            state.pinMarker = null;
+        }
         if (state.pinMarker) {
             state.pinMarker.setLatLng([j.lat, j.lon]);
+            bindPinDragHandlers(state.pinMarker);
+            if (state.pinMarker.dragging && !state.pinMarker.dragging.enabled()) {
+                state.pinMarker.dragging.enable();
+            }
         } else {
-            state.pinMarker = L.circleMarker([j.lat, j.lon], {
-                radius: 10,
-                color: '#111',
-                weight: 2,
-                fillColor: '#111',
-                fillOpacity: 0.45,
-                interactive: false,
+            state.pinMarker = L.marker([j.lat, j.lon], {
+                icon: junctionPinIcon(),
+                draggable: true,
+                autoPan: true,
+                zIndexOffset: 1200,
+                title: 'Drag to reposition junction',
             }).addTo(map);
+            bindPinDragHandlers(state.pinMarker);
         }
         map.panTo([j.lat, j.lon]);
         if (fromUser) markDirty();
+        // Refresh in-proximity endpoint styling immediately (before discover returns)
+        renderEndpointMarkers();
     }
 
     function fitMapToNearby() {
@@ -225,15 +267,16 @@
             const segId = (f.properties && f.properties.seg_id) || '';
             const isHi = !!hi[segId];
             const line = L.polyline(latlngs, {
-                color: isHi ? '#c0392b' : '#8B7355',
-                weight: isHi ? 5 : 3,
-                opacity: isHi ? 0.95 : 0.7,
+                color: isHi ? '#2f9e44' : '#b8a990',
+                weight: isHi ? 5 : 2,
+                opacity: isHi ? 0.85 : 0.45,
                 interactive: false,
             });
             line.bindTooltip(segId + (f.properties.seg_label ? ' — ' + f.properties.seg_label : ''));
             (isHi ? state.highlightLayer : state.segLayer).addLayer(line);
             latlngs.forEach(function (ll) { allBounds.push(ll); });
         });
+        renderEndpointMarkers();
         if (options.fit === 'nearby' && (highlightIds || []).length) {
             fitMapToNearby();
         } else if (options.fit === 'all' && allBounds.length) {
@@ -242,6 +285,60 @@
                 map.fitBounds(allBounds, { padding: [24, 24], maxZoom: 15 });
             } catch (e) { /* ignore */ }
         }
+    }
+
+    function endpointKey(lat, lng) {
+        return Number(lat).toFixed(5) + ',' + Number(lng).toFixed(5);
+    }
+
+    function renderEndpointMarkers() {
+        if (!state.endpointLayer) return;
+        state.endpointLayer.clearLayers();
+        const pin = state.pinMarker ? state.pinMarker.getLatLng() : null;
+        const byKey = {};
+
+        (state.mapFeatures || []).forEach(function (f) {
+            const coords = (f.geometry && f.geometry.coordinates) || [];
+            if (coords.length < 2) return;
+            const segId = (f.properties && f.properties.seg_id) || '';
+            const ends = [coords[0], coords[coords.length - 1]];
+            ends.forEach(function (c) {
+                if (!c || c.length < 2) return;
+                const lat = c[1];
+                const lng = c[0];
+                if (!isFinite(lat) || !isFinite(lng)) return;
+                const key = endpointKey(lat, lng);
+                if (!byKey[key]) {
+                    byKey[key] = { lat: lat, lng: lng, segIds: [] };
+                }
+                if (segId && byKey[key].segIds.indexOf(segId) < 0) {
+                    byKey[key].segIds.push(segId);
+                }
+            });
+        });
+
+        Object.keys(byKey).forEach(function (key) {
+            const ep = byKey[key];
+            let inProx = false;
+            if (pin) {
+                inProx = haversineM([pin.lat, pin.lng], [ep.lat, ep.lng]) <= state.proximityM;
+            }
+            const marker = L.circleMarker([ep.lat, ep.lng], {
+                radius: inProx ? 7 : 4,
+                color: inProx ? '#1b6b2a' : '#555',
+                weight: inProx ? 2 : 1,
+                fillColor: inProx ? '#2f9e44' : '#777',
+                fillOpacity: inProx ? 0.95 : 0.75,
+                opacity: inProx ? 1 : 0.7,
+                interactive: true,
+                bubblingMouseEvents: true,
+            });
+            const tip =
+                (ep.segIds.length ? ep.segIds.join(', ') : 'Segment endpoint') +
+                (inProx ? (' · within ' + state.proximityM + ' m of pin') : '');
+            marker.bindTooltip(tip, { direction: 'top', sticky: true, opacity: 0.9 });
+            state.endpointLayer.addLayer(marker);
+        });
     }
 
     function loadMapSegments() {
@@ -256,10 +353,376 @@
                 renderSegLines(nearbyIds, {
                     fit: nearbyIds.length ? 'nearby' : 'all',
                 });
+                renderAnnotations();
             })
             .catch(function () {
                 state.mapFeatures = [];
             });
+    }
+
+    function haversineM(a, b) {
+        const R = 6371000;
+        const lat1 = (Array.isArray(a) ? a[0] : a.lat) * Math.PI / 180;
+        const lat2 = (Array.isArray(b) ? b[0] : b.lat) * Math.PI / 180;
+        const dLat = lat2 - lat1;
+        const dLon = ((Array.isArray(b) ? b[1] : b.lng) - (Array.isArray(a) ? a[1] : a.lng)) *
+            Math.PI / 180;
+        const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+    }
+
+    function bearingDeg(a, b) {
+        const lat1 = (Array.isArray(a) ? a[0] : a.lat) * Math.PI / 180;
+        const lat2 = (Array.isArray(b) ? b[0] : b.lat) * Math.PI / 180;
+        const dLon = ((Array.isArray(b) ? b[1] : b.lng) - (Array.isArray(a) ? a[1] : a.lng)) *
+            Math.PI / 180;
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function destinationLatLng(lat, lng, bearing, distM) {
+        const R = 6371000;
+        const δ = distM / R;
+        const θ = bearing * Math.PI / 180;
+        const φ1 = lat * Math.PI / 180;
+        const λ1 = lng * Math.PI / 180;
+        const φ2 = Math.asin(
+            Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ)
+        );
+        const λ2 = λ1 + Math.atan2(
+            Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
+            Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+        );
+        return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+
+    function segLatLngs(segId) {
+        const feature = (state.mapFeatures || []).find(function (f) {
+            return f && f.properties && f.properties.seg_id === segId;
+        });
+        if (!feature || !feature.geometry) return [];
+        const coords = feature.geometry.coordinates || [];
+        return coords.map(function (c) { return [c[1], c[0]]; });
+    }
+
+    function pointAlongPath(latlngs, distM) {
+        if (!latlngs || latlngs.length < 2) return null;
+        let left = Math.max(0, distM);
+        for (let i = 0; i < latlngs.length - 1; i++) {
+            const d = haversineM(latlngs[i], latlngs[i + 1]);
+            if (d >= left) {
+                const t = d === 0 ? 0 : left / d;
+                const lat = latlngs[i][0] + t * (latlngs[i + 1][0] - latlngs[i][0]);
+                const lng = latlngs[i][1] + t * (latlngs[i + 1][1] - latlngs[i][1]);
+                return {
+                    lat: lat,
+                    lng: lng,
+                    bearing: bearingDeg(latlngs[i], latlngs[i + 1]),
+                };
+            }
+            left -= d;
+        }
+        const n = latlngs.length;
+        return {
+            lat: latlngs[n - 1][0],
+            lng: latlngs[n - 1][1],
+            bearing: bearingDeg(latlngs[n - 2], latlngs[n - 1]),
+        };
+    }
+
+    function pathFromPin(seg) {
+        const coords = segLatLngs(seg.seg_id);
+        if (coords.length < 2) {
+            // Fallback: straight line from pin-side endpoint away along start→end
+            if (seg.start_lat == null || seg.end_lat == null) return [];
+            const start = [seg.start_lat, seg.start_lon];
+            const end = [seg.end_lat, seg.end_lon];
+            if (seg.near_endpoint === 'end') return [end, start];
+            return [start, end];
+        }
+        if (seg.near_endpoint === 'end') return coords.slice().reverse();
+        return coords.slice();
+    }
+
+    function corridorKey(seg) {
+        const a = Number(seg.start_lat).toFixed(5) + ',' + Number(seg.start_lon).toFixed(5);
+        const b = Number(seg.end_lat).toFixed(5) + ',' + Number(seg.end_lon).toFixed(5);
+        return a < b ? a + '|' + b : b + '|' + a;
+    }
+
+    function annotEventText(events) {
+        return (events || []).map(function (e) {
+            return String(e).toLowerCase();
+        }).filter(Boolean).join(', ');
+    }
+
+    function annotLabelText(seg) {
+        const ev = annotEventText(seg.events);
+        return ev ? (seg.seg_id + ': ' + ev) : String(seg.seg_id || '');
+    }
+
+    function interactionSegIds(j) {
+        const ids = {};
+        ((j && j.interactions) || []).forEach(function (ix) {
+            if (!ix) return;
+            if (ix.from_seg_id) ids[ix.from_seg_id] = true;
+            if (ix.conflicts_with_seg_id) ids[ix.conflicts_with_seg_id] = true;
+            (ix.to_seg_ids || []).forEach(function (sid) {
+                if (sid) ids[sid] = true;
+            });
+        });
+        return ids;
+    }
+
+    function segmentsForAnnotations() {
+        const rows = state.nearby || [];
+        if (state.annotMode !== 'view') return rows;
+        const want = interactionSegIds(selectedJunction());
+        return rows.filter(function (s) { return want[s.seg_id]; });
+    }
+
+    function approachPointForSeg(seg, distM) {
+        const path = pathFromPin(seg);
+        if (!path.length) return null;
+        return pointAlongPath(path, distM == null ? 20 : distM);
+    }
+
+    function quadraticCurve(a, control, c, steps) {
+        const n = steps || 16;
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+            const t = i / n;
+            const u = 1 - t;
+            const lat = u * u * a[0] + 2 * u * t * control[0] + t * t * c[0];
+            const lng = u * u * a[1] + 2 * u * t * control[1] + t * t * c[1];
+            pts.push([lat, lng]);
+        }
+        return pts;
+    }
+
+    function addConnectorCurve(fromLL, viaLL, toLL) {
+        if (!state.annotLayer || !fromLL || !viaLL || !toLL) return;
+        const pts = quadraticCurve(
+            [fromLL.lat, fromLL.lng],
+            [viaLL.lat, viaLL.lng],
+            [toLL.lat, toLL.lng],
+            18
+        );
+        L.polyline(pts, {
+            color: '#c0392b',
+            weight: 3,
+            opacity: 0.9,
+            dashArray: '6 5',
+            interactive: false,
+            lineCap: 'round',
+            lineJoin: 'round',
+        }).addTo(state.annotLayer);
+    }
+
+    // Short connector stubs near the pin (labels sit farther out at ANNOT_PLACE_M)
+    const CONNECTOR_APPROACH_M = 48;
+
+    function renderConnectors() {
+        const j = selectedJunction();
+        if (!j || !state.annotLayer) return;
+        const byId = nearbyById();
+        const pin = (j.lat != null && j.lon != null)
+            ? { lat: Number(j.lat), lng: Number(j.lon) }
+            : null;
+        if (!pin || !isFinite(pin.lat) || !isFinite(pin.lng)) return;
+
+        (j.interactions || []).forEach(function (ix) {
+            if (!ix) return;
+            const fromSeg = byId[ix.from_seg_id];
+            // Keep connectors short near the pin so they don't read as travel arrows
+            const fromPt = fromSeg ? approachPointForSeg(fromSeg, CONNECTOR_APPROACH_M) : null;
+            const toIds = ix.to_seg_ids || [];
+            toIds.forEach(function (tid) {
+                const toSeg = byId[tid];
+                const toPt = toSeg ? approachPointForSeg(toSeg, CONNECTOR_APPROACH_M) : null;
+                if (fromPt && toPt) addConnectorCurve(fromPt, pin, toPt);
+            });
+            if (ix.type === 'cross' && ix.conflicts_with_seg_id) {
+                const cSeg = byId[ix.conflicts_with_seg_id];
+                const cPt = cSeg ? approachPointForSeg(cSeg, CONNECTOR_APPROACH_M) : null;
+                if (cPt) {
+                    // Reflect across pin so the conflict stream reads as a through-crossing
+                    const far = {
+                        lat: pin.lat - (cPt.lat - pin.lat),
+                        lng: pin.lng - (cPt.lng - pin.lng),
+                    };
+                    addConnectorCurve(cPt, pin, far);
+                }
+            }
+        });
+    }
+
+    // Distance along corridor from pin-side endpoint; lane offset from path centerline
+    const ANNOT_PLACE_M = 100;
+    const ANNOT_LANE_M = 20;
+
+    function directedArrowSlice(seg) {
+        /**
+         * Place annotation on real corridor geometry (pathFromPin + pointAlongPath).
+         * Travel arrows use pin→mid radial bearing so in/out always read toward/away
+         * from the pin even when the corridor curves (local tangent can be ~perp).
+         * Fallback: straight pin → far-endpoint ray when polyline is missing.
+         */
+        const j = selectedJunction();
+        if (!j || j.lat == null || j.lon == null) return null;
+        const inbound = flowDirection(seg) === 'in';
+        const pinLL = [Number(j.lat), Number(j.lon)];
+
+        let mid = null;
+
+        const path = pathFromPin(seg);
+        const along = path.length >= 2 ? pointAlongPath(path, ANNOT_PLACE_M) : null;
+        if (along && isFinite(along.lat) && isFinite(along.lng)) {
+            mid = [along.lat, along.lng];
+        } else {
+            if (seg.start_lat == null || seg.end_lat == null) return null;
+            const far = inbound
+                ? [Number(seg.start_lat), Number(seg.start_lon)]
+                : [Number(seg.end_lat), Number(seg.end_lon)];
+            const rayBearing = bearingDeg(pinLL, far);
+            if (!isFinite(rayBearing)) return null;
+            mid = destinationLatLng(pinLL[0], pinLL[1], rayBearing, ANNOT_PLACE_M);
+        }
+
+        // Corridor axis = pin → label (radial), not local path tangent
+        const outwardBearing = bearingDeg(pinLL, mid);
+        if (!isFinite(outwardBearing)) return null;
+
+        const tipBearing = inbound
+            ? (outwardBearing + 180) % 360
+            : outwardBearing;
+
+        return {
+            tipBearing: tipBearing,
+            outwardBearing: outwardBearing,
+            mid: mid,
+            inbound: inbound,
+        };
+    }
+
+    function laneAnchor(slice, side) {
+        if (!slice) return null;
+        // Perp to local path tangent (not pin→far ray)
+        const axis = slice.outwardBearing;
+        const perp = (axis + (side > 0 ? 90 : -90) + 360) % 360;
+        const placed = destinationLatLng(slice.mid[0], slice.mid[1], perp, ANNOT_LANE_M);
+        return {
+            latlng: L.latLng(placed[0], placed[1]),
+            bearing: slice.tipBearing,
+        };
+    }
+
+    function normalizeAngle180(deg) {
+        return ((Number(deg) + 180) % 360 + 360) % 360 - 180;
+    }
+
+    function flowAnnotIcon(linesHtml, travelBearing) {
+        // Geographic bearing: 0=north. SVG arrow points east at rotate(0),
+        // so CSS rotation is geographic - 90°.
+        const bearing = ((Number(travelBearing) % 360) + 360) % 360;
+        const cssRot = bearing - 90;
+        // Flip text only when the wrap rotation itself would invert letters
+        // (|cssRot| > 90). Do NOT key off geographic bearing — that double-
+        // flips SE-ish labels that are already upright after cssRot.
+        const flipText = Math.abs(normalizeAngle180(cssRot)) > 90;
+        const rowDir = flipText ? 'flex-direction:row-reverse;' : '';
+        const textFlip = flipText ? 'transform:rotate(180deg);' : '';
+        const svg =
+            '<svg class="junctions-annot-svg" viewBox="0 0 20 10" width="18" height="9" aria-hidden="true">' +
+            '<path d="M0 5h14M14 5l-3.2-3.2M14 5l-3.2 3.2" fill="none" stroke="#a0522d" ' +
+            'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+        // Zero-size icon + translate(-50%,-50%) so the visual center (arrow+label)
+        // sits on the latlng regardless of text length / rotation.
+        return L.divIcon({
+            className: 'junctions-annot',
+            html:
+                '<div class="junctions-annot-wrap" style="transform:translate(-50%,-50%) rotate(' +
+                cssRot.toFixed(1) + 'deg)">' +
+                '<div class="junctions-annot-row" style="' + rowDir + '">' + svg +
+                '<div class="junctions-annot-text" style="' + textFlip + '">' +
+                linesHtml + '</div></div></div>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+        });
+    }
+
+    function flowDirection(seg) {
+        // end-at-pin → arriving; start-at-pin → leaving
+        return seg.near_endpoint === 'end' ? 'in' : 'out';
+    }
+
+    function flowGroupKey(seg) {
+        return corridorKey(seg) + '|' + flowDirection(seg);
+    }
+
+    function sortSegsById(rows) {
+        return rows.slice().sort(function (a, b) {
+            const ka = segIdSortKey(a.seg_id);
+            const kb = segIdSortKey(b.seg_id);
+            for (let i = 0; i < 3; i++) {
+                if (ka[i] < kb[i]) return -1;
+                if (ka[i] > kb[i]) return 1;
+            }
+            return 0;
+        });
+    }
+
+    function renderStreamLabels() {
+        const map = ensureMap();
+        if (!map || !state.annotLayer) return;
+        const segs = segmentsForAnnotations();
+        if (!segs.length) return;
+
+        // Mock style: one arrow+label per (corridor × travel direction).
+        const flowGroups = {};
+        segs.forEach(function (seg) {
+            if (!seg || !seg.seg_id) return;
+            const key = flowGroupKey(seg);
+            if (!flowGroups[key]) flowGroups[key] = [];
+            flowGroups[key].push(seg);
+        });
+
+        Object.keys(flowGroups).forEach(function (key) {
+            const members = sortSegsById(flowGroups[key]);
+            const rep = members[0];
+            const slice = directedArrowSlice(rep);
+            if (!slice) return;
+
+            const side = slice.inbound ? -1 : 1;
+            const anchor = laneAnchor(slice, side);
+            if (!anchor) return;
+
+            const linesHtml = members.map(function (s) {
+                return '<div class="junctions-annot-line">' +
+                    escapeHtml(annotLabelText(s)) + '</div>';
+            }).join('');
+
+            L.marker(anchor.latlng, {
+                icon: flowAnnotIcon(linesHtml, anchor.bearing),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 900,
+            }).addTo(state.annotLayer);
+        });
+    }
+
+    function renderAnnotations() {
+        ensureMap();
+        if (!state.annotLayer) return;
+        state.annotLayer.clearLayers();
+        if (!(state.nearby || []).length) return;
+        // Connectors under labels so From→To arcs sit near the pin without covering text
+        renderConnectors();
+        renderStreamLabels();
     }
 
     function classifyNearbyRow(seg) {
@@ -364,6 +827,7 @@
             const legend = document.getElementById('junctions-segments-legend');
             if (legend) legend.textContent = '';
             renderSegLines([]);
+            renderAnnotations();
             return;
         }
         sortNearbyRows();
@@ -396,6 +860,136 @@
             legend.textContent = state.nearby.length + ' within ' + state.proximityM + ' m';
         }
         renderSegLines(state.nearby.map(function (s) { return s.seg_id; }), { fit: 'nearby' });
+        renderAnnotations();
+    }
+
+    function nearbyById() {
+        const byId = {};
+        // Prefer live discovery; fall back to selected junction cache
+        const rows = (state.nearby && state.nearby.length)
+            ? state.nearby
+            : ((selectedJunction() || {}).nearby_segments || []);
+        rows.forEach(function (s) { byId[s.seg_id] = s; });
+        return byId;
+    }
+
+    function formatEventList(events) {
+        const order = ['full', 'half', '10k', 'elite', 'open'];
+        const labels = {
+            full: 'Full',
+            half: 'Half',
+            '10k': '10k',
+            elite: 'Elite',
+            open: 'Open',
+        };
+        const lower = {};
+        (events || []).forEach(function (e) {
+            if (e) lower[String(e).toLowerCase()] = true;
+        });
+        const seen = [];
+        order.forEach(function (k) {
+            if (lower[k]) seen.push(labels[k]);
+        });
+        Object.keys(lower).sort().forEach(function (k) {
+            if (order.indexOf(k) < 0) {
+                seen.push(k.charAt(0).toUpperCase() + k.slice(1));
+            }
+        });
+        return seen.length ? seen.join('+') : 'runners';
+    }
+
+    function namedSeg(segId, byId) {
+        const row = byId[segId] || {};
+        const label = String(row.seg_label || row.name || '').trim();
+        if (!label || label === segId) return '(' + segId + ')';
+        return label + ' (' + segId + ')';
+    }
+
+    function segEvents(segId, byId) {
+        const row = byId[segId] || {};
+        if (row.events && row.events.length) {
+            return row.events.map(function (e) { return String(e).toLowerCase(); });
+        }
+        const ek = row.event_kms || {};
+        return Object.keys(ek).map(function (e) { return String(e).toLowerCase(); });
+    }
+
+    function interactionDescription(ix) {
+        const byId = nearbyById();
+        const fromId = String(ix.from_seg_id || '').trim();
+        const toIds = (ix.to_seg_ids || []).map(function (s) {
+            return String(s || '').trim();
+        }).filter(Boolean);
+        if (!fromId || !toIds.length) return '';
+
+        const scoped = {};
+        (ix.events || []).forEach(function (e) {
+            if (e) scoped[String(e).toLowerCase()] = true;
+        });
+        const hasScope = Object.keys(scoped).length > 0;
+
+        if (ix.type === 'cross') {
+            const conflicts = String(ix.conflicts_with_seg_id || '').trim();
+            const fromEv = segEvents(fromId, byId);
+            const toEv = segEvents(toIds[0], byId);
+            let crossing = fromEv.filter(function (e) { return toEv.indexOf(e) >= 0; });
+            if (!crossing.length) crossing = fromEv.slice();
+            let crossed = segEvents(conflicts, byId);
+            if (hasScope) {
+                const c1 = crossing.filter(function (e) { return scoped[e]; });
+                const c2 = crossed.filter(function (e) { return scoped[e]; });
+                if (c1.length) crossing = c1;
+                if (c2.length) crossed = c2;
+            }
+            const side = String(ix.side || '').toLowerCase();
+            const mid = (side === 'left' || side === 'right') ? (' ' + side + ' to ') : ' to ';
+            return (
+                formatEventList(crossing) + ' runners from ' + namedSeg(fromId, byId) +
+                ' crossing ' + formatEventList(crossed) + ' runners from ' +
+                (conflicts ? namedSeg(conflicts, byId) : 'the conflict stream') +
+                mid + namedSeg(toIds[0], byId)
+            );
+        }
+
+        // merge
+        let joining = segEvents(fromId, byId);
+        let through = [];
+        toIds.forEach(function (tid) {
+            segEvents(tid, byId).forEach(function (e) {
+                if ((e === 'full' || e === 'half') && through.indexOf(e) < 0) through.push(e);
+            });
+        });
+        if (hasScope) {
+            const j1 = joining.filter(function (e) { return scoped[e]; });
+            const t1 = through.filter(function (e) { return scoped[e]; });
+            if (j1.length) joining = j1;
+            if (t1.length) through = t1;
+        }
+        const toPart = toIds.map(function (tid) { return namedSeg(tid, byId); }).join(', ');
+        const throughBit = through.length
+            ? (formatEventList(through) + ' traffic')
+            : 'through traffic';
+        return (
+            formatEventList(joining) + ' runners from ' + namedSeg(fromId, byId) +
+            ' merging into ' + throughBit + ' on ' + toPart
+        );
+    }
+
+    function displayDescription(ix) {
+        const authored = String(ix.description || '').trim();
+        if (authored) return authored;
+        return interactionDescription(ix);
+    }
+
+    function applyAutoDescriptionIfUnlocked(ix, typedBefore, autoBefore, descEl) {
+        const suggested = interactionDescription(ix);
+        if (!typedBefore || typedBefore === autoBefore) {
+            ix.description = suggested;
+            ix._lastAutoDescription = suggested;
+            if (descEl) descEl.value = suggested;
+            return suggested;
+        }
+        return String(ix.description || '').trim();
     }
 
     function deriveEvents(fromId, toIds) {
@@ -532,6 +1126,10 @@
         ix.to_seg_ids = toSegs;
         ix.conflicts_with_seg_id = conflicts;
         ix.events = events;
+        const descEl = tr.querySelector('[data-f=description]');
+        if (descEl) {
+            ix.description = String(descEl.value || '').trim();
+        }
         j.nearby_seg_ids = state.nearby.map(function (s) { return s.seg_id; });
         j.nearby_segments = state.nearby.slice();
     }
@@ -576,12 +1174,30 @@
     }
 
     function wireInteractionRow(tr, ix) {
-        tr.querySelectorAll('select').forEach(function (el) {
-            el.addEventListener('change', function () {
+        tr.querySelectorAll('select, textarea, input').forEach(function (el) {
+            const evtName = el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ? 'input' : 'change';
+            el.addEventListener(evtName, function () {
+                const field = el.getAttribute('data-f');
+                const descEl = tr.querySelector('[data-f=description]');
+                const typedBefore = descEl
+                    ? String(descEl.value || '').trim()
+                    : String(ix.description || '').trim();
+                const autoBefore = ix._lastAutoDescription || interactionDescription(ix);
                 syncEditingInteractionFromDom();
                 markDirty();
-                if (el.getAttribute('data-f') === 'type') {
+                if (field === 'description') {
+                    return;
+                }
+                const j = selectedJunction();
+                const live = j && (j.interactions || []).find(function (x) {
+                    return x.id === ix.id;
+                });
+                if (!live) return;
+                applyAutoDescriptionIfUnlocked(live, typedBefore, autoBefore, descEl);
+                if (field === 'type') {
                     renderInteractions();
+                } else if (field === 'from' || field === 'to' || field === 'conflicts') {
+                    renderAnnotations();
                 }
             });
         });
@@ -617,8 +1233,9 @@
         if (!j) return;
         if (!(j.interactions || []).length) {
             tbody.innerHTML =
-                '<tr><td colspan="7" class="text-secondary">' +
+                '<tr><td colspan="8" class="text-secondary">' +
                 'No interactions yet. Add a cross or merge.</td></tr>';
+            renderAnnotations();
             return;
         }
         (j.interactions || []).forEach(function (ix, idx) {
@@ -629,6 +1246,11 @@
             const editing = state.editingIxId === id;
             const isMerge = ix.type === 'merge';
             const toIds = ix.to_seg_ids || [];
+            if (!String(ix.description || '').trim()) {
+                ix.description = interactionDescription(ix);
+                ix._lastAutoDescription = ix.description;
+            }
+            const desc = displayDescription(ix);
 
             if (!editing) {
                 tr.innerHTML =
@@ -637,6 +1259,8 @@
                     '<td>' + escapeHtml(displayText(ix.from_seg_id)) + '</td>' +
                     '<td>' + escapeHtml(displayText(toIds)) + '</td>' +
                     '<td>' + escapeHtml(isMerge ? '—' : displayText(ix.conflicts_with_seg_id)) + '</td>' +
+                    '<td class="junctions-ix-desc-col" title="' + escapeHtml(desc) + '">' +
+                    escapeHtml(desc || '—') + '</td>' +
                     '<td>' + escapeHtml(eventsDisplayList(ix.events || [])) + '</td>';
                 tbody.appendChild(tr);
                 wireInteractionRow(tr, ix);
@@ -664,11 +1288,16 @@
                 '<td>' + segSelectHtml('from', ix.from_seg_id || '', true) + '</td>' +
                 '<td>' + toCell + '</td>' +
                 '<td>' + conflictsCell + '</td>' +
+                '<td class="junctions-ix-desc-col">' +
+                '<textarea data-f="description" class="config-package-input junctions-ix-desc-input" ' +
+                'rows="3" placeholder="Plain-language description for race directors">' +
+                escapeHtml(desc) + '</textarea></td>' +
                 '<td>' + multiSelectHtml('events', packageEventIds(), ix.events || []) + '</td>';
 
             tbody.appendChild(tr);
             wireInteractionRow(tr, ix);
         });
+        renderAnnotations();
     }
 
     function renderList() {
@@ -846,6 +1475,8 @@
                 if (res.d.radius_m != null) state.proximityM = res.d.radius_m;
                 const proxLabel = document.getElementById('junctions-proximity-label');
                 if (proxLabel) proxLabel.textContent = String(state.proximityM);
+                const proxHint = document.getElementById('junctions-prox-hint');
+                if (proxHint) proxHint.textContent = String(state.proximityM);
                 target.nearby_seg_ids = state.nearby.map(function (s) { return s.seg_id; });
                 target.nearby_segments = state.nearby.slice();
                 renderNearby();
@@ -927,6 +1558,8 @@
                 if (data.proximity_m != null) state.proximityM = data.proximity_m;
                 const proxLabel = document.getElementById('junctions-proximity-label');
                 if (proxLabel) proxLabel.textContent = String(state.proximityM);
+                const proxHint = document.getElementById('junctions-prox-hint');
+                if (proxHint) proxHint.textContent = String(state.proximityM);
                 state.dirty = false;
                 renderList();
                 if (state.doc.junctions.length) {
@@ -989,7 +1622,12 @@
                     to_seg_ids: [(state.nearby[1] && state.nearby[1].seg_id) || ''],
                     conflicts_with_seg_id: (state.nearby[2] && state.nearby[2].seg_id) || '',
                     events: [],
+                    description: '',
                 });
+                const created = j.interactions[j.interactions.length - 1];
+                created.events = deriveEvents(created.from_seg_id, created.to_seg_ids);
+                created.description = interactionDescription(created);
+                created._lastAutoDescription = created.description;
                 state.editingIxId = newId;
                 renderInteractions();
                 markDirty();

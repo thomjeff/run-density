@@ -15,8 +15,26 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from app.core.junction_flow.descriptions import (
+    format_interaction_description,
+    role_headline_labels,
+)
+
 NODE_DWELL_SEC = 30.0
 MERGE_PARTNER_EVENTS = ("full", "half")
+
+
+def _enrich_interaction_result(
+    result: "InteractionResult",
+    ix: Dict[str, Any],
+    nearby_by_id: Dict[str, Dict[str, Any]],
+) -> "InteractionResult":
+    authored = str(ix.get("description") or "").strip()
+    result.description = authored or format_interaction_description(ix, nearby_by_id)
+    result.headline_labels = role_headline_labels(
+        ix, nearby_by_id, result.unique_by_role_event
+    )
+    return result
 
 
 @dataclass
@@ -45,6 +63,8 @@ class InteractionResult:
     field_crosstab: List[Dict[str, Any]]
     minute_rows: List[Dict[str, Any]]
     notes: List[str] = field(default_factory=list)
+    description: str = ""
+    headline_labels: Dict[str, Any] = field(default_factory=dict)
 
 
 def _hhmm(seconds: float) -> str:
@@ -514,20 +534,24 @@ def analyze_interaction(
             )
 
         if not pri_parts or not sec_parts:
-            return InteractionResult(
-                interaction_id=str(ix.get("id") or ""),
-                type="cross",
-                side=str(ix.get("side") or ""),
-                label=f"{from_seg}→{to_seg} vs {conflicts}",
-                events=events,
-                window_start_hhmm="—",
-                window_end_hhmm="—",
-                window_minutes=0.0,
-                unique_by_role_event={},
-                peak_concurrent={},
-                field_crosstab=[],
-                minute_rows=[],
-                notes=notes,
+            return _enrich_interaction_result(
+                InteractionResult(
+                    interaction_id=str(ix.get("id") or ""),
+                    type="cross",
+                    side=str(ix.get("side") or ""),
+                    label=f"{from_seg}→{to_seg} vs {conflicts}",
+                    events=events,
+                    window_start_hhmm="—",
+                    window_end_hhmm="—",
+                    window_minutes=0.0,
+                    unique_by_role_event={},
+                    peak_concurrent={},
+                    field_crosstab=[],
+                    minute_rows=[],
+                    notes=notes,
+                ),
+                ix,
+                nearby_by_id,
             )
 
         primary = _combine_presences(pri_parts)
@@ -586,7 +610,7 @@ def analyze_interaction(
         }
         result.field_crosstab = _crosstab(primary, secondary, w0, w1)
         result.label = f"{from_seg}→{to_seg} vs {conflicts}"
-        return result
+        return _enrich_interaction_result(result, ix, nearby_by_id)
 
     # merge
     from_seg = str(ix.get("from_seg_id") or "")
@@ -630,25 +654,29 @@ def analyze_interaction(
 
     partner_parts = _filter_presence_events(through_parts, merge_partner_events)
     if not join_parts or not partner_parts:
-        return InteractionResult(
-            interaction_id=str(ix.get("id") or ""),
-            type="merge",
-            side=str(ix.get("side") or ""),
-            label=f"{from_seg}→{','.join(to_segs)}",
-            events=events,
-            window_start_hhmm="—",
-            window_end_hhmm="—",
-            window_minutes=0.0,
-            unique_by_role_event={},
-            peak_concurrent={},
-            field_crosstab=[],
-            minute_rows=[],
-            notes=notes
-            + (
-                ["No full/half through presence at To streams."]
-                if join_parts and not partner_parts
-                else []
+        return _enrich_interaction_result(
+            InteractionResult(
+                interaction_id=str(ix.get("id") or ""),
+                type="merge",
+                side=str(ix.get("side") or ""),
+                label=f"{from_seg}→{','.join(to_segs)}",
+                events=events,
+                window_start_hhmm="—",
+                window_end_hhmm="—",
+                window_minutes=0.0,
+                unique_by_role_event={},
+                peak_concurrent={},
+                field_crosstab=[],
+                minute_rows=[],
+                notes=notes
+                + (
+                    ["No full/half through presence at To streams."]
+                    if join_parts and not partner_parts
+                    else []
+                ),
             ),
+            ix,
+            nearby_by_id,
         )
 
     primary = _combine_presences(join_parts)
@@ -708,7 +736,7 @@ def analyze_interaction(
     }
     result.field_crosstab = _crosstab(primary, secondary, w0, w1)
     result.label = f"{from_seg}→{','.join(to_segs)}"
-    return result
+    return _enrich_interaction_result(result, ix, nearby_by_id)
 
 
 def prepare_runners_by_event(runners_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
@@ -743,6 +771,7 @@ def interaction_to_dict(result: InteractionResult) -> Dict[str, Any]:
         "type": result.type,
         "side": result.side,
         "label": result.label,
+        "description": getattr(result, "description", "") or "",
         "events": result.events,
         "window_start": result.window_start_hhmm,
         "window_end": result.window_end_hhmm,
@@ -751,6 +780,7 @@ def interaction_to_dict(result: InteractionResult) -> Dict[str, Any]:
         "peak_concurrent": result.peak_concurrent,
         "field_crosstab": result.field_crosstab,
         "minute_rows": result.minute_rows,
+        "headline_labels": getattr(result, "headline_labels", None) or {},
         "notes": result.notes,
     }
 
@@ -817,6 +847,7 @@ def result_to_ui_payload(day_result: Dict[str, Any]) -> Dict[str, Any]:
                     "type": ix.get("type"),
                     "side": ix.get("side"),
                     "label": ix.get("label"),
+                    "description": ix.get("description"),
                     "events": ix.get("events"),
                     "window_start": ix.get("window_start"),
                     "window_end": ix.get("window_end"),
@@ -825,6 +856,7 @@ def result_to_ui_payload(day_result: Dict[str, Any]) -> Dict[str, Any]:
                     "peak_concurrent": ix.get("peak_concurrent"),
                     "field_crosstab": ix.get("field_crosstab"),
                     "minute_rows": ix.get("minute_rows"),
+                    "headline_labels": ix.get("headline_labels") or {},
                 }
             )
         junctions.append(
