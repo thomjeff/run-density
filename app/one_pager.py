@@ -271,6 +271,8 @@ def _load_locations_results(path: Path) -> List[Dict[str, Any]]:
 
 def _load_pass_timings_report(path: Path) -> Dict[int, Dict[str, Any]]:
     """Prefer Passes.csv (keyed by pass_id); fall back to Locations.csv / legacy loc_id."""
+    from app.location_report import parse_by_event
+
     candidates = []
     if path.name.lower() == "locations.csv":
         candidates.append(path.parent / "Passes.csv")
@@ -296,8 +298,38 @@ def _load_pass_timings_report(path: Path) -> Dict[int, Dict[str, Any]]:
         df[id_col] = pd.to_numeric(df[id_col], errors="coerce")
         df = df.dropna(subset=[id_col])
         df[id_col] = df[id_col].astype(int)
-        return df.set_index(id_col).to_dict("index")
+        records = df.set_index(id_col).to_dict("index")
+        for row in records.values():
+            if "by_event" in row:
+                row["by_event"] = parse_by_event(row.get("by_event"))
+        return records
     return {}
+
+
+def _by_event_timing_lines(report_row: Dict[str, Any]) -> List[str]:
+    """Issue #828: lines for per-event first/peak/last under aggregate timings."""
+    from app.location_report import parse_by_event
+
+    by_event = parse_by_event(report_row.get("by_event"))
+    if not by_event:
+        return []
+    lines: List[str] = []
+    for event in sorted(by_event.keys(), key=lambda e: str(e).lower()):
+        w = by_event[event] or {}
+        lines.append(
+            f"{event}: First {_format_time(w.get('first_runner'))} · "
+            f"Peak {_format_time(w.get('peak_start'))}–{_format_time(w.get('peak_end'))} · "
+            f"Last {_format_time(w.get('last_runner'))}"
+        )
+    return lines
+
+
+def _by_event_timing_html(report_row: Dict[str, Any]) -> str:
+    lines = _by_event_timing_lines(report_row)
+    if not lines:
+        return ""
+    items = "".join(f"<li>{html.escape(line)}</li>" for line in lines)
+    return f"<p><strong>By event</strong></p><ul>{items}</ul>"
 
 
 def _load_locations_report(path: Path) -> Dict[int, Dict[str, Any]]:
@@ -561,6 +593,15 @@ def _render_onepager_pdf(
                     y = _draw_text_block(
                         c, f"- {line}", font_body, 12, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
                     )
+                by_lines = _by_event_timing_lines(prow)
+                if by_lines:
+                    y = _draw_text_block(
+                        c, "By event:", font_bold, 11, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
+                    )
+                    for line in by_lines:
+                        y = _draw_text_block(
+                            c, f"- {line}", font_body, 11, _MARGIN + 40, y - 2, page_w - 2 * _MARGIN
+                        )
         else:
             timings_lines = [
                 f"First: {_format_time(report_row.get('first_runner'))}",
@@ -570,6 +611,15 @@ def _render_onepager_pdf(
             ]
             for line in timings_lines:
                 y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+            by_lines = _by_event_timing_lines(report_row)
+            if by_lines:
+                y = _draw_text_block(
+                    c, "By event:", font_bold, 12, _MARGIN + 16, y - 4, page_w - 2 * _MARGIN
+                )
+                for line in by_lines:
+                    y = _draw_text_block(
+                        c, f"- {line}", font_body, 11, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
+                    )
 
     y = _draw_text_block(c, "EVENTS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     if is_proxy:
@@ -688,6 +738,7 @@ def _render_onepager_html(
                 f"<li>Last: {html.escape(_format_time(prow.get('last_runner')))}</li>"
                 "</ul>"
             )
+            blocks.append(_by_event_timing_html(prow))
         runner_timings_html = "\n".join(blocks)
     else:
         runner_timings_html = """
@@ -698,7 +749,7 @@ def _render_onepager_html(
             <li>Peak Start: """ + html.escape(_format_time(report_row.get("peak_start"))) + """</li>
             <li>Peak End: """ + html.escape(_format_time(report_row.get("peak_end"))) + """</li>
             <li>Last: """ + html.escape(_format_time(report_row.get("last_runner"))) + """</li>
-        </ul>"""
+        </ul>""" + _by_event_timing_html(report_row)
 
     events_list = ", ".join(events) if events else "NA"
 

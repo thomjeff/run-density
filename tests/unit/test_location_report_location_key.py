@@ -73,7 +73,7 @@ def test_generate_location_report_writes_passes_and_locations(tmp_path, monkeypa
     monkeypatch.setattr(
         location_report,
         "calculate_arrival_times_for_location",
-        lambda *a, **k: [],
+        lambda *a, **k: {},
     )
     monkeypatch.setattr(location_report, "load_flagged_segments", lambda **k: {})
 

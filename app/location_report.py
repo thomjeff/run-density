@@ -11,6 +11,7 @@ Epic: Issue #277
 """
 
 from __future__ import annotations
+import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
@@ -78,6 +79,137 @@ def format_time_hhmmss(seconds: float) -> str:
     secs = total_seconds % 60
     
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def compute_timing_window(arrival_times: List[float]) -> Dict[str, Optional[str]]:
+    """
+    First / peak (p25–p75) / last from arrival seconds.
+
+    Issue #828: Shared helper so aggregate and per-event windows use the
+    same percentile rules.
+    """
+    empty = {
+        "first_runner": None,
+        "peak_start": None,
+        "peak_end": None,
+        "last_runner": None,
+    }
+    if not arrival_times:
+        return empty
+    sorted_times = sorted(arrival_times)
+    first = format_time_hhmmss(sorted_times[0])
+    last = format_time_hhmmss(sorted_times[-1])
+    if len(sorted_times) > 1:
+        p25_idx = int(len(sorted_times) * 0.25)
+        p75_idx = int(len(sorted_times) * 0.75)
+        peak_start = format_time_hhmmss(sorted_times[p25_idx])
+        peak_end = format_time_hhmmss(sorted_times[p75_idx])
+    else:
+        peak_start = first
+        peak_end = last
+    return {
+        "first_runner": first,
+        "peak_start": peak_start,
+        "peak_end": peak_end,
+        "last_runner": last,
+    }
+
+
+def build_by_event_timings(
+    arrivals_by_event: Dict[str, List[float]],
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """Per-event first/peak/last windows (Issue #828)."""
+    out: Dict[str, Dict[str, Optional[str]]] = {}
+    for event, times in arrivals_by_event.items():
+        if not times:
+            continue
+        out[str(event)] = compute_timing_window(times)
+    return out
+
+
+def serialize_by_event(by_event: Any) -> str:
+    """JSON-encode by_event for CSV cells."""
+    if not by_event:
+        return ""
+    if isinstance(by_event, str):
+        return by_event
+    return json.dumps(by_event, ensure_ascii=False, sort_keys=True)
+
+
+def parse_by_event(value: Any) -> Dict[str, Dict[str, Any]]:
+    """Parse by_event from a dict or JSON CSV cell."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return {}
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items() if isinstance(v, dict)}
+    text = str(value).strip()
+    if not text or text.lower() in ("nan", "none", "null"):
+        return {}
+    try:
+        data = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, dict)}
+
+
+def _time_to_seconds_loose(value: Any) -> Optional[float]:
+    if value is None or value == "" or value == "NA":
+        return None
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return float(value)
+    text = str(value).strip()
+    parts = text.split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        secs = int(parts[2]) if len(parts) >= 3 else 0
+    except (TypeError, ValueError):
+        return None
+    return hours * 3600 + minutes * 60 + secs
+
+
+def merge_by_event_timings(
+    maps: List[Any],
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """
+    Merge per-pass by_event maps for a Location row.
+
+    For each event: earliest first/peak_start, latest peak_end/last across passes.
+    """
+    merged: Dict[str, Dict[str, Optional[str]]] = {}
+    for raw in maps:
+        for event, window in parse_by_event(raw).items():
+            cur = merged.get(event)
+            if cur is None:
+                merged[event] = {
+                    "first_runner": window.get("first_runner"),
+                    "peak_start": window.get("peak_start"),
+                    "peak_end": window.get("peak_end"),
+                    "last_runner": window.get("last_runner"),
+                }
+                continue
+            for field, picker in (
+                ("first_runner", min),
+                ("peak_start", min),
+                ("peak_end", max),
+                ("last_runner", max),
+            ):
+                a = _time_to_seconds_loose(cur.get(field))
+                b = _time_to_seconds_loose(window.get(field))
+                if a is None and b is None:
+                    continue
+                if a is None:
+                    cur[field] = window.get(field)
+                elif b is None:
+                    continue
+                else:
+                    chosen = picker(a, b)
+                    cur[field] = format_time_hhmmss(chosen)
+    return merged
 
 
 def parse_segment_ids(seg_id_value: Any) -> List[str]:
@@ -452,13 +584,15 @@ def calculate_arrival_times_for_location(
     segments_df: pd.DataFrame,
     courses: Dict[str, GPXCourse],
     start_times: Dict[str, float]
-) -> List[float]:
+) -> Dict[str, List[float]]:
     """
-    Calculate arrival times for all eligible runners at a location.
-    
+    Calculate arrival times for all eligible runners at a location, keyed by event.
+
     Issue #277: Supports multiple crossings (e.g., A1 and G1 for loc_id=8).
     Issue #480: Processes ALL listed segments independently to capture all crossings
                 (e.g., B1 outbound, B3 return, D1 outbound, D2 return).
+    Issue #828: Returns per-event buckets so callers can compute aggregate and
+                by-event first/peak/last without changing arrival math.
     
     Args:
         location: Location row from locations.csv
@@ -468,10 +602,11 @@ def calculate_arrival_times_for_location(
         start_times: Dictionary of event start times in minutes
         
     Returns:
-        List of arrival times in seconds (may include duplicates for multiple crossings).
-        Same runner may appear multiple times (once per segment crossing).
+        Mapping of event id → list of arrival times in seconds (may include
+        duplicates for multiple crossings). Same runner may appear multiple
+        times (once per segment crossing).
     """
-    arrival_times = []
+    arrivals_by_event: Dict[str, List[float]] = {}
     
     # Eligible events: product vocabulary ∩ (courses present or all COURSE_EVENT_IDS),
     # discovered dynamically from location flags (#701 / #531 elite+open).
@@ -485,7 +620,7 @@ def calculate_arrival_times_for_location(
         logger.warning(
             f"Location {location.get('loc_id')}: No eligible events among {candidate_events}"
         )
-        return arrival_times
+        return arrivals_by_event
     
     logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")
     
@@ -494,7 +629,7 @@ def calculate_arrival_times_for_location(
     lon = location.get("lon")
     if pd.isna(lat) or pd.isna(lon):
         logger.warning(f"Location {location.get('loc_id')} has invalid coordinates")
-        return arrival_times
+        return arrivals_by_event
     
     location_point_utm = Point(WGS84_TO_UTM.transform(lon, lat))
     
@@ -553,6 +688,7 @@ def calculate_arrival_times_for_location(
             # Issue #480: Process ALL listed segments independently
             # This ensures we capture all crossings (e.g., B1 outbound, B3 return, D1 outbound, D2 return)
             processed_segments = []
+            event_arrivals = arrivals_by_event.setdefault(event, [])
             
             for seg_id, from_km, to_km in segment_ranges:
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km")
@@ -673,7 +809,7 @@ def calculate_arrival_times_for_location(
                     
                     # Arrival time = start_time + offset (seconds) + pace * distance
                     arrival_time = event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
-                    arrival_times.append(arrival_time)
+                    event_arrivals.append(arrival_time)
                 
                 processed_segments.append(seg_id)
             
@@ -704,6 +840,7 @@ def calculate_arrival_times_for_location(
         
         # Calculate arrival times
         event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
+        event_arrivals = arrivals_by_event.setdefault(event, [])
         
         for _, runner in event_runners.iterrows():
             start_offset = runner.get("start_offset", 0)
@@ -719,11 +856,14 @@ def calculate_arrival_times_for_location(
             
             # Arrival time = start_time + offset (seconds) + pace * distance
             arrival_time = event_start_sec + start_offset + pace_sec_per_km * distance_km
-            arrival_times.append(arrival_time)
+            event_arrivals.append(arrival_time)
         
-        logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} arrival times for {len(event_runners)} runners at distance {distance_km:.3f}km")
+        logger.debug(
+            f"Location {location.get('loc_id')} ({event}): Calculated {len(event_arrivals)} "
+            f"arrival times for {len(event_runners)} runners at distance {distance_km:.3f}km"
+        )
     
-    return arrival_times
+    return arrivals_by_event
 
 
 def generate_location_report(
@@ -1000,10 +1140,13 @@ def generate_location_report(
             locations_by_id[loc_id] = report_row
             continue
         
-        # Calculate arrival times
-        arrival_times = calculate_arrival_times_for_location(
+        # Calculate arrival times (per-event buckets — Issue #828)
+        arrivals_by_event = calculate_arrival_times_for_location(
             location, runners_df, segments_df, courses, start_times
         )
+        arrival_times: List[float] = []
+        for times in arrivals_by_event.values():
+            arrival_times.extend(times)
         
         if not arrival_times:
             loc_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
@@ -1020,23 +1163,17 @@ def generate_location_report(
             locations_by_id[loc_id] = report_row
             continue
         
-        # Calculate statistics
-        arrival_times_sorted = sorted(arrival_times)
-        report_row["first_runner"] = format_time_hhmmss(arrival_times_sorted[0])
-        report_row["last_runner"] = format_time_hhmmss(arrival_times_sorted[-1])
-        
-        # Percentiles
-        if len(arrival_times_sorted) > 1:
-            p25_idx = int(len(arrival_times_sorted) * 0.25)
-            p75_idx = int(len(arrival_times_sorted) * 0.75)
-            report_row["peak_start"] = format_time_hhmmss(arrival_times_sorted[p25_idx])
-            report_row["peak_end"] = format_time_hhmmss(arrival_times_sorted[p75_idx])
-        else:
-            report_row["peak_start"] = report_row["first_runner"]
-            report_row["peak_end"] = report_row["last_runner"]
+        # Aggregate statistics (union of all events — unchanged semantics)
+        timing = compute_timing_window(arrival_times)
+        report_row["first_runner"] = timing["first_runner"]
+        report_row["peak_start"] = timing["peak_start"]
+        report_row["peak_end"] = timing["peak_end"]
+        report_row["last_runner"] = timing["last_runner"]
+        report_row["by_event"] = build_by_event_timings(arrivals_by_event)
         
         # Calculate loc_end (last_runner + buffer, rounded to interval)
         if report_row["last_runner"] != "NA":
+            arrival_times_sorted = sorted(arrival_times)
             last_runner_sec = arrival_times_sorted[-1]
             buffer_minutes = location.get("buffer", 0)
             if pd.isna(buffer_minutes):
@@ -1268,6 +1405,7 @@ def generate_location_report(
         "lat", "lon", "zone",
         "buffer", "interval",
         "first_runner", "peak_start", "peak_end", "last_runner",
+        "by_event",
         "loc_start", "loc_end", "duration",
         "timing_source",
         # legacy aliases kept at end of base for importers mid-cutover
@@ -1286,6 +1424,8 @@ def generate_location_report(
     final_columns = final_columns + remaining_cols
 
     report_df = report_df[final_columns]
+    if "by_event" in report_df.columns:
+        report_df["by_event"] = report_df["by_event"].map(serialize_by_event)
 
     # Passes.csv — bottom-up timed instances (agencies / YSSR)
     passes_full, passes_rel = get_report_paths("Passes", "csv", output_dir)
@@ -1294,13 +1434,19 @@ def generate_location_report(
     logger.info(f"Passes report saved to: {passes_full}")
 
     # Locations.csv — consolidated Location view (UI mirror)
-    location_rows = consolidate_location_rows(report_df.to_dict(orient="records"))
+    # Re-read pass dicts with parsed by_event for merge
+    pass_records = report_df.to_dict(orient="records")
+    for rec in pass_records:
+        rec["by_event"] = parse_by_event(rec.get("by_event"))
+    location_rows = consolidate_location_rows(pass_records)
+    for rec in location_rows:
+        rec["by_event"] = serialize_by_event(rec.get("by_event"))
     locations_df_out = pd.DataFrame(location_rows)
     loc_base = [
         "loc_id", "pass_key", "pass_ids", "pass_count", "loc_label", "day",
         "loc_type", "lat", "lon", "zone",
         "first_runner", "last_runner", "loc_start", "loc_end",
-        "peak_start", "peak_end", "flag", "onepage", "notes",
+        "peak_start", "peak_end", "by_event", "flag", "onepage", "notes",
     ]
     loc_counts = sorted([c for c in locations_df_out.columns if c.endswith("_count") or c.endswith("_mins")])
     loc_cols = [c for c in loc_base + loc_counts if c in locations_df_out.columns]

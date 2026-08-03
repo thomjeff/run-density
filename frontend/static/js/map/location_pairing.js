@@ -45,6 +45,35 @@
         return best;
     }
 
+    function mergeByEventMaps(maps) {
+        const merged = {};
+        (maps || []).forEach((raw) => {
+            let map = raw;
+            if (typeof map === 'string') {
+                try { map = JSON.parse(map); } catch (e) { map = null; }
+            }
+            if (!map || typeof map !== 'object') return;
+            Object.keys(map).forEach((ev) => {
+                const w = map[ev] || {};
+                if (!merged[ev]) {
+                    merged[ev] = {
+                        first_runner: w.first_runner,
+                        peak_start: w.peak_start,
+                        peak_end: w.peak_end,
+                        last_runner: w.last_runner,
+                    };
+                    return;
+                }
+                const cur = merged[ev];
+                cur.first_runner = pickMinTime([cur.first_runner, w.first_runner]);
+                cur.peak_start = pickMinTime([cur.peak_start, w.peak_start]);
+                cur.peak_end = pickMaxTime([cur.peak_end, w.peak_end]);
+                cur.last_runner = pickMaxTime([cur.last_runner, w.last_runner]);
+            });
+        });
+        return Object.keys(merged).length ? merged : null;
+    }
+
     function effectiveKey(loc) {
         const key = loc && (loc.pass_key != null ? loc.pass_key : loc.location_key);
         const text = key != null ? String(key).trim() : '';
@@ -133,6 +162,7 @@
                 loc_end: pickMaxTime(passes.map((p) => p.loc_end)),
                 peak_start: pickMinTime(passes.map((p) => p.peak_start)),
                 peak_end: pickMaxTime(passes.map((p) => p.peak_end)),
+                by_event: mergeByEventMaps(passes.map((p) => p.by_event)),
                 flag: passes.some((p) => p.flag === true || p.flag === 'true' || p.flag === 'Y'),
                 onepage: passes.some((p) => String(p.onepage || '').toLowerCase() === 'y')
                     ? 'y'

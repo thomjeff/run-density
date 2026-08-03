@@ -44,6 +44,24 @@
     #locations-table a.loc-sheet-link:hover {
         color: #0a58ca;
     }
+    #locations-table .loc-by-event-details {
+        margin-top: 0.35rem;
+        font-size: 0.8rem;
+        line-height: 1.35;
+    }
+    #locations-table .loc-by-event-details summary {
+        cursor: pointer;
+        color: #6c757d;
+        user-select: none;
+    }
+    #locations-table .loc-by-event-row {
+        margin-top: 0.2rem;
+    }
+    #locations-table .loc-by-event-name {
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-right: 0.25rem;
+    }
 </style>
 {% endblock %}
 
@@ -361,6 +379,7 @@
                 timing_source: p.timing_source,
                 first_runner: p.first_runner,
                 last_runner: p.last_runner,
+                by_event: p.by_event || null,
                 onepage: p.onepage
             };
             Object.keys(p).forEach(key => {
@@ -419,6 +438,7 @@
                 timing_source: p.timing_source,
                 first_runner: p.first_runner,
                 last_runner: p.last_runner,
+                by_event: p.by_event || null,
                 onepage: p.onepage
             };
             Object.keys(p).forEach(key => {
@@ -1127,6 +1147,36 @@
         }
         return `<a href="${path}" target="_blank" rel="noopener" class="loc-sheet-link" onclick="event.stopPropagation()">${escaped}</a>`;
     }
+
+    /**
+     * Issue #828: compact per-event first/peak/last under the aggregate window.
+     */
+    function formatByEventTimingsHtml(location) {
+        let byEvent = location && location.by_event;
+        if (typeof byEvent === 'string') {
+            try {
+                byEvent = JSON.parse(byEvent);
+            } catch (e) {
+                byEvent = null;
+            }
+        }
+        if (!byEvent || typeof byEvent !== 'object') {
+            return '';
+        }
+        const events = Object.keys(byEvent).sort((a, b) => a.localeCompare(b));
+        if (!events.length) {
+            return '';
+        }
+        const lines = events.map((ev) => {
+            const w = byEvent[ev] || {};
+            const first = formatTimeToHHMM(w.first_runner) || '—';
+            const last = formatTimeToHHMM(w.last_runner) || '—';
+            const peakStart = formatTimeToHHMM(w.peak_start) || '—';
+            const peakEnd = formatTimeToHHMM(w.peak_end) || '—';
+            return `<div class="loc-by-event-row"><span class="loc-by-event-name">${escapeHtml(ev)}</span> ${escapeHtml(first)} → ${escapeHtml(last)} <span class="text-secondary">(peak ${escapeHtml(peakStart)}–${escapeHtml(peakEnd)})</span></div>`;
+        });
+        return `<details class="loc-by-event-details"><summary>By event</summary>${lines.join('')}</details>`;
+    }
     
     function renderLocationsTable(locations) {
         const tbody = document.getElementById('locations-tbody');
@@ -1190,6 +1240,12 @@
                 firstLastRunner = (firstRunnerFormatted !== "—" && lastRunnerFormatted !== "—")
                     ? `${firstRunnerFormatted} → ${lastRunnerFormatted}`
                     : "—";
+            }
+
+            // Issue #828: per-event timings under aggregate First/Last
+            const byEventHtml = formatByEventTimingsHtml(location);
+            if (byEventHtml) {
+                firstLastRunner = `${firstLastRunner}<div class="loc-by-event">${byEventHtml}</div>`;
             }
             
             // Issue #598: Format flag value
