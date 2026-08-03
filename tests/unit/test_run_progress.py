@@ -27,6 +27,13 @@ def test_user_stages_order():
     ]
 
 
+def test_normalize_day_suffixed_phase():
+    from app.core.v2.run_progress import normalize_phase_name
+
+    assert normalize_phase_name("phase_5_1_bin_generation_sun") == "phase_5_1_bin_generation"
+    assert normalize_phase_name("phase_3_2_density_compute") == "phase_3_2_density_compute"
+
+
 def test_phase_mapping_covers_catalog():
     assert PHASE_TO_USER_STAGE["phase_3_2_density_compute"] == "density"
     assert PHASE_TO_USER_STAGE["phase_4_3_junction_flow"] == "junctions"

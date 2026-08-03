@@ -4,6 +4,9 @@
 (function (global) {
     'use strict';
 
+    var elapsedTimer = null;
+    var lastProgressData = null;
+
     function escapeHtml(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;')
@@ -28,12 +31,33 @@
         return '○';
     }
 
+    function stopElapsedTicker() {
+        if (elapsedTimer) {
+            clearInterval(elapsedTimer);
+            elapsedTimer = null;
+        }
+    }
+
+    function startElapsedTicker() {
+        stopElapsedTicker();
+        elapsedTimer = setInterval(function () {
+            var el = document.querySelector('#rf-overview-progress .rf-progress-elapsed');
+            if (!el || !lastProgressData || lastProgressData.status !== 'running') {
+                return;
+            }
+            var elapsed = formatElapsed(lastProgressData.started_at);
+            if (elapsed) el.textContent = '· Running ' + elapsed;
+        }, 1000);
+    }
+
     function renderProgressCard(data) {
         var card = document.getElementById('rf-overview-progress');
         if (!card) return;
+        lastProgressData = data || null;
 
         var status = (data && data.status) || '';
         if (status === 'PASS') {
+            stopElapsedTicker();
             card.style.display = 'block';
             card.className = 'card rf-overview-progress rf-overview-progress--done';
             card.innerHTML =
@@ -42,6 +66,7 @@
             return;
         }
         if (status === 'FAIL') {
+            stopElapsedTicker();
             card.style.display = 'block';
             card.className = 'card rf-overview-progress rf-overview-progress--fail';
             card.innerHTML =
@@ -53,6 +78,7 @@
             return;
         }
         if (status !== 'running') {
+            stopElapsedTicker();
             card.style.display = 'none';
             card.innerHTML = '';
             return;
@@ -65,6 +91,15 @@
             if (percent < 8) percent = 8;
         }
         var elapsed = formatElapsed(data.started_at);
+        var stageSeconds = 0;
+        if (data.updated_at) {
+            var u = Date.parse(data.updated_at);
+            if (isFinite(u)) stageSeconds = Math.max(0, Math.floor((Date.now() - u) / 1000));
+        }
+        var longHint =
+            stageSeconds >= 45
+                ? '<p class="text-secondary small" style="margin:0 0 0.75rem;">Still working on this step — larger races can take a couple of minutes here.</p>'
+                : '';
         var stages = data.user_stages || [];
         var listHtml = stages
             .map(function (st) {
@@ -89,10 +124,13 @@
         card.className = 'card rf-overview-progress';
         card.innerHTML =
             '<h3 style="margin-bottom:0.35rem;">Preparing your results</h3>' +
-            '<p class="text-secondary" style="margin-bottom:0.75rem;">' +
+            '<p class="text-secondary" style="margin-bottom:0.35rem;">' +
             escapeHtml(data.message || 'Working…') +
-            (elapsed ? ' <span class="rf-progress-elapsed">· Running ' + escapeHtml(elapsed) + '</span>' : '') +
+            (elapsed
+                ? ' <span class="rf-progress-elapsed">· Running ' + escapeHtml(elapsed) + '</span>'
+                : '') +
             '</p>' +
+            longHint +
             '<div class="rf-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' +
             percent +
             '"><div class="rf-progress-bar-fill" style="width:' +
@@ -102,9 +140,12 @@
             listHtml +
             '</ul>' +
             '<p class="text-secondary small mb-0">This usually takes a few minutes. You can leave this page open.</p>';
+        startElapsedTicker();
     }
 
     function hideProgressCard() {
+        stopElapsedTicker();
+        lastProgressData = null;
         var card = document.getElementById('rf-overview-progress');
         if (!card) return;
         card.style.display = 'none';
@@ -160,9 +201,10 @@
                 })
                 .catch(function () {
                     if (stopped) return;
-                    // Run may not exist yet; retry a few times
-                    if (Date.now() - started < 30000) {
-                        timer = setTimeout(tick, delayMs());
+                    // Keep elapsed alive; retry while run may still be starting or busy.
+                    // Aborted/timeout fetches land here so the card keeps ticking.
+                    if (Date.now() - started < 600000) {
+                        timer = setTimeout(tick, Math.min(delayMs(), 2500));
                     }
                 });
         }
@@ -171,6 +213,7 @@
         return function stop() {
             stopped = true;
             if (timer) clearTimeout(timer);
+            stopElapsedTicker();
         };
     }
 

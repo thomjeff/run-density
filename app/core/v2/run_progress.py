@@ -71,6 +71,18 @@ def _empty_stage_states() -> List[Dict[str, Any]]:
     ]
 
 
+def normalize_phase_name(phase_name: Optional[str]) -> Optional[str]:
+    """Map day-suffixed phase ids (e.g. phase_5_1_bin_generation_sun) to catalog keys."""
+    if not phase_name:
+        return None
+    if phase_name in PHASE_TO_USER_STAGE:
+        return phase_name
+    for catalog_name in PHASE_TO_USER_STAGE:
+        if phase_name.startswith(catalog_name + "_"):
+            return catalog_name
+    return phase_name
+
+
 def build_progress_payload(
     *,
     run_id: str,
@@ -83,8 +95,13 @@ def build_progress_payload(
     junctions_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a progress.json document from completed pipeline phase names."""
-    completed = list(completed_phases or [])
+    completed = []
+    for phase in completed_phases or []:
+        normalized = normalize_phase_name(phase) or phase
+        if normalized not in completed:
+            completed.append(normalized)
     completed_set = set(completed)
+    current_phase = normalize_phase_name(current_phase) or current_phase
 
     stages = _empty_stage_states()
     stage_by_id = {s["id"]: s for s in stages}
@@ -219,6 +236,7 @@ def _merge_from_disk(run_id: str) -> Dict[str, Any]:
 
 
 def mark_phase_started(run_id: Optional[str], phase_name: str) -> None:
+    phase_name = normalize_phase_name(phase_name) or phase_name
     if not run_id or phase_name not in PHASE_TO_USER_STAGE:
         return
     try:
@@ -236,6 +254,7 @@ def mark_phase_started(run_id: Optional[str], phase_name: str) -> None:
 
 
 def mark_phase_complete(run_id: Optional[str], phase_name: str) -> None:
+    phase_name = normalize_phase_name(phase_name) or phase_name
     if not run_id or phase_name not in PHASE_TO_USER_STAGE:
         return
     try:

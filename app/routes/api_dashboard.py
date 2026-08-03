@@ -468,6 +468,8 @@ async def get_run_progress(run_id: str):
     Returns progress.json (or a synthetic fallback from metadata / analysis.json).
     """
     try:
+        import asyncio
+
         from app.core.v2.run_progress import resolve_progress_for_api
         from app.utils.run_id import get_run_directory
 
@@ -476,7 +478,9 @@ async def get_run_progress(run_id: str):
             raise HTTPException(status_code=400, detail="Invalid run_id")
         # Ensure directory naming is consistent
         _ = get_run_directory(run_id)
-        payload = resolve_progress_for_api(run_id)
+        # Offload sync filesystem work so the event loop stays free while
+        # analysis runs on a sibling thread.
+        payload = await asyncio.to_thread(resolve_progress_for_api, run_id)
         return JSONResponse(
             content=payload,
             headers={"Cache-Control": "no-store"},
