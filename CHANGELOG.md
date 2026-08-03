@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #819 — Junctions authoring UX
+- Draggable junction pins; segment start/end markers (green within proximity)
+- Stream interaction map annotations, connector arcs, editable descriptions
+- Default nearby proximity raised to **20 m** (`JUNCTION_SEGMENT_PROXIMITY_M`)
+
 ## [v2.0.12] - 2026-08-01
 
 ### Summary
@@ -24,7 +29,7 @@
 - Artifacts under day reports / UI for the selected run
 
 ### Issue #817 — Junction Flow authoring
-- Package Build **Junctions** tab (after Courses): map pin, nearby segments by endpoint proximity (`JUNCTION_SEGMENT_PROXIMITY_M`, default 10 m), declared cross/merge interactions
+- Package Build **Junctions** tab (after Courses): map pin, nearby segments by endpoint proximity (`JUNCTION_SEGMENT_PROXIMITY_M`, default 20 m), declared cross/merge interactions
 - Persist `junctions.json` at package root (streams derived from segment refs; Locations/Segments schemas unchanged)
 - API: `GET/PUT /api/config/packages/{id}/junctions`, `POST …/junctions/nearby`, `GET …/junctions/map-segments`
 

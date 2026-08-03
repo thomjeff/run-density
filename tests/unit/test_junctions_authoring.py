@@ -18,7 +18,7 @@ from app.utils.constants import JUNCTION_SEGMENT_PROXIMITY_M
 
 
 def test_junction_proximity_constant():
-    assert JUNCTION_SEGMENT_PROXIMITY_M == 10.0
+    assert JUNCTION_SEGMENT_PROXIMITY_M == 20.0
 
 
 def test_validate_junctions_cross_and_merge():

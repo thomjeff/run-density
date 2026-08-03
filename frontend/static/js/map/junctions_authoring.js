@@ -6,7 +6,7 @@
 
     let state = {
         configId: null,
-        proximityM: 10,
+        proximityM: 20,
         doc: { version: 1, junctions: [] },
         selectedId: null,
         dirty: false,

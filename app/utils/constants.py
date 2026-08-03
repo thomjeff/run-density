@@ -203,7 +203,7 @@ LOCATION_SEGMENT_CLAMP_M = 50.0
 
 # Junction Flow authoring (Issue #817): segment start/end within this distance
 # of a junction pin is treated as meeting at the junction.
-JUNCTION_SEGMENT_PROXIMITY_M = 10.0
+JUNCTION_SEGMENT_PROXIMITY_M = 20.0
 
 # Course Mapping location types (Issue #732 / #747) — alphabetical for UI dropdown
 LOCATION_TYPE_CHOICES = [
