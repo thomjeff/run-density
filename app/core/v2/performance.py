@@ -92,7 +92,15 @@ class PerformanceMonitor:
             logger.info(f"[{phase_number}] ⏱️  Starting: {phase_description}")
         else:
             logger.info(f"⏱️  Starting phase: {phase_name}")
-        
+
+        # Issue #825: Overview progress
+        try:
+            from app.core.v2.run_progress import mark_phase_started
+
+            mark_phase_started(self.run_id, phase_name)
+        except Exception:
+            pass
+
         return metrics
     
     def get_total_elapsed(self) -> float:
@@ -145,6 +153,14 @@ class PerformanceMonitor:
             logger.info("═" * 65)
         else:
             logger.info(f"✅ Phase complete: {metrics.phase_name} {elapsed_str}")
+
+        # Issue #825: Overview progress
+        try:
+            from app.core.v2.run_progress import mark_phase_complete
+
+            mark_phase_complete(self.run_id, metrics.phase_name)
+        except Exception:
+            pass
     
     def check_guardrails(self, metrics: PerformanceMetrics) -> Dict[str, Any]:
         """

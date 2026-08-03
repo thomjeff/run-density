@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #825 — Overview analysis progress
+- Race-director **Preparing your results** card on Overview while a run is in flight
+- Coarse user stages mapped from pipeline phases (no Phase 3.2 / log console in the default UI)
+- `progress.json` + `GET /api/runs/{run_id}/progress` polled from Overview
+
 ### Issue #819 — Junctions authoring UX
 - Draggable junction pins; segment start/end markers (green within proximity)
 - Stream interaction map annotations, connector arcs, editable descriptions
