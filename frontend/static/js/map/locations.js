@@ -95,6 +95,7 @@ function convertToGeoJSON(locations) {
                 notes: loc.notes,
                 first_runner: loc.first_runner,
                 last_runner: loc.last_runner,
+                by_event: loc.by_event || null,
                 flag: loc.flag,
                 flagged_seg_id: loc.flagged_seg_id,
                 flag_severity: loc.flag_severity,

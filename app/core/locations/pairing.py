@@ -21,6 +21,13 @@ from app.core.locations.identity import effective_pass_key
 logger = logging.getLogger(__name__)
 
 
+def _merge_by_event_from_passes(passes: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Issue #828: Location-level by_event = merge of pass-level maps."""
+    from app.location_report import merge_by_event_timings
+
+    return merge_by_event_timings([p.get("by_event") for p in passes])
+
+
 def effective_location_key(row: MutableMapping[str, Any]) -> str:
     """Alias for effective_pass_key (legacy name)."""
     return effective_pass_key(row)
@@ -217,6 +224,7 @@ def consolidate_location_rows(
             "loc_end": g.get("loc_end"),
             "peak_start": g.get("peak_start"),
             "peak_end": g.get("peak_end"),
+            "by_event": g.get("by_event") or _merge_by_event_from_passes(passes),
             "flag": g.get("flag"),
             "onepage": g.get("onepage"),
             "notes": g.get("notes"),
@@ -272,6 +280,7 @@ def _singleton_group(
         "loc_end": row.get("loc_end"),
         "peak_start": row.get("peak_start"),
         "peak_end": row.get("peak_end"),
+        "by_event": _merge_by_event_from_passes([row]),
         "flag": row.get("flag"),
         "onepage": row.get("onepage"),
         "notes": row.get("notes"),
@@ -336,6 +345,7 @@ def _paired_group(key: str, group: List[Dict[str, Any]]) -> Dict[str, Any]:
         "loc_end": max_time_str(r.get("loc_end") for r in ordered),
         "peak_start": min_time_str(r.get("peak_start") for r in ordered),
         "peak_end": max_time_str(r.get("peak_end") for r in ordered),
+        "by_event": _merge_by_event_from_passes(ordered),
         "flag": any(
             r.get("flag") in (True, "true", "True", "Y", "y", 1, "1") for r in ordered
         ),

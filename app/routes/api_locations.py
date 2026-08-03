@@ -132,6 +132,12 @@ async def get_locations_report(
                 # Convert flag column: handle both boolean and string representations
                 df['flag'] = df['flag'].apply(lambda x: True if (x is True or str(x).lower() in ['true', '1', 'y', 'yes']) else False)
             report_data = df.to_dict('records')
+            # Issue #828: parse by_event JSON column into objects for the UI
+            from app.location_report import parse_by_event
+
+            for row in report_data:
+                if "by_event" in row:
+                    row["by_event"] = parse_by_event(row.get("by_event"))
             _merge_onepage_into_report_rows(report_data, locations_results, selected_day)
         elif generate:
             # Generate new report
