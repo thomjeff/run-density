@@ -92,22 +92,31 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/run_overview.js?v=825a"></script>
-<script src="/static/js/run_overview_progress.js?v=825a"></script>
+<script src="/static/js/run_overview.js?v=825c"></script>
+<script src="/static/js/run_overview_progress.js?v=825c"></script>
 <script>
 (function () {
     var tabler = document.documentElement.classList.contains('rf-tabler');
     var stopProgressWatch = null;
 
-    function fetchJson(url) {
-        return fetch(url, { credentials: 'same-origin' }).then(function (r) {
-            if (r.status === 401) {
-                window.location.href = '/';
-                return Promise.reject(new Error('unauthorized'));
-            }
-            if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
-            return r.json();
-        });
+    function fetchJson(url, timeoutMs) {
+        timeoutMs = timeoutMs == null ? 8000 : timeoutMs;
+        var controller = new AbortController();
+        var timer = setTimeout(function () {
+            controller.abort();
+        }, timeoutMs);
+        return fetch(url, { credentials: 'same-origin', signal: controller.signal })
+            .then(function (r) {
+                if (r.status === 401) {
+                    window.location.href = '/';
+                    return Promise.reject(new Error('unauthorized'));
+                }
+                if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+                return r.json();
+            })
+            .finally(function () {
+                clearTimeout(timer);
+            });
     }
 
     function withUi(path) {

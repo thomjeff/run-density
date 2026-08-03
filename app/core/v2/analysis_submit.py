@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
+import threading
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import BackgroundTasks, status
 from fastapi.responses import JSONResponse
@@ -21,6 +21,10 @@ from app.core.v2.validation import ValidationError, validate_api_payload
 from app.utils.run_id import generate_run_id, get_run_directory
 
 logger = logging.getLogger(__name__)
+
+# Keep a strong reference so GC does not collect live analysis threads.
+_ACTIVE_ANALYSIS_THREADS: Dict[str, threading.Thread] = {}
+_ACTIVE_ANALYSIS_LOCK = threading.Lock()
 
 
 def map_data_dir_for_runtime(data_dir: str) -> str:
@@ -106,11 +110,59 @@ def run_analysis_background(
             mark_run_failed(run_id, str(e))
         except Exception:
             pass
+    finally:
+        with _ACTIVE_ANALYSIS_LOCK:
+            _ACTIVE_ANALYSIS_THREADS.pop(run_id, None)
+
+
+def enqueue_analysis_run(
+    *,
+    events,
+    segments_file: str,
+    locations_file: str,
+    flow_file: str,
+    data_dir: str,
+    run_id: str,
+    request_payload: Dict[str, Any],
+) -> threading.Thread:
+    """
+    Start analysis on a dedicated daemon thread.
+
+    FastAPI BackgroundTasks share the server threadpool and can starve HTTP
+    (including /progress polling) under CPU-heavy phases. A dedicated thread
+    keeps request handling responsive enough for Overview progress updates.
+    """
+    thread = threading.Thread(
+        target=run_analysis_background,
+        kwargs={
+            "events": events,
+            "segments_file": segments_file,
+            "locations_file": locations_file,
+            "flow_file": flow_file,
+            "data_dir": data_dir,
+            "run_id": run_id,
+            "request_payload": request_payload,
+        },
+        name=f"runflow-analysis-{run_id}",
+        daemon=True,
+    )
+    with _ACTIVE_ANALYSIS_LOCK:
+        existing = _ACTIVE_ANALYSIS_THREADS.get(run_id)
+        if existing is not None and existing.is_alive():
+            logger.warning(
+                "Analysis thread already running for run_id=%s; not starting another",
+                run_id,
+            )
+            return existing
+        _ACTIVE_ANALYSIS_THREADS[run_id] = thread
+    thread.start()
+    logger.info("Started analysis thread %s for run_id=%s", thread.name, run_id)
+    return thread
 
 
 def submit_v2_analysis(
     payload_dict: Dict[str, Any],
-    background_tasks: BackgroundTasks,
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> Union[V2AnalyzeResponse, JSONResponse]:
     """Validate payload, write analysis.json, and queue the background pipeline."""
     data_dir = payload_dict.get("data_dir") or get_data_directory()
@@ -209,8 +261,10 @@ def submit_v2_analysis(
             metadata=f"runflow/analysis/{run_id}/{day_code}/metadata.json",
         )
 
-    background_tasks.add_task(
-        run_analysis_background,
+    # Prefer a dedicated thread over FastAPI BackgroundTasks so long CPU-bound
+    # phases do not contend with the shared ASGI threadpool used for HTTP.
+    _ = background_tasks  # kept for call-site compatibility
+    enqueue_analysis_run(
         events=events,
         segments_file=segments_file,
         locations_file=locations_file,
