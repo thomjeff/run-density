@@ -21,6 +21,8 @@
 </div>
 
 <div id="rf-overview-body" style="display: none;">
+    <div id="rf-overview-progress" class="card rf-overview-progress" style="display: none; margin-bottom: 1.25rem;" aria-live="polite"></div>
+
     <div id="analysis-inputs-section" class="card" style="display: none; margin-bottom: 1.25rem;">
         <h3 style="margin-bottom: 1rem;">Analysis Inputs</h3>
         <div id="analysis-inputs-content"></div>
@@ -52,14 +54,50 @@
 .rf-overview-lead { margin: 0.35rem 0 0; color: #667382; font-size: 0.9rem; max-width: 40rem; }
 .rf-overview-meta { margin-bottom: 1rem; }
 .rf-overview-subhead { margin: 1rem 0 0.5rem; font-size: 1rem; color: #34495e; }
+.rf-overview-progress { border-left: 4px solid #206bc4; }
+.rf-overview-progress--done { border-left-color: #2fb344; }
+.rf-overview-progress--fail { border-left-color: #d63939; }
+.rf-progress-bar {
+    height: 8px;
+    background: #e6e8eb;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.85rem;
+}
+.rf-progress-bar-fill {
+    height: 100%;
+    background: #206bc4;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+.rf-progress-stages {
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+}
+.rf-progress-stage {
+    padding: 0.2rem 0;
+    color: #667382;
+    font-size: 0.9rem;
+}
+.rf-progress-stage--done { color: #2fb344; }
+.rf-progress-stage--current { color: #1e293b; font-weight: 600; }
+.rf-progress-stage-icon {
+    display: inline-block;
+    width: 1.1rem;
+    text-align: center;
+}
+.rf-progress-elapsed { white-space: nowrap; }
 </style>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/run_overview.js?v=796h"></script>
+<script src="/static/js/run_overview.js?v=825a"></script>
+<script src="/static/js/run_overview_progress.js?v=825a"></script>
 <script>
 (function () {
     var tabler = document.documentElement.classList.contains('rf-tabler');
+    var stopProgressWatch = null;
 
     function fetchJson(url) {
         return fetch(url, { credentials: 'same-origin' }).then(function (r) {
@@ -105,15 +143,8 @@
         document.getElementById('rf-overview-body').style.display = 'block';
     }
 
-    function boot(runId) {
-        document.getElementById('rf-overview-body').dataset.booted = '1';
-        if (!runId) {
-            showEmpty();
-            return;
-        }
-        localStorage.setItem('selected_run_id', runId);
-        showBody();
-        window.RunOverview.loadRunSummary(runId, fetchJson)
+    function loadSummary(runId) {
+        return window.RunOverview.loadRunSummary(runId, fetchJson)
             .then(function (data) {
                 var days = data.days || [];
                 var day = resolveDay();
@@ -121,17 +152,42 @@
                 else if (!day && days.length) day = days[0];
                 if (day) localStorage.setItem('selected_day', day);
                 if (window.updateNavLinks) window.updateNavLinks(day, runId);
-            })
-            .catch(function () {
-                showBody();
+                return data;
             });
+    }
+
+    function boot(runId) {
+        document.getElementById('rf-overview-body').dataset.booted = '1';
+        if (stopProgressWatch) {
+            stopProgressWatch();
+            stopProgressWatch = null;
+        }
+        if (!runId) {
+            showEmpty();
+            return;
+        }
+        localStorage.setItem('selected_run_id', runId);
+        showBody();
+        loadSummary(runId).catch(function () {
+            showBody();
+        });
+        if (window.RunOverviewProgress) {
+            stopProgressWatch = window.RunOverviewProgress.watchRunProgress(
+                runId,
+                fetchJson,
+                function (status) {
+                    if (status === 'PASS') {
+                        loadSummary(runId).catch(function () {});
+                    }
+                }
+            );
+        }
     }
 
     function onReady() {
         boot(resolveRunId());
     }
 
-    // Prefer URL/localStorage immediately; refresh when base day/run init finishes.
     document.addEventListener('DOMContentLoaded', onReady);
     window.addEventListener('runflow:context-ready', function (ev) {
         var id = (ev.detail && ev.detail.run_id) || resolveRunId();

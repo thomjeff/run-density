@@ -460,6 +460,36 @@ async def get_runs_list():
         )
 
 
+@router.get("/api/runs/{run_id}/progress")
+async def get_run_progress(run_id: str):
+    """
+    Issue #825: Race-director analysis progress for Overview polling.
+
+    Returns progress.json (or a synthetic fallback from metadata / analysis.json).
+    """
+    try:
+        from app.core.v2.run_progress import resolve_progress_for_api
+        from app.utils.run_id import get_run_directory
+
+        # Light validation: reject path traversal style ids
+        if not run_id or "/" in run_id or ".." in run_id:
+            raise HTTPException(status_code=400, detail="Invalid run_id")
+        # Ensure directory naming is consistent
+        _ = get_run_directory(run_id)
+        payload = resolve_progress_for_api(run_id)
+        return JSONResponse(
+            content=payload,
+            headers={"Cache-Control": "no-store"},
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting run progress for %s: %s", run_id, e)
+        raise HTTPException(status_code=500, detail="Failed to load run progress")
+
+
 @router.get("/api/runs/{run_id}/summary")
 async def get_run_summary(run_id: str):
     """

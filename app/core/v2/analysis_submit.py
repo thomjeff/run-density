@@ -90,9 +90,22 @@ def run_analysis_background(
                 with open(day_metadata_path, "w", encoding="utf-8") as fh:
                     json.dump(day_metadata, fh, indent=2, ensure_ascii=False)
 
+        try:
+            from app.core.v2.run_progress import mark_run_complete
+
+            mark_run_complete(run_id)
+        except Exception:
+            pass
+
         logger.info("Background analysis completed for run_id: %s", run_id)
     except Exception as e:
         logger.error("Error in background analysis for run_id %s: %s", run_id, e, exc_info=True)
+        try:
+            from app.core.v2.run_progress import mark_run_failed
+
+            mark_run_failed(run_id, str(e))
+        except Exception:
+            pass
 
 
 def submit_v2_analysis(
@@ -136,6 +149,13 @@ def submit_v2_analysis(
     run_id = generate_run_id()
     run_path = get_run_directory(run_id)
     run_path.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from app.core.v2.run_progress import init_run_progress
+
+        init_run_progress(run_id)
+    except Exception as e:
+        logger.warning("Failed to init progress.json for %s: %s", run_id, e)
 
     try:
         analysis_config = generate_analysis_json(
