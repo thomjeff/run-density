@@ -57,11 +57,12 @@
     }
 
     function resolveDay() {
-        var params = new URLSearchParams(window.location.search);
-        var fromUrl = (params.get('day') || '').trim().toLowerCase();
-        if (fromUrl) return fromUrl;
+        // Issue #841: prefer run-derived day from chrome over possibly-stale ?day=
         if (window.runflowDay && window.runflowDay.selected) return String(window.runflowDay.selected).toLowerCase();
-        return (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+        var stored = (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+        if (stored) return stored;
+        var params = new URLSearchParams(window.location.search);
+        return (params.get('day') || '').trim().toLowerCase();
     }
 
     function isTablerUi() {
@@ -82,7 +83,7 @@
         var url = path;
         var qs = [];
         if (runId) qs.push('run_id=' + encodeURIComponent(runId));
-        if (day) qs.push('day=' + encodeURIComponent(day));
+        // Issue #841: subnav is run_id-primary; day stays in chrome/localStorage
         if (isTablerUi()) qs.push('ui=tabler');
         if (qs.length) url += '?' + qs.join('&');
         return url;
@@ -120,18 +121,15 @@
         if (ctx) ctx.style.display = 'none';
         if (!missing) return;
         var link = document.getElementById('run-context-choose-link');
-        var day = resolveDay();
         if (link) {
-            link.href = withTablerUi(day ? ('/dashboard?day=' + encodeURIComponent(day)) : '/dashboard');
+            link.href = withTablerUi('/dashboard');
         }
-        updateResultsSubnav(null, day);
+        updateResultsSubnav(null, resolveDay());
         missing.style.display = 'block';
     }
 
     function fillBanner(runId, run) {
         var day = resolveDay();
-        var multiDay = window.runflowDay && Array.isArray(window.runflowDay.available) &&
-            window.runflowDay.available.length > 1;
 
         document.getElementById('run-context-id').textContent = runId;
         document.getElementById('run-context-desc').textContent = (run && run.description) || '—';
@@ -141,7 +139,8 @@
         var dayWrap = document.getElementById('run-context-day-wrap');
         var dayEl = document.getElementById('run-context-day');
         if (dayWrap && dayEl) {
-            if (multiDay && day) {
+            // Issue #841: always show day as read-only when known
+            if (day) {
                 dayEl.textContent = day.toUpperCase();
                 dayWrap.style.display = '';
             } else {
@@ -153,9 +152,7 @@
         if (reports) reports.href = resultsHref('/reports', runId, day);
         var change = document.getElementById('run-context-change-run');
         if (change) {
-            change.href = withTablerUi(day
-                ? ('/dashboard?day=' + encodeURIComponent(day) + '&run_id=' + encodeURIComponent(runId))
-                : ('/dashboard?run_id=' + encodeURIComponent(runId)));
+            change.href = withTablerUi('/dashboard?run_id=' + encodeURIComponent(runId));
         }
 
         updateResultsSubnav(runId, day);

@@ -59,7 +59,23 @@ def test_base_html_jinja_render_smoke():
     assert "@tabler/core@1.4.0/dist/js/tabler.min.js" in html
     assert "Classic UI" not in html
     assert "rf-tabler-exit" not in html
-    assert 'id="day-selector"' in html
+    assert 'id="day-selector"' not in html  # Issue #841: day from run, no dropdown
+    assert "initRunflowContext" in html
     assert 'id="rf-runs-dropdown"' in html
     assert 'id="rf-tabler-context-strip"' in html
+    assert 'id="rf-tabler-context-day"' in html
     assert 'id="rf-phase7-smoke"' in html
+
+
+def test_base_html_no_day_selector_markup(base_source: str):
+    """Issue #841: multi-day day dropdown removed from product chrome."""
+    assert 'id="day-selector"' not in base_source
+    assert 'id="day-selector-wrap"' not in base_source
+    assert "setDaySelectorVisible" not in base_source
+    assert "initDaySelector" not in base_source
+    assert "initRunflowContext" in base_source
+    assert 'id="rf-tabler-context-day"' in base_source
+    # Results nav is run_id-primary (day stripped from analysis links)
+    assert 'setQueryParam(newHref, "day", null)' in base_source
+    assert 'window.location.href = "/overview?run_id="' in base_source or \
+        'window.location.href = "/overview?run_id=" + encodeURIComponent(runId)' in base_source

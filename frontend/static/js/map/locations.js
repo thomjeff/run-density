@@ -367,19 +367,23 @@ function createLocationPopup(properties) {
  */
 function getRunDayParams() {
     const params = new URLSearchParams(window.location.search);
-    const dayParam = params.get('day');
     const runParam = params.get('run_id');
-    const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-    const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-    return { day, run_id, dayParam, runParam };
+    // Issue #841: prefer chrome/localStorage over possibly-stale URL day
+    const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
+    const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
+    return { day, run_id, dayParam: params.get('day'), runParam };
 }
 
 async function waitForRunflowDay(maxWaitMs = 2000) {
     const start = Date.now();
     while (Date.now() - start < maxWaitMs) {
         const { day, run_id } = getRunDayParams();
-        if (day && run_id) {
+        if (run_id && day) {
             return { day, run_id };
+        }
+        if (run_id) {
+            // Day optional — API can resolve from run
+            return { day: day || null, run_id };
         }
         await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -388,9 +392,8 @@ async function waitForRunflowDay(maxWaitMs = 2000) {
 
 async function loadLocations() {
     try {
-        // Get run_id and day from URL or global state
         let { day, run_id, dayParam, runParam } = getRunDayParams();
-        if (!day || !run_id) {
+        if (!run_id) {
             const ready = await waitForRunflowDay();
             if (ready) {
                 day = ready.day;
@@ -398,8 +401,8 @@ async function loadLocations() {
             }
         }
         
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch locations without day+run_id', {
+        if (!run_id) {
+            console.error('❌ Refusing to fetch locations without run_id', {
                 href: window.location.href,
                 dayParam, runParam,
                 runflowDay: window.runflowDay
@@ -407,7 +410,9 @@ async function loadLocations() {
             return null;
         }
         
-        const apiUrl = `/api/locations?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/locations?${qp.toString()}`;
         console.log('Loading locations via API...', { apiUrl, day, run_id });
         
         const response = await fetch(apiUrl, { cache: 'no-store' });
@@ -444,15 +449,15 @@ async function loadLocations() {
 async function loadSegmentsGeojson() {
     try {
         let { day, run_id, dayParam, runParam } = getRunDayParams();
-        if (!day || !run_id) {
+        if (!run_id) {
             const ready = await waitForRunflowDay();
             if (ready) {
                 day = ready.day;
                 run_id = ready.run_id;
             }
         }
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch segments without day+run_id', {
+        if (!run_id) {
+            console.error('❌ Refusing to fetch segments without run_id', {
                 href: window.location.href,
                 dayParam, runParam,
                 runflowDay: window.runflowDay
@@ -460,7 +465,9 @@ async function loadSegmentsGeojson() {
             return null;
         }
         
-        const apiUrl = `/api/segments/geojson?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/segments/geojson?${qp.toString()}`;
         console.log('Loading segments overlay via API...', { apiUrl, day, run_id });
         
         const response = await fetch(apiUrl, { cache: 'no-store' });

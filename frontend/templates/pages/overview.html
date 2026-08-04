@@ -129,11 +129,12 @@
     }
 
     function resolveDay() {
-        var params = new URLSearchParams(window.location.search);
-        var fromUrl = (params.get('day') || '').trim().toLowerCase();
-        if (fromUrl) return fromUrl;
+        // Issue #841: prefer run-derived day from chrome over possibly-stale ?day=
         if (window.runflowDay && window.runflowDay.selected) return String(window.runflowDay.selected).toLowerCase();
-        return (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+        var stored = (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+        if (stored) return stored;
+        var params = new URLSearchParams(window.location.search);
+        return (params.get('day') || '').trim().toLowerCase();
     }
 
     function wireEmptyLink() {

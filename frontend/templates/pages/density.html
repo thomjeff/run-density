@@ -289,11 +289,20 @@
     
     // Issue #652: Removed pagination - using scrollable tables instead
     
-    // Load density data on page load
+    // Load density data on page load (and after chrome derives day — Issue #841)
     document.addEventListener('DOMContentLoaded', function() {
         loadDensityData();
         setupBinDetailsEventListeners();
+        window.addEventListener('runflow:context-ready', loadDensityData);
     });
+
+    function resolveRunAndDay() {
+        // Issue #841: prefer run-derived day from chrome over stale ?day=
+        const params = new URLSearchParams(window.location.search);
+        const run_id = (params.get('run_id') || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
+        const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
+        return { day, run_id };
+    }
     
     // Issue #286: Format worst bin label (segment · distance · time)
     function formatWorstBinLabel(bin) {
@@ -374,25 +383,20 @@
     }
     
     function loadDensityData() {
-        // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
+        const { day, run_id } = resolveRunAndDay();
         
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch density data without day+run_id', {
+        if (!run_id) {
+            console.error('❌ Refusing to fetch density data without run_id', {
                 href: window.location.href,
-                dayParam, runParam,
                 runflowDay: window.runflowDay
             });
             showDensityError();
             return;
         }
         
-        const apiUrl = `/api/density/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/density/segments?${qp.toString()}`;
         console.log('Loading density data via API...', { apiUrl, day, run_id });
         
         fetch(apiUrl, { cache: 'no-store' })
@@ -470,21 +474,16 @@
     }
     
     function showSegmentDetail(seg_id) {
-        // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
+        const { day, run_id } = resolveRunAndDay();
         
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        
-        if (!day || !run_id) {
-            console.error('❌ Cannot load segment detail: missing day or run_id');
+        if (!run_id) {
+            console.error('❌ Cannot load segment detail: missing run_id');
             return;
         }
         
-        // Fetch detailed data with day/run_id params
-        const apiUrl = `/api/density/segment/${seg_id}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/density/segment/${seg_id}?${qp.toString()}`;
         fetch(apiUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) {
@@ -603,25 +602,21 @@
         if (loadingDiv) loadingDiv.style.display = 'block';
         if (contentDiv) contentDiv.style.display = 'none';
         
-        // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
+        const { day, run_id } = resolveRunAndDay();
         
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        
-        if (!day || !run_id) {
-            console.error('❌ Cannot load bin details: missing day or run_id');
+        if (!run_id) {
+            console.error('❌ Cannot load bin details: missing run_id');
             if (loadingDiv) {
                 loadingDiv.style.display = 'block';
-                loadingDiv.innerHTML = `<div>Error: Missing day or run_id</div>`;
+                loadingDiv.innerHTML = `<div>Error: Missing run_id</div>`;
             }
             return;
         }
         
         try {
-            const apiUrl = `/api/bins?segment_id=${segId}&limit=50000&run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+            const qp = new URLSearchParams({ segment_id: segId, limit: '50000', run_id });
+            if (day) qp.set('day', day);
+            const apiUrl = `/api/bins?${qp.toString()}`;
             const response = await fetch(apiUrl, { cache: 'no-store' });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);

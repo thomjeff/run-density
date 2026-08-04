@@ -132,33 +132,39 @@
     let overlapSummary = null;
     let overlapChart = null;
     
-    // Load flow data on page load
+    // Load flow data on page load (and after chrome derives day — Issue #841)
     document.addEventListener('DOMContentLoaded', function() {
         initializeSorting();
         loadFlowData();
         loadOverlapData();
+        window.addEventListener('runflow:context-ready', function () {
+            loadFlowData();
+            loadOverlapData();
+        });
     });
+
+    function resolveRunAndDay() {
+        const params = new URLSearchParams(window.location.search);
+        const run_id = (params.get('run_id') || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
+        const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
+        return { day, run_id };
+    }
     
     function loadFlowData() {
-        // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
+        const { day, run_id } = resolveRunAndDay();
         
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch flow data without day+run_id', {
+        if (!run_id) {
+            console.error('❌ Refusing to fetch flow data without run_id', {
                 href: window.location.href,
-                dayParam, runParam,
                 runflowDay: window.runflowDay
             });
             showFlowError();
             return;
         }
         
-        const apiUrl = `/api/flow/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/flow/segments?${qp.toString()}`;
         console.log('Loading flow data via API...', { apiUrl, day, run_id });
         
         fetch(apiUrl, { cache: 'no-store' })
@@ -441,19 +447,17 @@
     }
 
     function loadOverlapData() {
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        const { day, run_id } = resolveRunAndDay();
 
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch overlap data without day+run_id', { day, run_id });
+        if (!run_id) {
+            console.error('❌ Refusing to fetch overlap data without run_id', { day, run_id });
             showOverlapError();
             return;
         }
 
-        const apiUrl = `/api/bidirectional/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/bidirectional/segments?${qp.toString()}`;
         fetch(apiUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) {
@@ -515,20 +519,20 @@
     }
 
     function loadOverlapDetail(segment) {
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        if (!day || !run_id) {
+        const { day, run_id } = resolveRunAndDay();
+        if (!run_id) {
             showOverlapError();
             return;
         }
 
-        let apiUrl = `/api/bidirectional/segment/${encodeURIComponent(segment.seg_id)}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}&event_a=${encodeURIComponent(segment.event_a)}&event_b=${encodeURIComponent(segment.event_b)}`;
-        if (segment.flow_id) {
-            apiUrl += `&flow_id=${encodeURIComponent(segment.flow_id)}`;
-        }
+        const qp = new URLSearchParams({
+            run_id,
+            event_a: segment.event_a,
+            event_b: segment.event_b,
+        });
+        if (day) qp.set('day', day);
+        if (segment.flow_id) qp.set('flow_id', segment.flow_id);
+        let apiUrl = `/api/bidirectional/segment/${encodeURIComponent(segment.seg_id)}?${qp.toString()}`;
         fetch(apiUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) {

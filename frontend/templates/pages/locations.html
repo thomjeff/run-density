@@ -274,28 +274,35 @@
                 loadLocationsData();
             }
         }, 200);
+        window.addEventListener('runflow:context-ready', function () {
+            if (!tableDataLoaded) {
+                loadLocationsData();
+            }
+        });
     });
+
+    function resolveRunAndDay() {
+        const params = new URLSearchParams(window.location.search);
+        const run_id = (params.get('run_id') || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
+        const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
+        return { day, run_id };
+    }
     
     function loadLocationsData() {
-        // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
+        const { day, run_id } = resolveRunAndDay();
         
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
-        
-        if (!day || !run_id) {
-            console.error('❌ Refusing to fetch locations data without day+run_id', {
+        if (!run_id) {
+            console.error('❌ Refusing to fetch locations data without run_id', {
                 href: window.location.href,
-                dayParam, runParam,
                 runflowDay: window.runflowDay
             });
-            showLocationsError('Failed to load locations data: missing day or run_id');
+            showLocationsError('Failed to load locations data: missing run_id');
             return;
         }
         
-        const apiUrl = `/api/locations?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        const apiUrl = `/api/locations?${qp.toString()}`;
         console.log('Loading locations data via API...', { apiUrl, day, run_id });
         
         fetch(apiUrl, { cache: 'no-store' })
@@ -1127,9 +1134,8 @@
     }
 
     function getRunDayForLocSheets() {
-        const params = new URLSearchParams(window.location.search);
-        const day = (params.get('day') || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (params.get('run_id') || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
+        const run_id = ((new URLSearchParams(window.location.search).get('run_id')) || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
         return { day, run_id };
     }
 

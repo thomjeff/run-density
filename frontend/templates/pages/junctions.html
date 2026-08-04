@@ -90,16 +90,17 @@
     function resolveRunId() {
         const params = new URLSearchParams(window.location.search);
         return params.get("run_id")
-            || (window.runflowDay && window.runflowDay.runId)
-            || localStorage.getItem("runflow_run_id")
+            || (window.runflowDay && window.runflowDay.run_id)
+            || localStorage.getItem("selected_run_id")
             || null;
     }
 
     function resolveDay() {
-        const params = new URLSearchParams(window.location.search);
-        return params.get("day")
-            || (window.runflowDay && window.runflowDay.day)
-            || null;
+        // Issue #841: prefer run-derived day; ignore stale ?day= until chrome resolves
+        if (window.runflowDay && window.runflowDay.selected) {
+            return String(window.runflowDay.selected).toLowerCase();
+        }
+        return (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
     }
 
     function formatEventList(events) {
@@ -428,7 +429,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", load);
-    window.addEventListener("runflow-context-ready", load);
+    window.addEventListener("runflow:context-ready", load);
 })();
 </script>
 {% endblock %}

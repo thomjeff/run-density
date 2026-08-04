@@ -70,12 +70,13 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar: **Runflow** | **Runs ▾** | Overview · Segments · Density · Flow · Locations · Reports | **Build** | Day (multi-day) | Logout
+- Top bar: **Runflow** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Reports | **Build** | Logout
 - **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard`
-- Picking a run opens **`/overview?run_id=&day=`** (Analysis Inputs + Analysis Outputs)
-- Context strip: Active run · label · short id · day · **Package**
+- Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
+- Context strip: Active run · label · short id · day (read-only) · **Open source package**
 - Runs catalog is history-only
 - Build hub uses Tabler **card-header-tabs** for Legs / Courses / Packages
+- Historical multi-day analysis trees are not browsed in product chrome; archive offline if needed
 
 ### Attribution & license
 
