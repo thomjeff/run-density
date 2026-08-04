@@ -646,8 +646,6 @@
         if (isNaN(idx) || idx < 0) return;
         pendingLocationFocus = { legId: legId, locIndex: idx };
         legLocationsBrowserHighlightKey = legLocKey(legId, idx);
-        var legSel = document.getElementById('leg-locations-filter-leg');
-        if (legSel) legSel.value = legId;
         if (!isOrgLegsHubMode()) {
             var url = new URL(window.location.href);
             url.searchParams.delete('id');
@@ -666,11 +664,12 @@
     }
 
     function getLegLocationsBrowserFilters() {
-        var legSel = document.getElementById('leg-locations-filter-leg');
+        var zoneSel = document.getElementById('leg-locations-filter-zone');
         var typeSel = document.getElementById('leg-locations-filter-type');
         var searchInp = document.getElementById('leg-locations-filter-search');
         return {
-            legId: legSel ? String(legSel.value || '').trim() : '',
+            legId: selectedLegId ? String(selectedLegId).trim() : '',
+            zone: zoneSel ? String(zoneSel.value || '').trim() : '',
             type: typeSel ? String(typeSel.value || '').trim().toLowerCase() : '',
             query: searchInp ? String(searchInp.value || '').trim().toLowerCase() : ''
         };
@@ -679,6 +678,10 @@
     function legLocationRowMatchesFilters(row, filters) {
         if (!row || !row.loc) return false;
         if (filters.legId && row.legId !== filters.legId) return false;
+        if (filters.zone) {
+            var zone = String(row.loc.zone != null ? row.loc.zone : '').trim();
+            if (zone.toLowerCase() !== filters.zone.toLowerCase()) return false;
+        }
         var locType = String(row.loc.loc_type || 'course').toLowerCase();
         if (filters.type && locType !== filters.type) return false;
         if (filters.query) {
@@ -766,24 +769,32 @@
     }
 
     function populateLegLocationsBrowserFilters() {
-        var legSel = document.getElementById('leg-locations-filter-leg');
+        var zoneSel = document.getElementById('leg-locations-filter-zone');
         var typeSel = document.getElementById('leg-locations-filter-type');
-        if (!legSel || !typeSel) return;
-        var prevLeg = legSel.value;
+        if (!zoneSel || !typeSel) return;
+        var prevZone = zoneSel.value;
         var prevType = typeSel.value;
-        legSel.innerHTML = '';
-        var allLeg = document.createElement('option');
-        allLeg.value = '';
-        allLeg.textContent = 'All legs';
-        legSel.appendChild(allLeg);
-        (libraryState && libraryState.legs || []).forEach(function (leg) {
-            var opt = document.createElement('option');
-            opt.value = leg.id;
-            opt.textContent = leg.id + ' — ' + ((leg.leg_label || '').slice(0, 36) || leg.id);
-            legSel.appendChild(opt);
+        var zoneSet = {};
+        collectAllLegLocationRows().forEach(function (row) {
+            var zone = String(row.loc && row.loc.zone != null ? row.loc.zone : '').trim();
+            if (zone) zoneSet[zone] = true;
         });
-        if (prevLeg && legSel.querySelector('option[value="' + prevLeg + '"]')) {
-            legSel.value = prevLeg;
+        var zones = Object.keys(zoneSet).sort(function (a, b) {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+        zoneSel.innerHTML = '';
+        var allZone = document.createElement('option');
+        allZone.value = '';
+        allZone.textContent = 'All zones';
+        zoneSel.appendChild(allZone);
+        zones.forEach(function (zone) {
+            var opt = document.createElement('option');
+            opt.value = zone;
+            opt.textContent = zone;
+            zoneSel.appendChild(opt);
+        });
+        if (prevZone && zoneSel.querySelector('option[value="' + prevZone + '"]')) {
+            zoneSel.value = prevZone;
         }
         typeSel.innerHTML = '';
         var allType = document.createElement('option');
@@ -820,13 +831,19 @@
             return legLocationRowMatchesFilters(row, filters);
         });
         if (statusEl) {
+            var scope = filters.legId
+                ? 'on leg ' + filters.legId
+                : 'across all legs (no leg selected)';
+            if (filters.zone) scope += ' × zone ' + filters.zone;
             statusEl.textContent =
                 rows.length +
                 ' of ' +
                 allRows.length +
                 ' location' +
                 (allRows.length === 1 ? '' : 's') +
-                ' shown. Use the view action to edit on the map.';
+                ' shown ' +
+                scope +
+                '. Use the view action to edit on the map.';
         }
         renderLegLocationsBrowserHeader();
         tbody.innerHTML = '';
@@ -929,7 +946,7 @@
                 renderAllLegLocationsMapLayer();
             });
         }
-        ['leg-locations-filter-leg', 'leg-locations-filter-type'].forEach(function (id) {
+        ['leg-locations-filter-zone', 'leg-locations-filter-type'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) {
                 el.addEventListener('change', function () {
@@ -3555,6 +3572,27 @@
         });
         appendLegPopupField(content, 'Type', sel);
 
+        var sourceLegIdForEdit =
+            mode === 'edit-saved' && selectedLegId ? String(selectedLegId) : '';
+        var legMoveSel = null;
+        if (
+            mode === 'edit-saved' &&
+            sourceLegIdForEdit &&
+            usesOrgLegLibrary() &&
+            isOrgLegsHubMode()
+        ) {
+            legMoveSel = document.createElement('select');
+            (libraryState && libraryState.legs || []).forEach(function (leg) {
+                var opt = document.createElement('option');
+                opt.value = leg.id;
+                opt.textContent =
+                    leg.id + ' — ' + ((leg.leg_label || '').slice(0, 40) || leg.id);
+                if (leg.id === sourceLegIdForEdit) opt.selected = true;
+                legMoveSel.appendChild(opt);
+            });
+            appendLegPopupField(content, 'Leg', legMoveSel);
+        }
+
         var excludeProxyKey =
             mode === 'edit-saved' && selectedLegId && opts.locIndex != null
                 ? legLocKey(selectedLegId, opts.locIndex)
@@ -3775,6 +3813,60 @@
                 var locIndex = opts.locIndex;
                 var leg = getSelectedLeg();
                 if (!leg || locIndex == null || !selectedLegId) return;
+                var targetLegId = legMoveSel
+                    ? String(legMoveSel.value || '').trim()
+                    : selectedLegId;
+                if (targetLegId && targetLegId !== selectedLegId) {
+                    if (
+                        !window.confirm(
+                            'Move "' +
+                                locLabel +
+                                '" from leg ' +
+                                selectedLegId +
+                                ' to leg ' +
+                                targetLegId +
+                                '?'
+                        )
+                    ) {
+                        return;
+                    }
+                    var locationsForMove = (leg.locations || []).slice();
+                    if (locIndex < 0 || locIndex >= locationsForMove.length) return;
+                    var movedLoc = applyLegLocationLabelType(
+                        locationsForMove[locIndex],
+                        locLabel,
+                        locType
+                    );
+                    applyOpsFields(movedLoc);
+                    locationsForMove[locIndex] = movedLoc;
+                    map.closePopup();
+                    setLegStatus('Moving location…');
+                    saveLegLocations(selectedLegId, locationsForMove)
+                        .then(function () {
+                            return moveOrgLegLocation(selectedLegId, locIndex, targetLegId);
+                        })
+                        .then(function (data) {
+                            var newIdx =
+                                data && data.new_loc_index != null
+                                    ? data.new_loc_index
+                                    : null;
+                            setLegStatus(
+                                'Location moved to leg ' + targetLegId + '.'
+                            );
+                            if (newIdx != null) {
+                                navigateToLegLocation(targetLegId, newIdx, {
+                                    scroll: false,
+                                });
+                            } else {
+                                selectLegById(targetLegId, { preserveZoom: true });
+                            }
+                        })
+                        .catch(function (err) {
+                            redrawLegLocationMarkers(getSelectedLeg());
+                            setLegStatus(err.message || String(err), true);
+                        });
+                    return;
+                }
                 var locations = (leg.locations || []).slice();
                 if (locIndex < 0 || locIndex >= locations.length) return;
                 var savedLoc = applyLegLocationLabelType(
@@ -3993,7 +4085,11 @@
         invalidateLegGeometryRequests();
         clearLegMapLayers();
         selectedLegId = null;
+        document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
+            tr.classList.remove('selected');
+        });
         updateLegActionButtons();
+        renderLegLocationsBrowser();
     }
 
     function saveLegEndpoints(legId, startLabel, endLabel) {
@@ -4063,6 +4159,7 @@
         document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
             tr.classList.toggle('selected', tr.dataset.legId === legId);
         });
+        renderLegLocationsBrowser();
         if (!options.keepPinMode) {
             stopLegLocationPinMode();
         }
@@ -4125,6 +4222,10 @@
 
     function selectLeg(leg) {
         if (!leg) return;
+        if (selectedLegId === leg.id) {
+            clearLegMap();
+            return;
+        }
         selectLegById(leg.id);
     }
 
@@ -4394,6 +4495,33 @@
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 return afterLegLibraryMutation(payload.data);
+            });
+    }
+
+    function moveOrgLegLocation(sourceLegId, locIndex, targetLegId) {
+        return fetch(
+            '/api/org/legs/' +
+                encodeURIComponent(sourceLegId) +
+                '/locations/' +
+                encodeURIComponent(String(locIndex)) +
+                '/move',
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_leg_id: targetLegId }),
+            }
+        )
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    return payload.data;
+                });
             });
     }
 
