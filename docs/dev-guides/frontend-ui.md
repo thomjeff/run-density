@@ -70,12 +70,15 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar: **Runflow** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Reports | **Build** | Logout
-- **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard`
+- Top bar (Results): **Runflow** | **Results ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Reports | Logout
+- Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Packages | Logout
+- Workspace control switches Results ↔ Build (mutually exclusive chrome; Issue #842)
+- **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Results only)
 - Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
-- Context strip: Active run · label · short id · day (read-only) · **Open source package**
+- Context strip removed: run label/id/day live on the Results run dropdown; **Package** nav link (after Reports) opens the source config when known
+- Last Results route/run and last Build route are restored when switching workspaces
 - Runs catalog is history-only
-- Build hub uses Tabler **card-header-tabs** for Legs / Courses / Packages
+- Build hub page still has Legs / Courses / Packages panels; top nav mirrors hub views
 - Historical multi-day analysis trees are not browsed in product chrome; archive offline if needed
 
 ### Attribution & license
