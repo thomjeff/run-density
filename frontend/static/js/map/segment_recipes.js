@@ -612,7 +612,7 @@
         var row = document.getElementById('leg-locations-browser-thead-row');
         if (!row) return;
         row.innerHTML = '';
-        ['Leg #', 'ID', 'Label', 'Type', 'Proxy'].forEach(function (text) {
+        ['Leg #', 'ID', 'Label', 'Type', 'Zone', 'Proxy'].forEach(function (text) {
             var th = document.createElement('th');
             th.textContent = text;
             row.appendChild(th);
@@ -852,6 +852,9 @@
                 String(row.locIndex),
                 (row.loc.loc_label || '').slice(0, 48),
                 row.loc.loc_type || 'course',
+                row.loc.zone != null && String(row.loc.zone).trim() !== ''
+                    ? String(row.loc.zone).trim()
+                    : '—',
                 formatLegLocationProxyDisplay(row.loc),
             ].forEach(function (text) {
                 var td = document.createElement('td');
