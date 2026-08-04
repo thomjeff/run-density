@@ -878,6 +878,9 @@
         function switchWorkspaceTab(tab, cid) {
             window.history.pushState({}, '', buildConfigUrl(cid, tab));
             setActiveTab(tab);
+            if (typeof window.rfRememberWorkspaceRoute === 'function') {
+                window.rfRememberWorkspaceRoute();
+            }
         }
 
         document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
@@ -886,6 +889,9 @@
                 if (!view) return;
                 window.history.pushState({}, '', buildConfigUrl(null, null, view));
                 showHubView(view);
+                if (typeof window.rfRememberWorkspaceRoute === 'function') {
+                    window.rfRememberWorkspaceRoute();
+                }
             });
         });
 

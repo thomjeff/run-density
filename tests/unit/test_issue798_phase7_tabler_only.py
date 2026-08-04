@@ -77,5 +77,5 @@ def test_base_html_no_day_selector_markup(base_source: str):
     assert 'id="rf-tabler-context-day"' in base_source
     # Results nav is run_id-primary (day stripped from analysis links)
     assert 'setQueryParam(newHref, "day", null)' in base_source
-    assert 'window.location.href = "/overview?run_id="' in base_source or \
-        'window.location.href = "/overview?run_id=" + encodeURIComponent(runId)' in base_source
+    assert '"/overview?run_id=" + encodeURIComponent(runId)' in base_source
+    assert "initWorkspaceControl" in base_source

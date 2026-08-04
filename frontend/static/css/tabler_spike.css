@@ -30,6 +30,42 @@ html.rf-tabler .navbar .nav-link.active {
     color: var(--tblr-primary, #206bc4);
 }
 
+/* Issue #842: workspace control vs run dropdown vs page links */
+html.rf-tabler .rf-workspace-toggle {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #182433;
+    border: 1px solid var(--tblr-border-color, #e6e7e9);
+    border-radius: 0.35rem;
+    padding: 0.25rem 0.55rem;
+    margin-right: 0.15rem;
+    background: #f8fafc;
+}
+
+html.rf-tabler .rf-workspace-toggle:hover,
+html.rf-tabler .rf-workspace-toggle.show {
+    background: #eef2f7;
+    color: #182433;
+}
+
+html.rf-tabler .rf-runs-toggle {
+    font-weight: 600;
+    color: #3b4a5a;
+}
+
+html.rf-tabler .rf-runs-toggle.active {
+    color: var(--tblr-primary, #206bc4);
+}
+
+html.rf-tabler .rf-build-chrome .nav-link.active,
+html.rf-tabler .rf-results-chrome .nav-link.active {
+    font-weight: 700;
+}
+
+html.rf-tabler #rf-workspace-menu .dropdown-item.active {
+    font-weight: 600;
+}
+
 html.rf-tabler .page-wrapper {
     background: #f1f5f9;
 }

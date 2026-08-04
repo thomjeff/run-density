@@ -8,7 +8,7 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
-    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=796k">
+    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=842a">
     
     {% block extra_styles %}{% endblock %}
     
@@ -32,7 +32,7 @@
                     <a class="nav-link px-2 text-danger" href="/logout">Logout</a>
                 </div>
                 <div class="collapse navbar-collapse" id="rf-tabler-menu">
-                    <ul class="navbar-nav">
+                    <ul class="navbar-nav align-items-md-center">
                         {% if cloud_mode %}
                         <li class="nav-item">
                             <a class="nav-link{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="/dashboard">Runs</a>
@@ -41,8 +41,18 @@
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations">Locations</a>
                         </li>
                         {% else %}
-                        <li class="nav-item dropdown" id="rf-runs-dropdown">
-                            <a class="nav-link dropdown-toggle{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="#" id="rf-runs-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        {# Issue #842: mutually exclusive Results | Build workspace control #}
+                        <li class="nav-item dropdown" id="rf-workspace-dropdown">
+                            <a class="nav-link dropdown-toggle rf-workspace-toggle" href="#" id="rf-workspace-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Switch workspace">
+                                <span id="rf-workspace-label">Results</span>
+                            </a>
+                            <div class="dropdown-menu" id="rf-workspace-menu" aria-labelledby="rf-workspace-toggle">
+                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="results">Results</a>
+                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="build">Build</a>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown rf-results-chrome" id="rf-runs-dropdown">
+                            <a class="nav-link dropdown-toggle rf-runs-toggle{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="#" id="rf-runs-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                 <span id="rf-runs-trigger-label">Runs</span>
                             </a>
                             <div class="dropdown-menu" id="rf-runs-dropdown-menu">
@@ -54,29 +64,35 @@
                                 <a class="dropdown-item" id="rf-runs-view-all" href="/dashboard">View all runs…</a>
                             </div>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/overview' %} active{% endif %}" href="/overview" data-rf-run-view="1">Overview</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/segments' %} active{% endif %}" href="/segments" data-rf-run-view="1">Segments</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/density' %} active{% endif %}" href="/density" data-rf-run-view="1">Density</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/flow' %} active{% endif %}" href="/flow" data-rf-run-view="1">Flow</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/junctions' %} active{% endif %}" href="/junctions" data-rf-run-view="1">Junctions</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations" data-rf-run-view="1">Locations</a>
                         </li>
-                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link{% if request.url and (request.url.path == '/config' or request.url.path.startswith('/race-configuration')) %} active{% endif %}" href="/config" title="Legs, Courses, and Packages">Build</a>
+                        <li class="nav-item rf-build-chrome" hidden>
+                            <a class="nav-link" href="/config?view=legs" data-rf-build-view="legs">Legs</a>
+                        </li>
+                        <li class="nav-item rf-build-chrome" hidden>
+                            <a class="nav-link" href="/config?view=courses" data-rf-build-view="courses">Courses</a>
+                        </li>
+                        <li class="nav-item rf-build-chrome" hidden>
+                            <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
                         </li>
                         {% endif %}
                     </ul>
@@ -203,6 +219,142 @@
             return isResultsRoutePath(pathname);
         }
 
+        const WS_KEY = "rf_workspace";
+        const WS_LAST_RESULTS = "rf_last_results_path";
+        const WS_LAST_BUILD = "rf_last_build_path";
+        const DEFAULT_RESULTS_PATH = "/overview";
+        const DEFAULT_BUILD_PATH = "/config?view=legs";
+
+        function currentPathWithQuery() {
+            return window.location.pathname + (window.location.search || "");
+        }
+
+        function workspaceFromPath(pathname) {
+            if (isConfigRoutePath(pathname)) return "build";
+            if (isResultsRoutePath(pathname)) return "results";
+            return null;
+        }
+
+        function getStoredWorkspace() {
+            const raw = (localStorage.getItem(WS_KEY) || "").trim().toLowerCase();
+            return raw === "build" ? "build" : "results";
+        }
+
+        function setStoredWorkspace(ws) {
+            localStorage.setItem(WS_KEY, ws === "build" ? "build" : "results");
+        }
+
+        function rememberWorkspaceRoute(ws, pathOverride) {
+            const path = pathOverride || currentPathWithQuery();
+            if (!path || path === "/" || path === "/login" || path === "/logout") return;
+            if (ws === "build") {
+                localStorage.setItem(WS_LAST_BUILD, path);
+            } else if (ws === "results") {
+                // Prefer analysis pages over bare dashboard for restore
+                localStorage.setItem(WS_LAST_RESULTS, path);
+            }
+        }
+
+        function lastResultsPath() {
+            const stored = (localStorage.getItem(WS_LAST_RESULTS) || "").trim();
+            if (stored) return stored;
+            const runId = (localStorage.getItem("selected_run_id") || "").trim();
+            return runId ? ("/overview?run_id=" + encodeURIComponent(runId)) : DEFAULT_RESULTS_PATH;
+        }
+
+        function lastBuildPath() {
+            return (localStorage.getItem(WS_LAST_BUILD) || "").trim() || DEFAULT_BUILD_PATH;
+        }
+
+        function applyWorkspaceChrome(ws) {
+            const isBuild = ws === "build";
+            document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
+                // Run-view links still gate on hasRun via syncTablerRunNav; hide whole Results chrome in Build
+                if (isBuild) {
+                    el.hidden = true;
+                } else if (el.classList.contains("rf-tabler-run-view-link")) {
+                    // leave for syncTablerRunNav
+                } else {
+                    el.hidden = false;
+                }
+            });
+            document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
+                el.hidden = !isBuild;
+            });
+            const label = document.getElementById("rf-workspace-label");
+            if (label) label.textContent = isBuild ? "Build" : "Results";
+            document.querySelectorAll(".rf-workspace-pick").forEach(function (a) {
+                a.classList.toggle("active", a.getAttribute("data-workspace") === ws);
+            });
+            const toggle = document.getElementById("rf-workspace-toggle");
+            if (toggle) {
+                toggle.classList.toggle("active", true);
+                toggle.setAttribute("aria-label", isBuild ? "Workspace: Build" : "Workspace: Results");
+            }
+            // Mark active Build hub link from URL
+            if (isBuild) {
+                const view = (new URLSearchParams(window.location.search).get("view") || "").toLowerCase();
+                const configId = (new URLSearchParams(window.location.search).get("config_id") || "").trim();
+                document.querySelectorAll("[data-rf-build-view]").forEach(function (a) {
+                    const v = a.getAttribute("data-rf-build-view");
+                    let active = false;
+                    if (configId) {
+                        // Nested package: highlight Packages
+                        active = v === "packages";
+                    } else {
+                        active = (view || "legs") === v;
+                    }
+                    a.classList.toggle("active", active);
+                });
+            }
+        }
+
+        function switchWorkspace(ws) {
+            const target = ws === "build" ? "build" : "results";
+            setStoredWorkspace(target);
+            const dest = target === "build" ? lastBuildPath() : lastResultsPath();
+            if (dest === currentPathWithQuery()) {
+                applyWorkspaceChrome(target);
+                return;
+            }
+            window.location.href = dest;
+        }
+
+        function initWorkspaceControl() {
+            if (CLOUD_MODE) return;
+            const fromPath = workspaceFromPath(window.location.pathname);
+            const ws = fromPath || getStoredWorkspace();
+            setStoredWorkspace(ws);
+            rememberWorkspaceRoute(ws);
+            applyWorkspaceChrome(ws);
+
+            document.querySelectorAll(".rf-workspace-pick").forEach(function (a) {
+                a.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    switchWorkspace(a.getAttribute("data-workspace"));
+                });
+            });
+
+            // Brand returns to Results workspace (last Results route)
+            const brand = document.querySelector(".navbar-brand a");
+            if (brand) {
+                brand.addEventListener("click", function (ev) {
+                    if (getStoredWorkspace() === "build" || isConfigRoutePath(window.location.pathname)) {
+                        ev.preventDefault();
+                        switchWorkspace("results");
+                    }
+                });
+            }
+        }
+
+        window.rfRememberWorkspaceRoute = function () {
+            const fromPath = workspaceFromPath(window.location.pathname);
+            if (!fromPath) return;
+            setStoredWorkspace(fromPath);
+            rememberWorkspaceRoute(fromPath);
+            applyWorkspaceChrome(fromPath);
+        };
+
         function announceRunflowContextReady(runId, day) {
             // Issue #791 / #841: Results pages wait for run (and derived day) before empty CTA
             window.dispatchEvent(new CustomEvent("runflow:context-ready", {
@@ -218,8 +370,19 @@
         function syncTablerRunNav(runId, day) {
             if (!document.documentElement.classList.contains("rf-tabler")) return;
             const hasRun = !!(runId && String(runId).trim());
+            const onBuild = isConfigRoutePath(window.location.pathname)
+                || (!CLOUD_MODE && getStoredWorkspace() === "build");
+
+            // Issue #842: Results page links only in Results workspace
             document.querySelectorAll(".rf-tabler-run-view-link").forEach(function (li) {
-                li.hidden = !hasRun;
+                li.hidden = onBuild || !hasRun;
+            });
+            document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
+                if (el.classList.contains("rf-tabler-run-view-link")) return;
+                el.hidden = onBuild;
+            });
+            document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
+                el.hidden = !onBuild;
             });
 
             const strip = document.getElementById("rf-tabler-context-strip");
@@ -228,14 +391,12 @@
             const dayEl = document.getElementById("rf-tabler-context-day");
             const trigger = document.getElementById("rf-runs-trigger-label");
 
-            // Issue #815: Build mode does not need Active run chrome (avoids Package vs Packages clash)
-            const onBuild = isConfigRoutePath(window.location.pathname);
-
             if (!hasRun) {
                 if (strip) strip.hidden = true;
                 if (trigger) trigger.textContent = "Runs";
                 syncTablerPackageLink(null);
-                refreshRunsDropdown(null);
+                if (!onBuild) refreshRunsDropdown(null);
+                applyWorkspaceChrome(onBuild ? "build" : "results");
                 return;
             }
 
@@ -246,6 +407,7 @@
                 if (cached) label = cached;
             } catch (e) { /* ignore */ }
 
+            // Issue #815 / #842: Build never shows Active-run strip
             if (strip) strip.hidden = onBuild;
             if (labelEl) labelEl.textContent = label;
             if (idEl) {
@@ -265,9 +427,10 @@
                 const trunc = label.length > 28 ? label.slice(0, 26) + "…" : label;
                 trigger.textContent = trunc + " · " + shortRunId(id);
             }
-            // Package deep-link is analysis chrome only
+            // Package deep-link is Results chrome only
             syncTablerPackageLink(onBuild ? null : id);
-            refreshRunsDropdown(id);
+            if (!onBuild) refreshRunsDropdown(id);
+            applyWorkspaceChrome(onBuild ? "build" : "results");
         }
 
         function configIdFromDataDir(dataDir) {
@@ -296,10 +459,16 @@
                         return;
                     }
                     localStorage.setItem("selected_config_id", configId);
-                    link.href = "/config?config_id=" + encodeURIComponent(configId);
+                    // Do not flip workspace here — only navigating to Build should (Issue #842)
+                    const pkgPath = "/config?config_id=" + encodeURIComponent(configId);
+                    link.href = pkgPath;
                     link.textContent = "Open source package";
                     link.title = "Open source package " + configId;
                     link.hidden = false;
+                    link.onclick = function () {
+                        setStoredWorkspace("build");
+                        rememberWorkspaceRoute("build", pkgPath);
+                    };
                 })
                 .catch(function () {
                     link.hidden = true;
@@ -372,6 +541,7 @@
                 try { sessionStorage.setItem("rf_run_label_" + runId, label); } catch (e) { /* ignore */ }
             }
             localStorage.setItem("selected_run_id", runId);
+            setStoredWorkspace("results");
             fetch("/api/runs/" + encodeURIComponent(runId) + "/summary", { credentials: "same-origin" })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
@@ -379,10 +549,14 @@
                     // Issue #841: day from run only — do not carry ?day= in Results nav
                     const day = days.length ? String(days[0]).toLowerCase() : null;
                     if (day) localStorage.setItem("selected_day", day);
-                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId);
+                    const dest = "/overview?run_id=" + encodeURIComponent(runId);
+                    rememberWorkspaceRoute("results", dest);
+                    window.location.href = dest;
                 })
                 .catch(function () {
-                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId);
+                    const dest = "/overview?run_id=" + encodeURIComponent(runId);
+                    rememberWorkspaceRoute("results", dest);
+                    window.location.href = dest;
                 });
         }
 
@@ -392,6 +566,13 @@
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
                 if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
                 if (a.classList.contains("dropdown-toggle") || a.classList.contains("dropdown-item")) return;
+                if (a.classList.contains("rf-workspace-pick")) return;
+                const buildView = a.getAttribute("data-rf-build-view");
+                if (buildView) {
+                    // Issue #842: Build hub links stay view=legs|courses|packages (no run scoping)
+                    a.setAttribute("href", "/config?view=" + encodeURIComponent(buildView));
+                    return;
+                }
                 const linkPath = href.split("?")[0];
                 if (!linkPath) return;
                 let newHref = href.split("?")[0];
@@ -431,7 +612,6 @@
             if (configId) {
                 localStorage.setItem("selected_config_id", configId);
             }
-            // Keep Results nest visible while on Build (Issue #796); Active run strip hidden on Build (#815)
             const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
             const storedDay = (localStorage.getItem("selected_day") || "").trim() || null;
             updateNavLinks(storedDay, storedRun);
@@ -446,6 +626,9 @@
         }
 
         function initConfigPageNav() {
+            setStoredWorkspace("build");
+            rememberWorkspaceRoute("build");
+
             const params = new URLSearchParams(window.location.search);
             let changed = false;
             if (params.has("day")) {
@@ -471,10 +654,11 @@
                 const qs = p2.toString();
                 window.history.replaceState({}, "", window.location.pathname + (qs ? "?" + qs : ""));
             }
-            // Keep last Results run in top-bar views while authoring
+            // Keep last Results run for restore when switching back (Issue #842)
             const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
             const storedDay = (localStorage.getItem("selected_day") || "").trim() || null;
             updateNavLinks(storedDay, storedRun);
+            applyWorkspaceChrome("build");
         }
 
         /**
@@ -482,6 +666,8 @@
          * Derive day from the run; never show a day dropdown; strip ?day= from Results URLs.
          */
         async function initRunflowContext() {
+            initWorkspaceControl();
+
             if (isConfigRoutePath(window.location.pathname)) {
                 initConfigPageNav();
                 announceRunflowContextReady(
@@ -498,6 +684,9 @@
                 announceRunflowContextReady(storedRun, day);
                 return;
             }
+
+            setStoredWorkspace("results");
+            rememberWorkspaceRoute("results");
 
             const params = new URLSearchParams(window.location.search);
             const urlDayRaw = params.get("day");

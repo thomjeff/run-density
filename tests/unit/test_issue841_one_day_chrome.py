@@ -38,6 +38,8 @@ def test_runflow_context_strips_day_from_results_url(base_source: str):
 
 def test_pick_run_navigates_without_day_query(base_source: str):
     assert '"/overview?run_id=" + encodeURIComponent(runId)' in base_source
+    assert "rememberWorkspaceRoute(\"results\", dest)" in base_source or \
+        'rememberWorkspaceRoute("results", dest)' in base_source
 
 
 def test_active_run_strip_always_shows_day_when_known(base_source: str):
