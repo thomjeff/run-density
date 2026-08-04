@@ -34,3 +34,26 @@ def test_stamp_pass_identity_preserves_existing_shared_loc_id():
     assert get_loc_id(locs[1]) == 7
     assert get_pass_id(locs[0]) == 10
     assert get_pass_id(locs[1]) == 20
+
+
+def test_stamp_pass_identity_rejects_duplicate_loc_id_across_keys():
+    """Two different pass_keys must not keep the same human loc_id (#838)."""
+    locs = [
+        {
+            "id": 79,
+            "pass_key": "CKTV6",
+            "loc_id": 1,
+            "loc_label": "St John at Charlotte",
+        },
+        {
+            "id": 114,
+            "pass_key": "24NXJ",
+            "loc_id": 1,
+            "loc_label": "Aberdeen at Church",
+        },
+    ]
+    stamp_pass_identity(locs)
+    assert get_pass_id(locs[0]) == 79
+    assert get_pass_id(locs[1]) == 114
+    assert get_loc_id(locs[0]) != get_loc_id(locs[1])
+    assert {get_loc_id(locs[0]), get_loc_id(locs[1])} == {1, 2}

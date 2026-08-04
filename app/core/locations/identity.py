@@ -148,14 +148,16 @@ def _assign_human_loc_ids(locs: Sequence[Dict[str, Any]]) -> None:
         if len(group) >= 2 and len(unique) == 1:
             # Paired passes already share a human loc_id
             shared = next(iter(unique))
-            key_to_loc_id[key] = shared
-            used_loc_ids.add(shared)
+            if shared not in used_loc_ids:
+                key_to_loc_id[key] = shared
+                used_loc_ids.add(shared)
             continue
         if len(group) == 1 and loc_ids[0] is not None:
             lid = loc_ids[0]
             pid = get_pass_id(group[0])
             # Legacy CSV: loc_id was the pass instance — treat as unset
-            if lid != pid:
+            # Also skip if another pass_key already claimed this human id (#838).
+            if lid != pid and lid not in used_loc_ids:
                 key_to_loc_id[key] = lid
                 used_loc_ids.add(lid)
 
