@@ -53,12 +53,10 @@ function cleanFeature(feature) {
 
 function currentDayAndRun() {
     const urlParams = new URLSearchParams(window.location.search);
-    const dayParam = urlParams.get('day');
     const runParam = urlParams.get('run_id');
-    const dayFromSelect = document.getElementById('day-selector')?.value;
 
-    // Prefer URL → selector → global → storage fallbacks
-    const day = (dayParam || dayFromSelect || (window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '')
+    // Issue #841: prefer run-derived day from chrome; do not trust stale ?day=
+    const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || urlParams.get('day') || '')
         .toLowerCase()
         .trim();
     const run_id = runParam || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '';
@@ -74,28 +72,19 @@ function currentDayAndRun() {
  */
 async function loadSegments() {
     try {
-        // Resolve directly from URL to avoid any timing issues
-        const urlParams = new URLSearchParams(window.location.search);
-        const dayParam = urlParams.get("day");
-        const runParam = urlParams.get("run_id");
+        let { day, run_id } = currentDayAndRun();
 
-        let day = (dayParam || '').toLowerCase().trim();
-        let run_id = (runParam || '').trim();
-
-        // Hard guard: refuse to fetch without both values to avoid silent fallbacks
-        if (!run_id || !day) {
-            console.error("❌ Refusing to fetch segments without day+run_id", {
+        // Hard guard: need run_id; day may be omitted (API resolves from run — Issue #841)
+        if (!run_id) {
+            console.error("❌ Refusing to fetch segments without run_id", {
                 href: window.location.href,
-                dayParam,
-                runParam,
-                dayFromSelect: document.getElementById("day-selector")?.value,
                 runflowDay: window.runflowDay
             });
             return null;
         }
 
         const params = new URLSearchParams();
-        if (run_id) params.set('run_id', run_id);
+        params.set('run_id', run_id);
         if (day) params.set('day', day);
         params.set('_', Date.now().toString()); // cache buster during dev
         const apiUrl = `/api/segments/geojson?${params.toString()}`;
@@ -719,14 +708,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.map.on('moveend', debouncedFilterTableByMapBounds);
         window.map.on('zoomend', debouncedFilterTableByMapBounds);
         
-        // If day selector exists, trigger refresh on change to re-fetch correct day/run_id
-        const daySelector = document.getElementById('day-selector');
-        if (daySelector) {
-            daySelector.addEventListener('change', async () => {
-                await refreshSegmentsOnDayChange();
-            });
-        }
-        
         console.log('✅ Segments map initialized successfully with bounds filtering');
         
     } catch (error) {
@@ -740,6 +721,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Handle bfcache / soft navigation cases: refresh data when page is shown
 window.addEventListener('pageshow', async () => {
+    if (window.map) {
+        await refreshSegmentsOnDayChange();
+    }
+});
+
+// Refresh after chrome resolves run-derived day (Issue #841)
+window.addEventListener('runflow:context-ready', async () => {
     if (window.map) {
         await refreshSegmentsOnDayChange();
     }

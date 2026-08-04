@@ -28,12 +28,7 @@
                     </a>
                 </h1>
                 <div class="navbar-nav flex-row order-md-last align-items-center gap-1">
-                    <div id="day-selector-wrap" class="nav-item rf-tabler-day" style="display:none;" aria-hidden="true">
-                        <label for="day-selector" class="form-label mb-0 me-1 visually-hidden">Day</label>
-                        <select id="day-selector" class="form-select form-select-sm" style="min-width:88px;">
-                            <option value="">—</option>
-                        </select>
-                    </div>
+                    {# Issue #841: day dropdown removed — day is read-only from the run #}
                     <a class="nav-link px-2 text-danger" href="/logout">Logout</a>
                 </div>
                 <div class="collapse navbar-collapse" id="rf-tabler-menu">
@@ -208,15 +203,8 @@
             return isResultsRoutePath(pathname);
         }
 
-        function setDaySelectorVisible(visible) {
-            const wrap = document.getElementById("day-selector-wrap");
-            if (!wrap) return;
-            wrap.style.display = visible ? "flex" : "none";
-            wrap.setAttribute("aria-hidden", visible ? "false" : "true");
-        }
-
         function announceRunflowContextReady(runId, day) {
-            // Issue #791: Results pages (run_context) wait for day/run init before empty CTA
+            // Issue #791 / #841: Results pages wait for run (and derived day) before empty CTA
             window.dispatchEvent(new CustomEvent("runflow:context-ready", {
                 detail: { run_id: runId || null, day: day || null },
             }));
@@ -265,9 +253,8 @@
                 idEl.title = id;
             }
             if (dayEl) {
-                const multi = window.runflowDay && Array.isArray(window.runflowDay.available)
-                    && window.runflowDay.available.length > 1;
-                if (multi && day) {
+                // Issue #841: always show day as read-only run metadata when known
+                if (day) {
                     dayEl.textContent = "· " + String(day).toUpperCase();
                     dayEl.hidden = false;
                 } else {
@@ -389,14 +376,10 @@
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
                     const days = (data && data.days) || [];
-                    let day = (localStorage.getItem("selected_day") || "").trim().toLowerCase();
-                    if (day && days.length && days.indexOf(day) < 0) day = days[0];
-                    else if (!day && days.length) day = days[0];
+                    // Issue #841: day from run only — do not carry ?day= in Results nav
+                    const day = days.length ? String(days[0]).toLowerCase() : null;
                     if (day) localStorage.setItem("selected_day", day);
-                    const params = new URLSearchParams();
-                    params.set("run_id", runId);
-                    if (day) params.set("day", day);
-                    window.location.href = "/overview?" + params.toString();
+                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId);
                 })
                 .catch(function () {
                     window.location.href = "/overview?run_id=" + encodeURIComponent(runId);
@@ -424,12 +407,12 @@
                     newHref = setQueryParam(newHref, "run_id", null);
                     newHref = setQueryParam(newHref, "day", null);
                 } else if (isAnalysisRoutePath(linkPath)) {
-                    if (day) newHref = setQueryParam(newHref, "day", day);
+                    // Issue #841: Results nav is run_id-primary; day comes from the run
                     if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                    newHref = setQueryParam(newHref, "day", null);
                     // Catalog page should not require a run in the URL
                     if (linkPath === "/dashboard") {
                         newHref = setQueryParam(newHref, "run_id", null);
-                        newHref = setQueryParam(newHref, "day", null);
                     }
                     newHref = setQueryParam(newHref, "config_id", null);
                 }
@@ -463,8 +446,6 @@
         }
 
         function initConfigPageNav() {
-            setDaySelectorVisible(false);
-
             const params = new URLSearchParams(window.location.search);
             let changed = false;
             if (params.has("day")) {
@@ -496,10 +477,11 @@
             updateNavLinks(storedDay, storedRun);
         }
 
-        async function initDaySelector() {
-            const select = document.getElementById("day-selector");
-            if (!select) return;
-
+        /**
+         * Issue #841: one analysis run = one event day in product chrome.
+         * Derive day from the run; never show a day dropdown; strip ?day= from Results URLs.
+         */
+        async function initRunflowContext() {
             if (isConfigRoutePath(window.location.pathname)) {
                 initConfigPageNav();
                 announceRunflowContextReady(
@@ -509,9 +491,7 @@
                 return;
             }
 
-            // Day chrome belongs on Results routes only (Issue #791 Phase 0)
             if (!isResultsRoutePath(window.location.pathname)) {
-                setDaySelectorVisible(false);
                 const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
                 const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
                 updateNavLinks(day, storedRun);
@@ -519,18 +499,13 @@
                 return;
             }
 
-            setDaySelectorVisible(false); // show only after we know multi-day
-
             const params = new URLSearchParams(window.location.search);
             const urlDayRaw = params.get("day");
             const urlRunRaw = params.get("run_id");
-            const hasUrlDay = !!urlDayRaw;
             const hasUrlRun = !!urlRunRaw;
 
-            // Start with URL as canonical, then fall back to storage
-            let selectedDay = (urlDayRaw || localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+            let selectedDay = null;
             let runId = (urlRunRaw || localStorage.getItem("selected_run_id") || "").trim() || null;
-
             let availableDays = [];
 
             if (CLOUD_MODE) {
@@ -544,24 +519,16 @@
 
             if (!CLOUD_MODE) {
                 try {
-                    // Issue #565: If run_id is in URL, pass it to API to get correct available_days for that run
-                    // Otherwise, get latest run_id from API
+                    // Do not pass URL day — stale ?day= must not poison resolution (Issue #841)
                     let url = "/api/dashboard/summary";
-                    const qp = [];
-                    
                     if (hasUrlRun) {
-                        // URL has run_id - pass it to API to get available_days for that specific run
-                        qp.push(`run_id=${encodeURIComponent(urlRunRaw)}`);
+                        url += "?run_id=" + encodeURIComponent(urlRunRaw);
                         runId = urlRunRaw;
                     }
-                    // Only pass day if we have it
-                    if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
-                    if (qp.length) url += `?${qp.join("&")}`;
 
                     const resp = await fetch(url, { cache: "no-store" });
                     const data = await resp.json();
 
-                    // If no run_id in URL, use latest from API
                     if (!hasUrlRun) {
                         const latestRunId = data?.run_id;
                         if (latestRunId) {
@@ -569,103 +536,62 @@
                         }
                     }
 
-                    // Fill missing day if not in URL
-                    if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
-
                     availableDays = Array.isArray(data?.available_days)
-                        ? data.available_days.map(d => d.toLowerCase())
+                        ? data.available_days.map(d => String(d).toLowerCase())
                         : [];
+                    if (data?.selected_day) {
+                        selectedDay = String(data.selected_day).toLowerCase();
+                    }
                 } catch (e) {
-                    console.warn("Day selector: failed to load dashboard summary for day metadata", e);
+                    console.warn("Runflow context: failed to load dashboard summary for day metadata", e);
                 }
             }
 
-            // Issue #565: If run_id is set, only use available_days from API (don't add invalid days)
-            // If no run_id, keep empty — do not invent fri/sat/sun/mon
-            if (!availableDays.length) {
-                if (runId && selectedDay) {
-                    availableDays = [selectedDay];
-                } else if (!runId && selectedDay) {
-                    availableDays = [selectedDay];
+            // Prefer run-derived day. Accept URL day only when it is still valid for this run.
+            const urlDay = (urlDayRaw || "").toLowerCase().trim() || null;
+            if (availableDays.length) {
+                if (urlDay && availableDays.includes(urlDay)) {
+                    selectedDay = urlDay;
                 } else {
-                    availableDays = [];
+                    selectedDay = availableDays[0];
                 }
-            } else if (selectedDay && !availableDays.includes(selectedDay)) {
-                // URL has a day that's not available for this run_id - remove it and use first available
-                selectedDay = availableDays[0] || null;
-                // Update URL to remove invalid day or set to first available
-                const params = new URLSearchParams(window.location.search);
-                if (selectedDay) {
-                    params.set("day", selectedDay);
-                } else {
-                    params.delete("day");
+            } else if (urlDay) {
+                // No available_days from API — keep storage/URL only as last resort
+                selectedDay = urlDay;
+            } else {
+                selectedDay = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+            }
+
+            // Canonical Results URL is run_id-only (strip day / keep run_id)
+            {
+                const p = new URLSearchParams(window.location.search);
+                let changed = false;
+                if (p.has("day")) {
+                    p.delete("day");
+                    changed = true;
                 }
-                if (runId) params.set("run_id", runId);
-                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
-                if (newUrl !== window.location.pathname + window.location.search) {
+                if (runId && p.get("run_id") !== runId) {
+                    p.set("run_id", runId);
+                    changed = true;
+                }
+                if (CLOUD_MODE && runId) {
+                    p.set("run_id", runId);
+                    changed = true;
+                }
+                const newUrl = window.location.pathname + (p.toString() ? "?" + p.toString() : "");
+                if (changed && newUrl !== window.location.pathname + window.location.search) {
                     window.history.replaceState({}, "", newUrl);
                 }
             }
 
-            select.innerHTML = "";
-            availableDays.forEach(day => {
-                const opt = document.createElement("option");
-                opt.value = day; // keep lowercase
-                opt.textContent = day.toUpperCase();
-                select.appendChild(opt);
-            });
-
-            // Issue #565: Only set selected day if it's in availableDays for this run_id
-            if (selectedDay && availableDays.includes(selectedDay)) {
-                select.value = selectedDay;
-            } else if (availableDays.length > 0) {
-                // If selectedDay is not available, use first available day
-                selectedDay = availableDays[0];
-                select.value = selectedDay;
-                // Update URL if day changed
-                const params = new URLSearchParams(window.location.search);
-                params.set("day", selectedDay);
-                if (runId) params.set("run_id", runId);
-                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
-                if (newUrl !== window.location.pathname + window.location.search) {
-                    window.history.replaceState({}, "", newUrl);
-                }
-            }
-
-            // Show Day control only when the selected run has more than one day
-            setDaySelectorVisible(availableDays.length > 1);
-
-            if (CLOUD_MODE) {
-                // Force canonical run_id and day in URL for cloud mode
-                const params = new URLSearchParams(window.location.search);
-                if (runId) params.set("run_id", runId);
-                if (selectedDay) params.set("day", selectedDay);
-                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
-                if (newUrl !== window.location.pathname + window.location.search) {
-                    window.history.replaceState({}, "", newUrl);
-                }
-            }
-
-            // Persist canonical state and update nav links
             if (selectedDay) localStorage.setItem("selected_day", selectedDay);
             if (runId) localStorage.setItem("selected_run_id", runId);
             updateNavLinks(selectedDay, runId);
             window.runflowDay = { selected: selectedDay, available: availableDays, run_id: runId };
             announceRunflowContextReady(runId, selectedDay);
-
-            select.addEventListener("change", (e) => {
-                if (isConfigRoutePath(window.location.pathname) || !isResultsRoutePath(window.location.pathname)) {
-                    return;
-                }
-                const day = (e.target.value || "").toLowerCase().trim();
-                if (!runId) return; // do not navigate without run_id
-                localStorage.setItem("selected_day", day);
-                const newUrl = setQueryParam(setQueryParam(window.location.href, "day", day), "run_id", runId);
-                window.location.href = newUrl;
-            });
         }
 
-        document.addEventListener("DOMContentLoaded", initDaySelector);
+        document.addEventListener("DOMContentLoaded", initRunflowContext);
     })();
     </script>
 </body>

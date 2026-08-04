@@ -859,43 +859,18 @@
     }
     
     function updateDaySelector(availableDays) {
-        // Update day selector in navbar
-        const daySelector = document.getElementById('day-selector');
-        if (daySelector && availableDays && availableDays.length > 0) {
-            // Clear existing options
-            daySelector.innerHTML = '';
-            
-            // Add options for available days
-            const DAY_ORDER = ["fri", "sat", "sun", "mon"];
-            const orderedDays = availableDays.sort((a, b) => {
-                const aIdx = DAY_ORDER.indexOf(a);
-                const bIdx = DAY_ORDER.indexOf(b);
-                if (aIdx === -1 && bIdx === -1) return 0;
-                if (aIdx === -1) return 1;
-                if (bIdx === -1) return -1;
-                return aIdx - bIdx;
-            });
-            
-            orderedDays.forEach(day => {
-                const option = document.createElement('option');
-                option.value = day;
-                option.textContent = day.toUpperCase();
-                daySelector.appendChild(option);
-            });
-            
-            // Update window.runflowDay
+        // Issue #841: no day dropdown — keep runflowDay.available in sync only
+        if (availableDays && availableDays.length > 0) {
             if (window.runflowDay) {
                 window.runflowDay.available = availableDays;
             } else {
                 window.runflowDay = { available: availableDays };
             }
-            
-            // Select first day if none selected
             const currentDay = currentDaySelection();
             if (currentDay && availableDays.includes(currentDay)) {
-                daySelector.value = currentDay;
-            } else if (availableDays.length > 0) {
-                daySelector.value = availableDays[0];
+                if (window.runflowDay) window.runflowDay.selected = currentDay;
+            } else {
+                if (window.runflowDay) window.runflowDay.selected = availableDays[0];
                 localStorage.setItem('selected_day', availableDays[0]);
             }
         }
@@ -905,9 +880,6 @@
         if (window.runflowDay && window.runflowDay.selected) {
             return window.runflowDay.selected;
         }
-        const params = new URLSearchParams(window.location.search);
-        const d = params.get("day");
-        if (d) return d.toLowerCase();
         const stored = localStorage.getItem("selected_day");
         return stored ? stored.toLowerCase() : null;
     }

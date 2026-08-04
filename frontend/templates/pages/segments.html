@@ -160,10 +160,12 @@
     
     function currentDayAndRun() {
         const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
         const runParam = params.get('run_id');
-        const day = dayParam ? dayParam.toLowerCase() : (window.runflowDay && window.runflowDay.selected);
-        const run_id = runParam || (window.runflowDay && window.runflowDay.run_id);
+        // Issue #841: prefer chrome/localStorage over URL day
+        const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || params.get('day') || '')
+            .toLowerCase()
+            .trim() || null;
+        const run_id = runParam || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || null;
         return { day, run_id };
     }
     
@@ -175,33 +177,31 @@
         return u.pathname + u.search;
     }
     
-    // Issue #565: Ensure run_id is present; respect URL run_id if explicitly set
+    // Issue #565 / #841: Ensure run_id is present; day is derived by chrome (not forced into URL)
     async function ensureRunAndDayInUrl() {
         const params = new URLSearchParams(window.location.search);
         let runId = params.get('run_id');
         const hasUrlRunId = !!runId;
-        let dayParam = params.get('day');
 
         try {
-            // Fetch latest run_id for fallback only
             const resp = await fetch('/api/dashboard/summary', { cache: 'no-store' });
             const data = await resp.json();
             const latestRunId = data.run_id;
             
-            // Issue #565: Only use latest run_id if no run_id in URL
-            // Respect URL run_id when explicitly set (don't override with latest)
             if (!hasUrlRunId && latestRunId) {
                 runId = latestRunId;
             }
-            // If URL has run_id, keep it (don't override)
+
+            if (data.selected_day) {
+                localStorage.setItem('selected_day', String(data.selected_day).toLowerCase());
+            }
             
-            const selectedDay = (dayParam || data.selected_day || '').toLowerCase();
             const p = new URLSearchParams(window.location.search);
             if (runId) p.set('run_id', runId);
-            if (selectedDay) p.set('day', selectedDay);
+            p.delete('day');
             const newUrl = window.location.pathname + (p.toString() ? '?' + p.toString() : '');
             if (newUrl !== window.location.pathname + window.location.search) {
-                window.location.replace(newUrl);
+                window.history.replaceState({}, '', newUrl);
             }
         } catch (e) {
             console.warn('Failed to resolve run_id for segments page', e);
@@ -221,21 +221,6 @@
                     focusOnSegment(focusSegmentId);
                 }
             }, 100);
-            
-            // Force reload of map data with day/run_id when day selector changes
-            const daySelector = document.getElementById('day-selector');
-            if (daySelector) {
-                daySelector.addEventListener('change', () => {
-                    const day = daySelector.value || '';
-                    const params = new URLSearchParams(window.location.search);
-                    if (day) params.set('day', day);
-                    else params.delete('day');
-                    const { run_id } = currentDayAndRun();
-                    if (run_id) params.set('run_id', run_id);
-                    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-                    window.location.href = newUrl;
-                });
-            }
         });
     });
     
