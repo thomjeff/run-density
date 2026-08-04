@@ -68,7 +68,6 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "notes",
     "buffer",
     "interval",
-    "zone",
     "equipment",
     "contact",
     "proxy_pass_id",
@@ -84,13 +83,21 @@ _LEG_LOC_PRESERVE_FIELDS = (
 # silently ignored otherwise).
 _LEG_OWNED_PLACEMENT_FIELDS = ("lat", "lon", "placement")
 
+# Zone is org-level (Build → Legs), snapshotted into Courses. Do not preserve
+# stale package course.json zone on merge / race export (Issue #836).
+_LEG_OWNED_ZONE_FIELD = "zone"
+
+# Fields persisted on org/package leg location rows (includes zone; zone is not
+# package-preserved on merge — see _LEG_OWNED_ZONE_FIELD).
+_LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS + (_LEG_OWNED_ZONE_FIELD,)
+
 # Assigned-course race builds use saved course leg snapshots as source of truth
-# for labels/types/placement; only operational fields stay on the package row.
+# for labels/types/placement/zone; only remaining operational fields stay on the
+# package row.
 _RACE_EXPORT_PRESERVE_FIELDS = (
     "notes",
     "buffer",
     "interval",
-    "zone",
     "equipment",
     "contact",
     "proxy_pass_id",
@@ -101,8 +108,6 @@ _RACE_EXPORT_PRESERVE_FIELDS = (
     "onepage",
     "resources",
 )
-
-_LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS
 
 _BLANK_LOCATION_DAYS = frozenset({"", "nan", "none", "null"})
 
@@ -1190,7 +1195,8 @@ def merge_leg_locations_into_course(
     ``leg_manifest`` overrides the org/package library (e.g. merged saved-course
     snapshots during Build race exports). ``preserve_from_course`` controls which
     fields are kept from existing course rows; race builds use
-    ``_RACE_EXPORT_PRESERVE_FIELDS`` so saved course snapshots win for type/label.
+    ``_RACE_EXPORT_PRESERVE_FIELDS`` so saved course snapshots win for
+    type/label/zone.
     """
     from app.core.config_package.leg_library_resolver import (
         recipe_leg_ids_from_package,
@@ -1287,6 +1293,9 @@ def merge_leg_locations_into_course(
                 "source": "leg",
                 "seg_id": seg_id if on_course else "",
             }
+            zone_val = loc.get(_LEG_OWNED_ZONE_FIELD)
+            if zone_val not in (None, ""):
+                row[_LEG_OWNED_ZONE_FIELD] = zone_val
             if not row["pass_key"]:
                 ensure_location_key(row, used_loc_keys)
                 row["pass_key"] = row.get("location_key") or ""
@@ -1324,6 +1333,8 @@ def merge_leg_locations_into_course(
                     row["pass_id"] = new_id
                 for field in preserve_fields:
                     if field in _LEG_OWNED_PLACEMENT_FIELDS:
+                        continue
+                    if field == _LEG_OWNED_ZONE_FIELD:
                         continue
                     if on_course and field in (
                         "proxy_loc_id",
