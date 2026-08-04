@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Build{% endblock %}
+{% block title %}Legs{% endblock %}
 
 {% block extra_head %}
 {% include 'partials/course_mapping_styles.html' %}
@@ -10,48 +10,27 @@
 {% block content %}
 <div class="race-config-page">
     <div class="page-header">
-        <h2 id="race-config-page-title">Build</h2>
+        <h2 id="race-config-page-title">Legs</h2>
         <p id="race-config-page-lead" class="race-config-page-lead">
-            Build global <strong>Legs</strong> and named <strong>Courses</strong>, then assemble them into race <strong>Packages</strong>.
+            Shared routes and locations used by every package. Edit them here, then freeze distance recipes on Courses.
         </p>
     </div>
 
     <div id="race-config-entry" class="page-shell page-shell--entry">
         <div class="content-card race-config-hub-shell">
-            <div class="race-config-hub-header">
-                <ul class="race-config-hub-tabs nav nav-tabs card-header-tabs" role="tablist" aria-label="Build library">
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link race-config-hub-tab active" data-hub-view="legs" role="tab" aria-selected="true">Legs</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link race-config-hub-tab" data-hub-view="courses" role="tab" aria-selected="false">Courses</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link race-config-hub-tab" data-hub-view="packages" role="tab" aria-selected="false">Packages</button>
-                    </li>
-                </ul>
-            </div>
-
+            {# Issue #842 follow-up: hub tabs removed — top nav is Legs | Courses | Packages #}
             <div class="race-config-hub-body">
                 <div id="race-config-hub-legs" class="race-config-hub-panel">
-                    <p class="card-help race-config-hub-lead" title="Stored in the organization leg library">
-                        Legs are shared routes and locations used by every package.
-                        Edit them here, then freeze distance recipes on the <strong>Courses</strong> tab.
-                    </p>
                     <div id="race-config-hub-legs-slot" class="race-config-hub-legs-slot"></div>
                 </div>
 
                 <div id="race-config-hub-courses" class="race-config-hub-panel" style="display: none;">
                     <div class="card-header">
-                        <h3 class="card-title">Courses</h3>
+                        <h3 class="card-title visually-hidden">Courses</h3>
                         <div class="card-actions">
                             <button type="button" id="btn-save-named-course" class="course-btn primary" title="Compose a course from org legs and freeze exports">New course</button>
                         </div>
                     </div>
-                    <p class="card-help" title="Frozen snapshots live in the organization course library">
-                        A course is a named frozen snapshot for one distance (e.g. 10K University).
-                        Assign courses to packages by distance.
-                    </p>
                     <p id="saved-courses-status" class="course-derived-empty" style="display: none;"></p>
                     <div id="saved-courses-table-wrap" style="display: none;">
                         <div class="scrollable-table-container">
@@ -104,12 +83,11 @@
 
                 <div id="race-config-hub-packages" class="race-config-hub-panel" style="display: none;">
                     <div class="card-header">
-                        <h3 class="card-title">Packages</h3>
+                        <h3 class="card-title visually-hidden">Packages</h3>
                         <div class="card-actions">
                             <button type="button" id="race-config-new-btn" class="course-btn primary">New package</button>
                         </div>
                     </div>
-                    <p class="card-help">Each package assigns one course per distance (Full / Half / 10K) and holds runner files for multi-distance analysis.</p>
                     <div class="scrollable-table-container">
                         <table id="race-config-list-table" class="table-sticky-header">
                             <thead>
@@ -322,5 +300,5 @@
 <script src="/static/js/map/saved_courses.js?v=791p2"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
 <script src="/static/js/map/junctions_authoring.js?v=819x"></script>
-<script src="/static/js/race_configuration.js?v=817f"></script>
+<script src="/static/js/race_configuration.js?v=842c"></script>
 {% endblock %}

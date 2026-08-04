@@ -36,6 +36,15 @@ def test_build_hub_links_in_top_nav(base_source: str):
     assert 'title="Legs, Courses, and Packages"' not in base_source
 
 
+def test_build_page_has_no_in_page_hub_tabs():
+    src = (REPO_ROOT / "frontend" / "templates" / "pages" / "race_configuration.html").read_text(
+        encoding="utf-8"
+    )
+    assert "race-config-hub-tab" not in src
+    assert 'id="race-config-page-title"' in src
+    assert "Shared routes and locations" in src
+
+
 def test_results_chrome_class_on_run_controls(base_source: str):
     assert "rf-results-chrome" in base_source
     assert 'id="rf-runs-dropdown"' in base_source

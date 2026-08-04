@@ -196,10 +196,35 @@
         });
     }
 
+    function syncHubPageHeader(view) {
+        const titleEl = document.getElementById('race-config-page-title');
+        const leadEl = document.getElementById('race-config-page-lead');
+        if (!titleEl || !leadEl) return;
+        const copy = {
+            legs: {
+                title: 'Legs',
+                lead: 'Shared routes and locations used by every package. Edit them here, then freeze distance recipes on Courses.',
+            },
+            courses: {
+                title: 'Courses',
+                lead: 'A course is a named frozen snapshot for one distance (e.g. 10K University). Assign courses to packages by distance.',
+            },
+            packages: {
+                title: 'Packages',
+                lead: 'Each package assigns one course per distance (Full / Half / 10K) and holds runner files for multi-distance analysis.',
+            },
+        };
+        const cfg = copy[view] || copy.legs;
+        titleEl.textContent = cfg.title;
+        leadEl.textContent = cfg.lead;
+        document.title = cfg.title + ' - Race Density & Flow Intelligence';
+    }
+
     function showHubView(view) {
         const packagesPanel = document.getElementById('race-config-hub-packages');
         const legsPanel = document.getElementById('race-config-hub-legs');
         const coursesPanel = document.getElementById('race-config-hub-courses');
+        // Legacy in-page hub tabs (removed from markup; keep for safety if restored)
         document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
             const isActive = btn.getAttribute('data-hub-view') === view;
             btn.classList.toggle('active', isActive);
@@ -208,6 +233,7 @@
         if (packagesPanel) packagesPanel.style.display = view === 'packages' ? 'block' : 'none';
         if (legsPanel) legsPanel.style.display = view === 'legs' ? 'block' : 'none';
         if (coursesPanel) coursesPanel.style.display = view === 'courses' ? 'block' : 'none';
+        syncHubPageHeader(view);
 
         if (view === 'legs') {
             placeLegsPanelInHub();
@@ -284,7 +310,7 @@
 
     function setPageTitle(text) {
         const el = document.getElementById('race-config-page-title');
-        if (el) el.textContent = text || 'Build';
+        if (el) el.textContent = text || 'Packages';
     }
 
     function showEntryOnly() {
@@ -294,7 +320,6 @@
         if (entry) entry.style.display = 'block';
         if (workspace) workspace.style.display = 'none';
         if (pageHeader) pageHeader.style.display = '';
-        setPageTitle('Build');
         const lead = document.getElementById('race-config-page-lead');
         if (lead) lead.style.display = '';
         ensureHubModalsOnBody();

@@ -30,31 +30,51 @@ html.rf-tabler .navbar .nav-link.active {
     color: var(--tblr-primary, #206bc4);
 }
 
-/* Issue #842: workspace control vs run dropdown vs page links */
-html.rf-tabler .rf-workspace-toggle {
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: #182433;
+/* Issue #842: workspace + run controls share one nav-row height */
+html.rf-tabler .navbar .navbar-nav {
+    align-items: center;
+}
+
+html.rf-tabler .rf-workspace-toggle,
+html.rf-tabler .rf-runs-toggle {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    line-height: 1.25;
+    padding: 0.35rem 0.65rem;
+    margin: 0;
     border: 1px solid var(--tblr-border-color, #e6e7e9);
     border-radius: 0.35rem;
-    padding: 0.25rem 0.55rem;
-    margin-right: 0.15rem;
-    background: #f8fafc;
-}
-
-html.rf-tabler .rf-workspace-toggle:hover,
-html.rf-tabler .rf-workspace-toggle.show {
-    background: #eef2f7;
-    color: #182433;
-}
-
-html.rf-tabler .rf-runs-toggle {
+    background: #fff;
     font-weight: 600;
     color: #3b4a5a;
 }
 
-html.rf-tabler .rf-runs-toggle.active {
+html.rf-tabler .rf-workspace-toggle {
+    font-weight: 700;
+    color: #182433;
+    background: #f8fafc;
+}
+
+html.rf-tabler .rf-workspace-toggle:hover,
+html.rf-tabler .rf-workspace-toggle.show,
+html.rf-tabler .rf-runs-toggle:hover,
+html.rf-tabler .rf-runs-toggle.show {
+    background: #eef2f7;
+    color: #182433;
+}
+
+html.rf-tabler .rf-runs-toggle.active,
+html.rf-tabler .rf-workspace-toggle.active {
     color: var(--tblr-primary, #206bc4);
+}
+
+html.rf-tabler .navbar-nav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
 }
 
 html.rf-tabler .rf-build-chrome .nav-link.active,
@@ -64,6 +84,18 @@ html.rf-tabler .rf-results-chrome .nav-link.active {
 
 html.rf-tabler #rf-workspace-menu .dropdown-item.active {
     font-weight: 600;
+}
+
+html.rf-tabler .race-config-page .visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 html.rf-tabler .page-wrapper {
