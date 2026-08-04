@@ -396,8 +396,89 @@ def test_build_race_exports_uses_saved_course_location_types(tmp_path, monkeypat
 
     build_package_race_exports(config_id)
 
-    rows = list(csv.DictReader((package_path / "locations.csv").open(encoding="utf-8")))
+    rows = list(csv.DictReader((package_path / "passes.csv").open(encoding="utf-8")))
     george = [r for r in rows if r.get("loc_label") == "University at George"]
     assert len(george) == 1
     assert george[0].get("loc_type") == "course"
     assert george[0].get("seg_id")
+
+
+def test_build_race_exports_uses_saved_course_zone(tmp_path, monkeypatch):
+    """Stale package zone must not override org/course-snapshot zone (#836)."""
+    import csv
+
+    _patch_roots(tmp_path, monkeypatch)
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    gpx_name = "36_trail.gpx"
+    (org_dir / gpx_name).write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "36",
+                        "file": gpx_name,
+                        "seg_label": "Trail",
+                        "start_label": "Start",
+                        "end_label": "End",
+                        "locations": [
+                            {
+                                "loc_label": "Trail at Charlotte",
+                                "loc_type": "course",
+                                "lat": 45.954885,
+                                "lon": -66.636135,
+                                "placement": "along",
+                                "zone": "9",
+                                "location_key": "N2RKT",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    save_org_course(
+        name="Full Trail",
+        distance="full",
+        recipe=["36"],
+        course_id="04",
+    )
+
+    result = create_config_package(
+        "Race build zones",
+        "",
+        event_day="sun",
+        package_events=["full"],
+    )
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": []},
+            "flow_overrides": [],
+        },
+    )
+    set_package_course_assignments(config_id, {"full": "04"})
+    build_package_race_exports(config_id)
+
+    package_path = resolve_config_package_path(config_id)
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text(encoding="utf-8"))
+    stale = course["locations"][0]
+    stale["zone"] = "2"
+    course_path.write_text(json.dumps(course, indent=2), encoding="utf-8")
+
+    build_package_race_exports(config_id)
+
+    rows = list(csv.DictReader((package_path / "passes.csv").open(encoding="utf-8")))
+    charlotte = [r for r in rows if r.get("loc_label") == "Trail at Charlotte"]
+    assert len(charlotte) == 1
+    assert charlotte[0].get("zone") == "9"
+    course_after = json.loads(course_path.read_text(encoding="utf-8"))
+    assert course_after["locations"][0].get("zone") == "9"
