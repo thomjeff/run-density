@@ -48,11 +48,17 @@
     /** Background layer showing every leg route on the legs map. */
     var allLegRoutesLayer = null;
     var allLegRoutesFetchSeq = 0;
+    /** Last GeoJSON features from org/package leg geometries (for restyling). */
+    var allLegRoutesFeatures = null;
     var ALL_LEG_ROUTES_PANE = 'all-leg-routes';
     var allLegLocationsLayer = null;
     var ALL_LEG_LOCATIONS_PANE = 'all-leg-locations';
     var legLocationsBrowserShowAllPins = false;
     var legLocationsBrowserHighlightKey = '';
+    /** Last zone-audit fit key so we only re-zoom when the scope changes. */
+    var legLocationsZoneAuditFitKey = '';
+    /** True when a zone-audit fit is waiting on leg geometries. */
+    var legLocationsZoneAuditFitPending = false;
     var pendingLocationFocus = null;
     var legLocationsBrowserFiltersBound = false;
     /** Draw-a-leg mode state (Issue #789 Create Leg). */
@@ -329,13 +335,84 @@
         return (res && res.status ? 'HTTP ' + res.status + ': ' : '') + 'Request failed';
     }
 
+    var legActionToastTimer = null;
+
+    function clearLegActionToastTimer() {
+        if (legActionToastTimer) {
+            clearTimeout(legActionToastTimer);
+            legActionToastTimer = null;
+        }
+    }
+
+    function hideLegActionToast() {
+        clearLegActionToastTimer();
+        var toast = document.getElementById('leg-action-toast');
+        if (!toast) return;
+        toast.hidden = true;
+        toast.textContent = '';
+        toast.classList.remove('is-busy', 'is-error');
+    }
+
+    /**
+     * Prominent map-overlay feedback for location save / move / remove.
+     * Non-blocking toast (not a modal) so rapid pin edits stay fluid.
+     */
+    function showLegActionToast(msg, kind) {
+        var toast = document.getElementById('leg-action-toast');
+        if (!toast || !msg) return;
+        clearLegActionToastTimer();
+        toast.textContent = msg;
+        toast.classList.remove('is-busy', 'is-error');
+        if (kind === 'error') toast.classList.add('is-error');
+        else if (kind === 'busy') toast.classList.add('is-busy');
+        toast.hidden = false;
+        if (kind === 'busy') return;
+        var ms = kind === 'error' ? 4500 : 2800;
+        legActionToastTimer = setTimeout(function () {
+            legActionToastTimer = null;
+            hideLegActionToast();
+        }, ms);
+    }
+
+    function legStatusToastKind(msg, isError) {
+        if (!msg) return null;
+        if (isError) return 'error';
+        if (/^(Saving|Moving|Removing)\b/i.test(msg)) return 'busy';
+        if (
+            /^(Location (updated|removed|position saved|moved)\b|Locations saved\b)/i.test(
+                msg
+            )
+        ) {
+            return 'ok';
+        }
+        return null;
+    }
+
     function setLegStatus(msg, isError) {
         var el = document.getElementById('course-legs-status');
-        if (!el) return;
-        if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
-        el.style.display = 'block';
-        el.style.color = isError ? '#c0392b' : '#27ae60';
-        el.textContent = msg;
+        if (!msg) {
+            if (el) {
+                el.style.display = 'none';
+                el.textContent = '';
+            }
+            hideLegActionToast();
+            return;
+        }
+        var kind = legStatusToastKind(msg, isError);
+        if (kind) {
+            // Toast covers save/move/remove feedback — skip the inline duplicate under Org leg library.
+            if (el) {
+                el.style.display = 'none';
+                el.textContent = '';
+            }
+            showLegActionToast(msg, kind);
+            return;
+        }
+        if (el) {
+            el.style.display = 'block';
+            el.style.color = isError ? '#c0392b' : '#27ae60';
+            el.textContent = msg;
+        }
     }
 
     function setRecipeStatus(msg, isError) {
@@ -713,9 +790,75 @@
         btn.textContent = legLocationsBrowserShowAllPins ? 'Hide all pins' : 'Show all pins';
     }
 
+    /** No leg selected + a Zone filter: map focuses that zone across the library. */
+    function isZoneAuditMapMode() {
+        if (!isOrgLegsHubMode() || selectedLegId) return false;
+        var filters = getLegLocationsBrowserFilters();
+        return !!(filters && filters.zone);
+    }
+
+    function shouldShowBrowserLocationsOnMap() {
+        return !!legLocationsBrowserShowAllPins || isZoneAuditMapMode();
+    }
+
+    /** Leg ids that have at least one location matching current browser filters. */
+    function getFilteredBrowserLegIdSet() {
+        var filters = getLegLocationsBrowserFilters();
+        var ids = {};
+        collectAllLegLocationRows().forEach(function (row) {
+            if (!legLocationRowMatchesFilters(row, filters)) return;
+            if (row.legId) ids[row.legId] = true;
+        });
+        return ids;
+    }
+
+    function allLegRouteStyle(legId, auditLegIds) {
+        if (auditLegIds) {
+            if (legId && auditLegIds[legId]) {
+                return { color: '#5b4db8', weight: 5, opacity: 0.95 };
+            }
+            return { color: '#9b8ec4', weight: 2, opacity: 0.22 };
+        }
+        return { color: '#9b8ec4', weight: 3, opacity: 0.7 };
+    }
+
+    function fitZoneAuditMapBounds(rows, legIds) {
+        var map = window.courseMappingMap;
+        if (!map || typeof L === 'undefined') return;
+        var points = [];
+        (rows || []).forEach(function (row) {
+            if (row.loc && row.loc.lat != null && row.loc.lon != null) {
+                points.push([row.loc.lat, row.loc.lon]);
+            }
+        });
+        Object.keys(legIds || {}).forEach(function (legId) {
+            var bounds = legBoundsCache[legId];
+            if (!bounds) return;
+            try {
+                points.push(bounds.getSouthWest());
+                points.push(bounds.getNorthEast());
+            } catch (e) { /* ignore */ }
+        });
+        if (!points.length) return;
+        function doFit() {
+            if (points.length === 1) {
+                map.setView(points[0], Math.max(map.getZoom(), 14));
+                return;
+            }
+            try {
+                map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 15 });
+            } catch (e) { /* empty */ }
+        }
+        if (legsTableBoundsFilter) {
+            legsTableBoundsFilter.runProgrammatic(doFit);
+        } else {
+            doFit();
+        }
+    }
+
     function renderAllLegLocationsMapLayer() {
         var map = window.courseMappingMap;
-        if (!map || !legLocationsBrowserShowAllPins || !isOrgLegsHubMode()) {
+        if (!map || !shouldShowBrowserLocationsOnMap() || !isOrgLegsHubMode()) {
             removeAllLegLocationsLayer();
             return;
         }
@@ -851,6 +994,9 @@
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
             renderAllLegLocationsMapLayer();
+            syncAllLegRoutesHighlight();
+            legLocationsZoneAuditFitKey = '';
+            legLocationsZoneAuditFitPending = false;
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -902,6 +1048,29 @@
             tbody.appendChild(tr);
         });
         renderAllLegLocationsMapLayer();
+        syncAllLegRoutesHighlight();
+        if (isZoneAuditMapMode()) {
+            var auditLegIds = getFilteredBrowserLegIdSet();
+            var fitKey =
+                (filters.zone || '') +
+                '|' +
+                Object.keys(auditLegIds).sort().join(',') +
+                '|' +
+                rows.length;
+            if (fitKey !== legLocationsZoneAuditFitKey) {
+                legLocationsZoneAuditFitKey = fitKey;
+                if (allLegRoutesFeatures && allLegRoutesFeatures.length) {
+                    legLocationsZoneAuditFitPending = false;
+                    fitZoneAuditMapBounds(rows, auditLegIds);
+                } else {
+                    legLocationsZoneAuditFitPending = true;
+                    fitZoneAuditMapBounds(rows, auditLegIds);
+                }
+            }
+        } else {
+            legLocationsZoneAuditFitKey = '';
+            legLocationsZoneAuditFitPending = false;
+        }
     }
 
     function tryOpenPendingLocationFocus() {
@@ -1624,6 +1793,66 @@
         }
     }
 
+    function paintAllLegRoutesFromFeatures(features) {
+        var mapNow = window.courseMappingMap;
+        if (!mapNow || typeof L === 'undefined') return;
+        ensureAllLegRoutesPane(mapNow);
+        removeAllLegRoutesLayer();
+        features = features || [];
+        if (!features.length) return;
+        var auditLegIds = isZoneAuditMapMode() ? getFilteredBrowserLegIdSet() : null;
+        var group = L.layerGroup();
+        features.forEach(function (feature) {
+            var geom = feature.geometry || {};
+            var coords = geom.coordinates || [];
+            if (geom.type !== 'LineString' || coords.length < 2) return;
+            var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
+            var props = feature.properties || {};
+            var legId = props.leg_id;
+            if (legId) {
+                try {
+                    legBoundsCache[legId] = L.latLngBounds(latlngs);
+                } catch (e) { /* ignore */ }
+            }
+            var style = allLegRouteStyle(legId, auditLegIds);
+            var line = L.polyline(latlngs, {
+                pane: ALL_LEG_ROUTES_PANE,
+                color: style.color,
+                weight: style.weight,
+                opacity: style.opacity
+            });
+            var label = String(props.leg_label || legId || '');
+            if (label) {
+                line.bindTooltip(label, { sticky: true });
+            }
+            if (legId) {
+                line.on('click', function () {
+                    if (legDrawActive || legExtendActive) return;
+                    selectLegById(legId);
+                });
+            }
+            group.addLayer(line);
+        });
+        allLegRoutesLayer = group.addTo(mapNow);
+        if (legLocationsZoneAuditFitPending && isZoneAuditMapMode()) {
+            legLocationsZoneAuditFitPending = false;
+            var filters = getLegLocationsBrowserFilters();
+            var rows = collectAllLegLocationRows().filter(function (row) {
+                return legLocationRowMatchesFilters(row, filters);
+            });
+            fitZoneAuditMapBounds(rows, getFilteredBrowserLegIdSet());
+        }
+    }
+
+    function syncAllLegRoutesHighlight() {
+        if (!allLegRoutesFeatures || !allLegRoutesFeatures.length) {
+            if (isZoneAuditMapMode()) renderAllLegRoutes();
+            return;
+        }
+        if (!shouldShowLegRoutesWhileDrawing()) return;
+        paintAllLegRoutesFromFeatures(allLegRoutesFeatures);
+    }
+
     /** Draw every leg route as a muted background line so the full network is visible without a selection. */
     function renderAllLegRoutes() {
         var map = window.courseMappingMap;
@@ -1636,6 +1865,7 @@
         var legs = (libraryState && libraryState.legs) || [];
         if (!legs.length) {
             removeAllLegRoutesLayer();
+            allLegRoutesFeatures = null;
             return;
         }
         allLegRoutesFetchSeq += 1;
@@ -1649,44 +1879,8 @@
             .then(function (data) {
                 if (seq !== allLegRoutesFetchSeq || !data) return;
                 if (!shouldShowLegRoutesWhileDrawing()) return;
-                var mapNow = window.courseMappingMap;
-                if (!mapNow) return;
-                ensureAllLegRoutesPane(mapNow);
-                removeAllLegRoutesLayer();
-                var features = data.features || [];
-                if (!features.length) return;
-                var group = L.layerGroup();
-                features.forEach(function (feature) {
-                    var geom = feature.geometry || {};
-                    var coords = geom.coordinates || [];
-                    if (geom.type !== 'LineString' || coords.length < 2) return;
-                    var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
-                    var props = feature.properties || {};
-                    var legId = props.leg_id;
-                    if (legId) {
-                        try {
-                            legBoundsCache[legId] = L.latLngBounds(latlngs);
-                        } catch (e) { /* ignore */ }
-                    }
-                    var line = L.polyline(latlngs, {
-                        pane: ALL_LEG_ROUTES_PANE,
-                        color: '#9b8ec4',
-                        weight: 3,
-                        opacity: 0.7
-                    });
-                    var label = String(props.leg_label || legId || '');
-                    if (label) {
-                        line.bindTooltip(label, { sticky: true });
-                    }
-                    if (legId) {
-                        line.on('click', function () {
-                            if (legDrawActive || legExtendActive) return;
-                            selectLegById(legId);
-                        });
-                    }
-                    group.addLayer(line);
-                });
-                allLegRoutesLayer = group.addTo(mapNow);
+                allLegRoutesFeatures = data.features || [];
+                paintAllLegRoutesFromFeatures(allLegRoutesFeatures);
             })
             .catch(function () { /* background layer is best-effort */ });
     }
