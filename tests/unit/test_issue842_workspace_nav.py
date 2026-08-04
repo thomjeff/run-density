@@ -54,9 +54,18 @@ def test_results_chrome_class_on_run_controls(base_source: str):
     assert "rf_last_build_path" in base_source
 
 
-def test_build_does_not_show_active_run_strip(base_source: str):
-    assert "Build never shows Active-run strip" in base_source
-    assert 'strip.hidden = onBuild' in base_source
+def test_no_active_run_strip_in_results_chrome(base_source: str):
+    assert 'id="rf-tabler-context-strip"' not in base_source
+    assert "Active run" not in base_source
+    assert 'id="rf-tabler-package-nav"' in base_source
+    assert 'link.textContent = "Package"' in base_source
+    assert "Open source package</a>" not in base_source
+
+
+def test_package_nav_gated_separately_from_run_views(base_source: str):
+    assert "rf-tabler-package-nav" in base_source
+    assert "leave for syncTablerPackageLink" in base_source
+    assert "formatRunsTriggerLabel" in base_source
 
 
 def test_base_html_renders_workspace_control():

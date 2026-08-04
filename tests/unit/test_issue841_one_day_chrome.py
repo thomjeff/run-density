@@ -42,9 +42,12 @@ def test_pick_run_navigates_without_day_query(base_source: str):
         'rememberWorkspaceRoute("results", dest)' in base_source
 
 
-def test_active_run_strip_always_shows_day_when_known(base_source: str):
-    assert "Issue #841: always show day as read-only run metadata when known" in base_source
-    assert 'dayEl.textContent = "· " + String(day).toUpperCase()' in base_source
+def test_run_dropdown_shows_day_when_known(base_source: str):
+    assert "Issue #841: day stays on the run control" in base_source
+    assert "formatRunsTriggerLabel" in base_source
+    assert 'text += " · " + String(day).toUpperCase()' in base_source
+    # Old Active-run strip day node removed
+    assert 'id="rf-tabler-context-day"' not in base_source
     # Old multi-day-only visibility gate removed
     assert "window.runflowDay.available.length > 1" not in base_source
 
@@ -74,5 +77,6 @@ def test_base_html_renders_without_day_selector():
     )
     html = template.render(request=_Request(), cloud_mode=False)
     assert 'id="day-selector"' not in html
-    assert 'id="rf-tabler-context-day"' in html
+    assert 'id="rf-tabler-context-day"' not in html
+    assert 'id="rf-runs-dropdown"' in html
     assert 'id="rf-841-smoke"' in html

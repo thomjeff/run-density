@@ -8,7 +8,7 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
-    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=842c">
+    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=842e">
     
     {% block extra_styles %}{% endblock %}
     
@@ -85,6 +85,10 @@
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
+                        {# Issue #842: Package jumps to source config; replaces Active-run strip link #}
+                        <li class="nav-item rf-results-chrome rf-tabler-package-nav" id="rf-tabler-package-nav" hidden>
+                            <a class="nav-link" id="rf-tabler-open-package" href="/config" data-rf-package-link="1">Package</a>
+                        </li>
                         <li class="nav-item rf-build-chrome" hidden>
                             <a class="nav-link" href="/config?view=legs" data-rf-build-view="legs">Legs</a>
                         </li>
@@ -99,15 +103,6 @@
                 </div>
             </div>
         </header>
-        <div id="rf-tabler-context-strip" class="rf-tabler-context-strip" hidden>
-            <div class="container-xl rf-tabler-context-inner">
-                <span class="rf-tabler-context-pill">Active run</span>
-                <span id="rf-tabler-context-label" class="rf-tabler-context-label">—</span>
-                <span id="rf-tabler-context-id" class="rf-tabler-context-id"></span>
-                <span id="rf-tabler-context-day" class="rf-tabler-context-day" hidden></span>
-                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config" hidden>Open source package</a>
-            </div>
-        </div>
         <div class="page-wrapper">
             <div class="page-body">
                 <div class="container-xl rf-tabler-content">
@@ -274,6 +269,8 @@
                     el.hidden = true;
                 } else if (el.classList.contains("rf-tabler-run-view-link")) {
                     // leave for syncTablerRunNav
+                } else if (el.classList.contains("rf-tabler-package-nav")) {
+                    // leave for syncTablerPackageLink
                 } else {
                     el.hidden = false;
                 }
@@ -367,6 +364,15 @@
             return id.length > 10 ? id.slice(0, 8) + "…" : id;
         }
 
+        function formatRunsTriggerLabel(label, runId, day) {
+            const trunc = String(label || runId || "Runs");
+            const short = trunc.length > 28 ? trunc.slice(0, 26) + "…" : trunc;
+            let text = short + " · " + shortRunId(runId);
+            // Issue #841: day stays on the run control (Active-run strip removed)
+            if (day) text += " · " + String(day).toUpperCase();
+            return text;
+        }
+
         function syncTablerRunNav(runId, day) {
             if (!document.documentElement.classList.contains("rf-tabler")) return;
             const hasRun = !!(runId && String(runId).trim());
@@ -379,20 +385,16 @@
             });
             document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
                 if (el.classList.contains("rf-tabler-run-view-link")) return;
+                if (el.classList.contains("rf-tabler-package-nav")) return;
                 el.hidden = onBuild;
             });
             document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
                 el.hidden = !onBuild;
             });
 
-            const strip = document.getElementById("rf-tabler-context-strip");
-            const labelEl = document.getElementById("rf-tabler-context-label");
-            const idEl = document.getElementById("rf-tabler-context-id");
-            const dayEl = document.getElementById("rf-tabler-context-day");
             const trigger = document.getElementById("rf-runs-trigger-label");
 
             if (!hasRun) {
-                if (strip) strip.hidden = true;
                 if (trigger) trigger.textContent = "Runs";
                 syncTablerPackageLink(null);
                 if (!onBuild) refreshRunsDropdown(null);
@@ -407,27 +409,8 @@
                 if (cached) label = cached;
             } catch (e) { /* ignore */ }
 
-            // Issue #815 / #842: Build never shows Active-run strip
-            if (strip) strip.hidden = onBuild;
-            if (labelEl) labelEl.textContent = label;
-            if (idEl) {
-                idEl.textContent = shortRunId(id);
-                idEl.title = id;
-            }
-            if (dayEl) {
-                // Issue #841: always show day as read-only run metadata when known
-                if (day) {
-                    dayEl.textContent = "· " + String(day).toUpperCase();
-                    dayEl.hidden = false;
-                } else {
-                    dayEl.hidden = true;
-                }
-            }
-            if (trigger) {
-                const trunc = label.length > 28 ? label.slice(0, 26) + "…" : label;
-                trigger.textContent = trunc + " · " + shortRunId(id);
-            }
-            // Package deep-link is Results chrome only
+            if (trigger) trigger.textContent = formatRunsTriggerLabel(label, id, day);
+            // Package nav item is Results chrome only (after Reports)
             syncTablerPackageLink(onBuild ? null : id);
             if (!onBuild) refreshRunsDropdown(id);
             applyWorkspaceChrome(onBuild ? "build" : "results");
@@ -444,10 +427,11 @@
         }
 
         function syncTablerPackageLink(runId) {
+            const nav = document.getElementById("rf-tabler-package-nav");
             const link = document.getElementById("rf-tabler-open-package");
-            if (!link) return;
+            if (!nav || !link) return;
             if (!runId) {
-                link.hidden = true;
+                nav.hidden = true;
                 return;
             }
             fetch("/api/analysis/" + encodeURIComponent(runId) + "/config", { credentials: "same-origin" })
@@ -455,23 +439,23 @@
                 .then(function (cfg) {
                     const configId = configIdFromDataDir(cfg && cfg.data_dir);
                     if (!configId) {
-                        link.hidden = true;
+                        nav.hidden = true;
                         return;
                     }
                     localStorage.setItem("selected_config_id", configId);
                     // Do not flip workspace here — only navigating to Build should (Issue #842)
                     const pkgPath = "/config?config_id=" + encodeURIComponent(configId);
                     link.href = pkgPath;
-                    link.textContent = "Open source package";
+                    link.textContent = "Package";
                     link.title = "Open source package " + configId;
-                    link.hidden = false;
                     link.onclick = function () {
                         setStoredWorkspace("build");
                         rememberWorkspaceRoute("build", pkgPath);
                     };
+                    nav.hidden = false;
                 })
                 .catch(function () {
-                    link.hidden = true;
+                    nav.hidden = true;
                 });
         }
 
@@ -518,14 +502,12 @@
                         list.appendChild(a);
                     });
                     if (activeRunId) {
-                        const labelEl = document.getElementById("rf-tabler-context-label");
                         const trigger = document.getElementById("rf-runs-trigger-label");
                         try {
                             const cached = sessionStorage.getItem("rf_run_label_" + activeRunId);
-                            if (cached && labelEl) labelEl.textContent = cached;
                             if (cached && trigger) {
-                                const trunc = cached.length > 28 ? cached.slice(0, 26) + "…" : cached;
-                                trigger.textContent = trunc + " · " + shortRunId(activeRunId);
+                                const day = (localStorage.getItem("selected_day") || "").trim() || null;
+                                trigger.textContent = formatRunsTriggerLabel(cached, activeRunId, day);
                             }
                         } catch (e) { /* ignore */ }
                     }

@@ -75,7 +75,7 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 - Workspace control switches Results ↔ Build (mutually exclusive chrome; Issue #842)
 - **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Results only)
 - Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
-- Context strip (Results only): Active run · label · short id · day (read-only) · **Open source package**
+- Context strip removed: run label/id/day live on the Results run dropdown; **Package** nav link (after Reports) opens the source config when known
 - Last Results route/run and last Build route are restored when switching workspaces
 - Runs catalog is history-only
 - Build hub page still has Legs / Courses / Packages panels; top nav mirrors hub views
