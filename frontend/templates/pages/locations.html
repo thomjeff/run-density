@@ -516,8 +516,7 @@
         }
         
         // Update map markers (without fitting bounds - preserve user zoom)
-        const visibleIds = filtered.flatMap(loc => loc.loc_ids || [loc.loc_id]);
-        filterMapToLocations(visibleIds, false);
+        filterMapToLocations(filtered, false);
         
         // Render filtered and sorted data
         renderLocationsTable(filtered);
@@ -808,38 +807,63 @@
         }
         
         // Update map to show only filtered locations (only fit bounds if requested)
-        const visibleIds = filtered.flatMap(loc => loc.loc_ids || [loc.loc_id]);
-        filterMapToLocations(visibleIds, fitBounds);
+        filterMapToLocations(filtered, fitBounds);
         
         // Render filtered and sorted data
         renderLocationsTable(filtered);
     }
     
     /**
-     * Filter map markers to show only specified location IDs
-     * @param {Array<number|string>} visibleLocIds - Array of location IDs to show
+     * Filter map markers to the current table filter result.
+     * Prefer pass_key / location_key so colliding human loc_ids do not leak pins (#838).
+     * @param {Array<Object>|Array<number|string>} visibleLocationsOrIds - Filtered location rows, or legacy id list
      * @param {boolean} fitBounds - Whether to fit map bounds to visible markers (default: true)
      */
-    function filterMapToLocations(visibleLocIds, fitBounds = true) {
+    function filterMapToLocations(visibleLocationsOrIds, fitBounds = true) {
         if (!window.locationsLayer || !window.locationsMarkersByLocId) {
             return; // Map not initialized yet
         }
-        
-        const visibleSet = new Set(visibleLocIds.map(id => String(id)));
+
+        const rows = Array.isArray(visibleLocationsOrIds) ? visibleLocationsOrIds : [];
+        const useKeys = rows.length > 0 && typeof rows[0] === 'object' && rows[0] !== null;
+        const visibleKeySet = new Set();
+        const visibleIdSet = new Set();
+        if (useKeys) {
+            rows.forEach(function (loc) {
+                const key = String(loc.pass_key || loc.location_key || '').trim();
+                if (key) visibleKeySet.add(key);
+                const ids = loc.loc_ids || [loc.loc_id];
+                (Array.isArray(ids) ? ids : [ids]).forEach(function (id) {
+                    if (id != null && id !== '') visibleIdSet.add(String(id));
+                });
+            });
+        } else {
+            rows.forEach(function (id) {
+                if (id != null && id !== '') visibleIdSet.add(String(id));
+            });
+        }
+
         let hasVisibleMarkers = false;
-        
+        const visibleMarkers = [];
+
         // Show/hide markers based on filter
         window.locationsLayer.eachLayer(function(marker) {
-            const locId = String(marker.feature?.properties?.loc_id);
-            const isVisible = visibleSet.has(locId);
-            
+            const props = marker.feature?.properties || {};
+            const key = String(props.pass_key || props.location_key || '').trim();
+            let isVisible = false;
+            if (useKeys && visibleKeySet.size > 0) {
+                isVisible = key !== '' && visibleKeySet.has(key);
+            } else {
+                const locId = String(props.loc_id);
+                isVisible = visibleIdSet.has(locId);
+            }
+
             if (isVisible) {
                 hasVisibleMarkers = true;
-                // Show marker with original styling
-                const props = marker.feature?.properties || {};
+                visibleMarkers.push(marker);
                 const locType = props.loc_type?.toLowerCase() || 'unknown';
                 const color = getLocationMarkerColor(locType);
-                
+
                 marker.setStyle({
                     radius: 8,
                     fillColor: color,
@@ -848,50 +872,39 @@
                     opacity: 1,
                     fillOpacity: 0.8
                 });
-                
-                // Re-enable pointer events so tooltips/popups work
+
                 if (marker.options) {
                     marker.options.interactive = true;
                 }
                 marker._path && (marker._path.style.pointerEvents = 'auto');
             } else {
-                // Hide marker by making it transparent and disabling pointer events
                 marker.setStyle({
                     opacity: 0,
                     fillOpacity: 0
                 });
-                
-                // Disable pointer events to prevent tooltip/popup on hidden markers
+
                 if (marker.options) {
                     marker.options.interactive = false;
                 }
                 marker._path && (marker._path.style.pointerEvents = 'none');
             }
         });
-        
+
         // Fit map bounds to visible markers if requested and if any visible
-        if (fitBounds && hasVisibleMarkers && visibleLocIds.length > 0) {
-            const visibleMarkers = visibleLocIds
-                .map(id => window.locationsMarkersByLocId[String(id)])
-                .filter(m => m != null);
-            
-            if (visibleMarkers.length > 0) {
-                const group = L.featureGroup(visibleMarkers);
-                if (window.map && group.getBounds().isValid()) {
-                    // Temporarily disable bounds filtering to allow programmatic fit
-                    const wasProgrammatic = window.isProgrammaticMapMove;
-                    window.isProgrammaticMapMove = true;
-                    
-                    window.map.fitBounds(group.getBounds(), {
-                        padding: [20, 20],
-                        maxZoom: 16
-                    });
-                    
-                    // Re-enable bounds filtering after animation
-                    setTimeout(() => {
-                        window.isProgrammaticMapMove = wasProgrammatic;
-                    }, 600);
-                }
+        if (fitBounds && hasVisibleMarkers && visibleMarkers.length > 0) {
+            const group = L.featureGroup(visibleMarkers);
+            if (window.map && group.getBounds().isValid()) {
+                const wasProgrammatic = window.isProgrammaticMapMove;
+                window.isProgrammaticMapMove = true;
+
+                window.map.fitBounds(group.getBounds(), {
+                    padding: [20, 20],
+                    maxZoom: 16
+                });
+
+                setTimeout(() => {
+                    window.isProgrammaticMapMove = wasProgrammatic;
+                }, 600);
             }
         }
     }
