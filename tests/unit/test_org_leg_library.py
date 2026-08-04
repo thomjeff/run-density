@@ -5,6 +5,7 @@ import yaml
 from app.core.config_package.org_leg_library import (
     import_org_leg_to_package,
     list_org_legs,
+    move_org_leg_location,
     publish_package_leg_to_org_library,
     update_org_leg,
     update_org_leg_geometry,
@@ -380,6 +381,126 @@ def test_copy_org_leg_locations_from_paired_leg(tmp_path, monkeypatch):
     assert copied["locations"][0]["loc_label"] == "Trail at Charlotte"
     assert copied["locations"][0]["resources"]["yssr"] == 2
     assert len(list(get_org_legs_dir().glob("*.gpx"))) == 2
+
+
+def test_move_org_leg_location_happy_path(tmp_path, monkeypatch):
+    """Move one pin from source leg onto target; preserve location_key."""
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "05_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "12_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "05",
+                        "file": "05_trail.gpx",
+                        "seg_label": "Source corridor",
+                        "locations": [
+                            {
+                                "loc_label": "Keep on source",
+                                "loc_type": "course",
+                                "lat": 45.961,
+                                "lon": -66.641,
+                                "location_key": "KEEP1",
+                            },
+                            {
+                                "loc_label": "St John at Aberdeen",
+                                "loc_type": "traffic",
+                                "lat": 45.96,
+                                "lon": -66.64,
+                                "zone": "A",
+                                "resources": {"yssr": 1},
+                                "location_key": "ABCDE",
+                            },
+                        ],
+                    },
+                    {
+                        "id": "12",
+                        "file": "12_trail.gpx",
+                        "seg_label": "Target corridor",
+                        "locations": [],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = move_org_leg_location("05", 1, "12")
+    assert state["source_leg_id"] == "05"
+    assert state["target_leg_id"] == "12"
+    assert state["new_loc_index"] == 0
+    source = next(l for l in state["legs"] if l["id"] == "05")
+    target = next(l for l in state["legs"] if l["id"] == "12")
+    assert len(source.get("locations") or []) == 1
+    assert source["locations"][0]["loc_label"] == "Keep on source"
+    assert len(target.get("locations") or []) == 1
+    moved = target["locations"][0]
+    assert moved["loc_label"] == "St John at Aberdeen"
+    assert moved["location_key"] == "ABCDE"
+    assert moved["zone"] == "A"
+    assert moved["resources"]["yssr"] == 1
+
+
+def test_move_org_leg_location_blocks_duplicate_key(tmp_path, monkeypatch):
+    """Refuse move when target already has the same location_key."""
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "05_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "12_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "05",
+                        "file": "05_trail.gpx",
+                        "seg_label": "Source",
+                        "locations": [
+                            {
+                                "loc_label": "Shared pin",
+                                "loc_type": "traffic",
+                                "lat": 45.96,
+                                "lon": -66.64,
+                                "location_key": "SAME2",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "12",
+                        "file": "12_trail.gpx",
+                        "seg_label": "Target",
+                        "locations": [
+                            {
+                                "loc_label": "Already here",
+                                "loc_type": "traffic",
+                                "lat": 45.961,
+                                "lon": -66.641,
+                                "location_key": "SAME2",
+                            }
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        move_org_leg_location("05", 0, "12")
+        assert False, "expected ValueError for duplicate location_key"
+    except ValueError as exc:
+        assert "SAME2" in str(exc)
 
 
 def test_update_org_leg_geometry(tmp_path, monkeypatch):

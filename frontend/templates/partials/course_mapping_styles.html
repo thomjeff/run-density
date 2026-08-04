@@ -141,6 +141,38 @@
         line-height: 1.35;
         pointer-events: none;
     }
+    .leg-action-toast {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1200;
+        max-width: min(420px, calc(100% - 2rem));
+        padding: 0.65rem 1.1rem;
+        border-radius: 6px;
+        border: 1px solid #27ae60;
+        background: #edf9f1;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1e7e34;
+        line-height: 1.35;
+        text-align: center;
+        pointer-events: none;
+    }
+    .leg-action-toast[hidden] {
+        display: none !important;
+    }
+    .leg-action-toast.is-busy {
+        border-color: #2980b9;
+        background: #eaf4fb;
+        color: #1a5276;
+    }
+    .leg-action-toast.is-error {
+        border-color: #c0392b;
+        background: #fdecea;
+        color: #922b21;
+    }
     #config-package-legs-panel .config-legs-map-lead {
         margin: 0 0 0.65rem 0;
         font-size: 0.875rem;

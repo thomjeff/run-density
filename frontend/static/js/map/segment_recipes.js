@@ -48,11 +48,17 @@
     /** Background layer showing every leg route on the legs map. */
     var allLegRoutesLayer = null;
     var allLegRoutesFetchSeq = 0;
+    /** Last GeoJSON features from org/package leg geometries (for restyling). */
+    var allLegRoutesFeatures = null;
     var ALL_LEG_ROUTES_PANE = 'all-leg-routes';
     var allLegLocationsLayer = null;
     var ALL_LEG_LOCATIONS_PANE = 'all-leg-locations';
     var legLocationsBrowserShowAllPins = false;
     var legLocationsBrowserHighlightKey = '';
+    /** Last zone-audit fit key so we only re-zoom when the scope changes. */
+    var legLocationsZoneAuditFitKey = '';
+    /** True when a zone-audit fit is waiting on leg geometries. */
+    var legLocationsZoneAuditFitPending = false;
     var pendingLocationFocus = null;
     var legLocationsBrowserFiltersBound = false;
     /** Draw-a-leg mode state (Issue #789 Create Leg). */
@@ -329,13 +335,84 @@
         return (res && res.status ? 'HTTP ' + res.status + ': ' : '') + 'Request failed';
     }
 
+    var legActionToastTimer = null;
+
+    function clearLegActionToastTimer() {
+        if (legActionToastTimer) {
+            clearTimeout(legActionToastTimer);
+            legActionToastTimer = null;
+        }
+    }
+
+    function hideLegActionToast() {
+        clearLegActionToastTimer();
+        var toast = document.getElementById('leg-action-toast');
+        if (!toast) return;
+        toast.hidden = true;
+        toast.textContent = '';
+        toast.classList.remove('is-busy', 'is-error');
+    }
+
+    /**
+     * Prominent map-overlay feedback for location save / move / remove.
+     * Non-blocking toast (not a modal) so rapid pin edits stay fluid.
+     */
+    function showLegActionToast(msg, kind) {
+        var toast = document.getElementById('leg-action-toast');
+        if (!toast || !msg) return;
+        clearLegActionToastTimer();
+        toast.textContent = msg;
+        toast.classList.remove('is-busy', 'is-error');
+        if (kind === 'error') toast.classList.add('is-error');
+        else if (kind === 'busy') toast.classList.add('is-busy');
+        toast.hidden = false;
+        if (kind === 'busy') return;
+        var ms = kind === 'error' ? 4500 : 2800;
+        legActionToastTimer = setTimeout(function () {
+            legActionToastTimer = null;
+            hideLegActionToast();
+        }, ms);
+    }
+
+    function legStatusToastKind(msg, isError) {
+        if (!msg) return null;
+        if (isError) return 'error';
+        if (/^(Saving|Moving|Removing)\b/i.test(msg)) return 'busy';
+        if (
+            /^(Location (updated|removed|position saved|moved)\b|Locations saved\b)/i.test(
+                msg
+            )
+        ) {
+            return 'ok';
+        }
+        return null;
+    }
+
     function setLegStatus(msg, isError) {
         var el = document.getElementById('course-legs-status');
-        if (!el) return;
-        if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
-        el.style.display = 'block';
-        el.style.color = isError ? '#c0392b' : '#27ae60';
-        el.textContent = msg;
+        if (!msg) {
+            if (el) {
+                el.style.display = 'none';
+                el.textContent = '';
+            }
+            hideLegActionToast();
+            return;
+        }
+        var kind = legStatusToastKind(msg, isError);
+        if (kind) {
+            // Toast covers save/move/remove feedback — skip the inline duplicate under Org leg library.
+            if (el) {
+                el.style.display = 'none';
+                el.textContent = '';
+            }
+            showLegActionToast(msg, kind);
+            return;
+        }
+        if (el) {
+            el.style.display = 'block';
+            el.style.color = isError ? '#c0392b' : '#27ae60';
+            el.textContent = msg;
+        }
     }
 
     function setRecipeStatus(msg, isError) {
@@ -612,7 +689,7 @@
         var row = document.getElementById('leg-locations-browser-thead-row');
         if (!row) return;
         row.innerHTML = '';
-        ['Leg #', 'ID', 'Label', 'Type', 'Proxy'].forEach(function (text) {
+        ['Leg #', 'ID', 'Label', 'Type', 'Zone', 'Proxy'].forEach(function (text) {
             var th = document.createElement('th');
             th.textContent = text;
             row.appendChild(th);
@@ -646,8 +723,6 @@
         if (isNaN(idx) || idx < 0) return;
         pendingLocationFocus = { legId: legId, locIndex: idx };
         legLocationsBrowserHighlightKey = legLocKey(legId, idx);
-        var legSel = document.getElementById('leg-locations-filter-leg');
-        if (legSel) legSel.value = legId;
         if (!isOrgLegsHubMode()) {
             var url = new URL(window.location.href);
             url.searchParams.delete('id');
@@ -666,11 +741,12 @@
     }
 
     function getLegLocationsBrowserFilters() {
-        var legSel = document.getElementById('leg-locations-filter-leg');
+        var zoneSel = document.getElementById('leg-locations-filter-zone');
         var typeSel = document.getElementById('leg-locations-filter-type');
         var searchInp = document.getElementById('leg-locations-filter-search');
         return {
-            legId: legSel ? String(legSel.value || '').trim() : '',
+            legId: selectedLegId ? String(selectedLegId).trim() : '',
+            zone: zoneSel ? String(zoneSel.value || '').trim() : '',
             type: typeSel ? String(typeSel.value || '').trim().toLowerCase() : '',
             query: searchInp ? String(searchInp.value || '').trim().toLowerCase() : ''
         };
@@ -679,6 +755,10 @@
     function legLocationRowMatchesFilters(row, filters) {
         if (!row || !row.loc) return false;
         if (filters.legId && row.legId !== filters.legId) return false;
+        if (filters.zone) {
+            var zone = String(row.loc.zone != null ? row.loc.zone : '').trim();
+            if (zone.toLowerCase() !== filters.zone.toLowerCase()) return false;
+        }
         var locType = String(row.loc.loc_type || 'course').toLowerCase();
         if (filters.type && locType !== filters.type) return false;
         if (filters.query) {
@@ -710,9 +790,75 @@
         btn.textContent = legLocationsBrowserShowAllPins ? 'Hide all pins' : 'Show all pins';
     }
 
+    /** No leg selected + a Zone filter: map focuses that zone across the library. */
+    function isZoneAuditMapMode() {
+        if (!isOrgLegsHubMode() || selectedLegId) return false;
+        var filters = getLegLocationsBrowserFilters();
+        return !!(filters && filters.zone);
+    }
+
+    function shouldShowBrowserLocationsOnMap() {
+        return !!legLocationsBrowserShowAllPins || isZoneAuditMapMode();
+    }
+
+    /** Leg ids that have at least one location matching current browser filters. */
+    function getFilteredBrowserLegIdSet() {
+        var filters = getLegLocationsBrowserFilters();
+        var ids = {};
+        collectAllLegLocationRows().forEach(function (row) {
+            if (!legLocationRowMatchesFilters(row, filters)) return;
+            if (row.legId) ids[row.legId] = true;
+        });
+        return ids;
+    }
+
+    function allLegRouteStyle(legId, auditLegIds) {
+        if (auditLegIds) {
+            if (legId && auditLegIds[legId]) {
+                return { color: '#5b4db8', weight: 5, opacity: 0.95 };
+            }
+            return { color: '#9b8ec4', weight: 2, opacity: 0.22 };
+        }
+        return { color: '#9b8ec4', weight: 3, opacity: 0.7 };
+    }
+
+    function fitZoneAuditMapBounds(rows, legIds) {
+        var map = window.courseMappingMap;
+        if (!map || typeof L === 'undefined') return;
+        var points = [];
+        (rows || []).forEach(function (row) {
+            if (row.loc && row.loc.lat != null && row.loc.lon != null) {
+                points.push([row.loc.lat, row.loc.lon]);
+            }
+        });
+        Object.keys(legIds || {}).forEach(function (legId) {
+            var bounds = legBoundsCache[legId];
+            if (!bounds) return;
+            try {
+                points.push(bounds.getSouthWest());
+                points.push(bounds.getNorthEast());
+            } catch (e) { /* ignore */ }
+        });
+        if (!points.length) return;
+        function doFit() {
+            if (points.length === 1) {
+                map.setView(points[0], Math.max(map.getZoom(), 14));
+                return;
+            }
+            try {
+                map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 15 });
+            } catch (e) { /* empty */ }
+        }
+        if (legsTableBoundsFilter) {
+            legsTableBoundsFilter.runProgrammatic(doFit);
+        } else {
+            doFit();
+        }
+    }
+
     function renderAllLegLocationsMapLayer() {
         var map = window.courseMappingMap;
-        if (!map || !legLocationsBrowserShowAllPins || !isOrgLegsHubMode()) {
+        if (!map || !shouldShowBrowserLocationsOnMap() || !isOrgLegsHubMode()) {
             removeAllLegLocationsLayer();
             return;
         }
@@ -766,24 +912,32 @@
     }
 
     function populateLegLocationsBrowserFilters() {
-        var legSel = document.getElementById('leg-locations-filter-leg');
+        var zoneSel = document.getElementById('leg-locations-filter-zone');
         var typeSel = document.getElementById('leg-locations-filter-type');
-        if (!legSel || !typeSel) return;
-        var prevLeg = legSel.value;
+        if (!zoneSel || !typeSel) return;
+        var prevZone = zoneSel.value;
         var prevType = typeSel.value;
-        legSel.innerHTML = '';
-        var allLeg = document.createElement('option');
-        allLeg.value = '';
-        allLeg.textContent = 'All legs';
-        legSel.appendChild(allLeg);
-        (libraryState && libraryState.legs || []).forEach(function (leg) {
-            var opt = document.createElement('option');
-            opt.value = leg.id;
-            opt.textContent = leg.id + ' — ' + ((leg.leg_label || '').slice(0, 36) || leg.id);
-            legSel.appendChild(opt);
+        var zoneSet = {};
+        collectAllLegLocationRows().forEach(function (row) {
+            var zone = String(row.loc && row.loc.zone != null ? row.loc.zone : '').trim();
+            if (zone) zoneSet[zone] = true;
         });
-        if (prevLeg && legSel.querySelector('option[value="' + prevLeg + '"]')) {
-            legSel.value = prevLeg;
+        var zones = Object.keys(zoneSet).sort(function (a, b) {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+        zoneSel.innerHTML = '';
+        var allZone = document.createElement('option');
+        allZone.value = '';
+        allZone.textContent = 'All zones';
+        zoneSel.appendChild(allZone);
+        zones.forEach(function (zone) {
+            var opt = document.createElement('option');
+            opt.value = zone;
+            opt.textContent = zone;
+            zoneSel.appendChild(opt);
+        });
+        if (prevZone && zoneSel.querySelector('option[value="' + prevZone + '"]')) {
+            zoneSel.value = prevZone;
         }
         typeSel.innerHTML = '';
         var allType = document.createElement('option');
@@ -820,13 +974,19 @@
             return legLocationRowMatchesFilters(row, filters);
         });
         if (statusEl) {
+            var scope = filters.legId
+                ? 'on leg ' + filters.legId
+                : 'across all legs (no leg selected)';
+            if (filters.zone) scope += ' × zone ' + filters.zone;
             statusEl.textContent =
                 rows.length +
                 ' of ' +
                 allRows.length +
                 ' location' +
                 (allRows.length === 1 ? '' : 's') +
-                ' shown. Use the view action to edit on the map.';
+                ' shown ' +
+                scope +
+                '. Use the view action to edit on the map.';
         }
         renderLegLocationsBrowserHeader();
         tbody.innerHTML = '';
@@ -834,6 +994,9 @@
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
             renderAllLegLocationsMapLayer();
+            syncAllLegRoutesHighlight();
+            legLocationsZoneAuditFitKey = '';
+            legLocationsZoneAuditFitPending = false;
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -852,6 +1015,9 @@
                 String(row.locIndex),
                 (row.loc.loc_label || '').slice(0, 48),
                 row.loc.loc_type || 'course',
+                row.loc.zone != null && String(row.loc.zone).trim() !== ''
+                    ? String(row.loc.zone).trim()
+                    : '—',
                 formatLegLocationProxyDisplay(row.loc),
             ].forEach(function (text) {
                 var td = document.createElement('td');
@@ -882,6 +1048,29 @@
             tbody.appendChild(tr);
         });
         renderAllLegLocationsMapLayer();
+        syncAllLegRoutesHighlight();
+        if (isZoneAuditMapMode()) {
+            var auditLegIds = getFilteredBrowserLegIdSet();
+            var fitKey =
+                (filters.zone || '') +
+                '|' +
+                Object.keys(auditLegIds).sort().join(',') +
+                '|' +
+                rows.length;
+            if (fitKey !== legLocationsZoneAuditFitKey) {
+                legLocationsZoneAuditFitKey = fitKey;
+                if (allLegRoutesFeatures && allLegRoutesFeatures.length) {
+                    legLocationsZoneAuditFitPending = false;
+                    fitZoneAuditMapBounds(rows, auditLegIds);
+                } else {
+                    legLocationsZoneAuditFitPending = true;
+                    fitZoneAuditMapBounds(rows, auditLegIds);
+                }
+            }
+        } else {
+            legLocationsZoneAuditFitKey = '';
+            legLocationsZoneAuditFitPending = false;
+        }
     }
 
     function tryOpenPendingLocationFocus() {
@@ -926,7 +1115,7 @@
                 renderAllLegLocationsMapLayer();
             });
         }
-        ['leg-locations-filter-leg', 'leg-locations-filter-type'].forEach(function (id) {
+        ['leg-locations-filter-zone', 'leg-locations-filter-type'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) {
                 el.addEventListener('change', function () {
@@ -1604,6 +1793,66 @@
         }
     }
 
+    function paintAllLegRoutesFromFeatures(features) {
+        var mapNow = window.courseMappingMap;
+        if (!mapNow || typeof L === 'undefined') return;
+        ensureAllLegRoutesPane(mapNow);
+        removeAllLegRoutesLayer();
+        features = features || [];
+        if (!features.length) return;
+        var auditLegIds = isZoneAuditMapMode() ? getFilteredBrowserLegIdSet() : null;
+        var group = L.layerGroup();
+        features.forEach(function (feature) {
+            var geom = feature.geometry || {};
+            var coords = geom.coordinates || [];
+            if (geom.type !== 'LineString' || coords.length < 2) return;
+            var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
+            var props = feature.properties || {};
+            var legId = props.leg_id;
+            if (legId) {
+                try {
+                    legBoundsCache[legId] = L.latLngBounds(latlngs);
+                } catch (e) { /* ignore */ }
+            }
+            var style = allLegRouteStyle(legId, auditLegIds);
+            var line = L.polyline(latlngs, {
+                pane: ALL_LEG_ROUTES_PANE,
+                color: style.color,
+                weight: style.weight,
+                opacity: style.opacity
+            });
+            var label = String(props.leg_label || legId || '');
+            if (label) {
+                line.bindTooltip(label, { sticky: true });
+            }
+            if (legId) {
+                line.on('click', function () {
+                    if (legDrawActive || legExtendActive) return;
+                    selectLegById(legId);
+                });
+            }
+            group.addLayer(line);
+        });
+        allLegRoutesLayer = group.addTo(mapNow);
+        if (legLocationsZoneAuditFitPending && isZoneAuditMapMode()) {
+            legLocationsZoneAuditFitPending = false;
+            var filters = getLegLocationsBrowserFilters();
+            var rows = collectAllLegLocationRows().filter(function (row) {
+                return legLocationRowMatchesFilters(row, filters);
+            });
+            fitZoneAuditMapBounds(rows, getFilteredBrowserLegIdSet());
+        }
+    }
+
+    function syncAllLegRoutesHighlight() {
+        if (!allLegRoutesFeatures || !allLegRoutesFeatures.length) {
+            if (isZoneAuditMapMode()) renderAllLegRoutes();
+            return;
+        }
+        if (!shouldShowLegRoutesWhileDrawing()) return;
+        paintAllLegRoutesFromFeatures(allLegRoutesFeatures);
+    }
+
     /** Draw every leg route as a muted background line so the full network is visible without a selection. */
     function renderAllLegRoutes() {
         var map = window.courseMappingMap;
@@ -1616,6 +1865,7 @@
         var legs = (libraryState && libraryState.legs) || [];
         if (!legs.length) {
             removeAllLegRoutesLayer();
+            allLegRoutesFeatures = null;
             return;
         }
         allLegRoutesFetchSeq += 1;
@@ -1629,44 +1879,8 @@
             .then(function (data) {
                 if (seq !== allLegRoutesFetchSeq || !data) return;
                 if (!shouldShowLegRoutesWhileDrawing()) return;
-                var mapNow = window.courseMappingMap;
-                if (!mapNow) return;
-                ensureAllLegRoutesPane(mapNow);
-                removeAllLegRoutesLayer();
-                var features = data.features || [];
-                if (!features.length) return;
-                var group = L.layerGroup();
-                features.forEach(function (feature) {
-                    var geom = feature.geometry || {};
-                    var coords = geom.coordinates || [];
-                    if (geom.type !== 'LineString' || coords.length < 2) return;
-                    var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
-                    var props = feature.properties || {};
-                    var legId = props.leg_id;
-                    if (legId) {
-                        try {
-                            legBoundsCache[legId] = L.latLngBounds(latlngs);
-                        } catch (e) { /* ignore */ }
-                    }
-                    var line = L.polyline(latlngs, {
-                        pane: ALL_LEG_ROUTES_PANE,
-                        color: '#9b8ec4',
-                        weight: 3,
-                        opacity: 0.7
-                    });
-                    var label = String(props.leg_label || legId || '');
-                    if (label) {
-                        line.bindTooltip(label, { sticky: true });
-                    }
-                    if (legId) {
-                        line.on('click', function () {
-                            if (legDrawActive || legExtendActive) return;
-                            selectLegById(legId);
-                        });
-                    }
-                    group.addLayer(line);
-                });
-                allLegRoutesLayer = group.addTo(mapNow);
+                allLegRoutesFeatures = data.features || [];
+                paintAllLegRoutesFromFeatures(allLegRoutesFeatures);
             })
             .catch(function () { /* background layer is best-effort */ });
     }
@@ -3552,6 +3766,27 @@
         });
         appendLegPopupField(content, 'Type', sel);
 
+        var sourceLegIdForEdit =
+            mode === 'edit-saved' && selectedLegId ? String(selectedLegId) : '';
+        var legMoveSel = null;
+        if (
+            mode === 'edit-saved' &&
+            sourceLegIdForEdit &&
+            usesOrgLegLibrary() &&
+            isOrgLegsHubMode()
+        ) {
+            legMoveSel = document.createElement('select');
+            (libraryState && libraryState.legs || []).forEach(function (leg) {
+                var opt = document.createElement('option');
+                opt.value = leg.id;
+                opt.textContent =
+                    leg.id + ' — ' + ((leg.leg_label || '').slice(0, 40) || leg.id);
+                if (leg.id === sourceLegIdForEdit) opt.selected = true;
+                legMoveSel.appendChild(opt);
+            });
+            appendLegPopupField(content, 'Leg', legMoveSel);
+        }
+
         var excludeProxyKey =
             mode === 'edit-saved' && selectedLegId && opts.locIndex != null
                 ? legLocKey(selectedLegId, opts.locIndex)
@@ -3772,6 +4007,60 @@
                 var locIndex = opts.locIndex;
                 var leg = getSelectedLeg();
                 if (!leg || locIndex == null || !selectedLegId) return;
+                var targetLegId = legMoveSel
+                    ? String(legMoveSel.value || '').trim()
+                    : selectedLegId;
+                if (targetLegId && targetLegId !== selectedLegId) {
+                    if (
+                        !window.confirm(
+                            'Move "' +
+                                locLabel +
+                                '" from leg ' +
+                                selectedLegId +
+                                ' to leg ' +
+                                targetLegId +
+                                '?'
+                        )
+                    ) {
+                        return;
+                    }
+                    var locationsForMove = (leg.locations || []).slice();
+                    if (locIndex < 0 || locIndex >= locationsForMove.length) return;
+                    var movedLoc = applyLegLocationLabelType(
+                        locationsForMove[locIndex],
+                        locLabel,
+                        locType
+                    );
+                    applyOpsFields(movedLoc);
+                    locationsForMove[locIndex] = movedLoc;
+                    map.closePopup();
+                    setLegStatus('Moving location…');
+                    saveLegLocations(selectedLegId, locationsForMove)
+                        .then(function () {
+                            return moveOrgLegLocation(selectedLegId, locIndex, targetLegId);
+                        })
+                        .then(function (data) {
+                            var newIdx =
+                                data && data.new_loc_index != null
+                                    ? data.new_loc_index
+                                    : null;
+                            setLegStatus(
+                                'Location moved to leg ' + targetLegId + '.'
+                            );
+                            if (newIdx != null) {
+                                navigateToLegLocation(targetLegId, newIdx, {
+                                    scroll: false,
+                                });
+                            } else {
+                                selectLegById(targetLegId, { preserveZoom: true });
+                            }
+                        })
+                        .catch(function (err) {
+                            redrawLegLocationMarkers(getSelectedLeg());
+                            setLegStatus(err.message || String(err), true);
+                        });
+                    return;
+                }
                 var locations = (leg.locations || []).slice();
                 if (locIndex < 0 || locIndex >= locations.length) return;
                 var savedLoc = applyLegLocationLabelType(
@@ -3990,7 +4279,11 @@
         invalidateLegGeometryRequests();
         clearLegMapLayers();
         selectedLegId = null;
+        document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
+            tr.classList.remove('selected');
+        });
         updateLegActionButtons();
+        renderLegLocationsBrowser();
     }
 
     function saveLegEndpoints(legId, startLabel, endLabel) {
@@ -4060,6 +4353,7 @@
         document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
             tr.classList.toggle('selected', tr.dataset.legId === legId);
         });
+        renderLegLocationsBrowser();
         if (!options.keepPinMode) {
             stopLegLocationPinMode();
         }
@@ -4122,6 +4416,10 @@
 
     function selectLeg(leg) {
         if (!leg) return;
+        if (selectedLegId === leg.id) {
+            clearLegMap();
+            return;
+        }
         selectLegById(leg.id);
     }
 
@@ -4391,6 +4689,33 @@
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 return afterLegLibraryMutation(payload.data);
+            });
+    }
+
+    function moveOrgLegLocation(sourceLegId, locIndex, targetLegId) {
+        return fetch(
+            '/api/org/legs/' +
+                encodeURIComponent(sourceLegId) +
+                '/locations/' +
+                encodeURIComponent(String(locIndex)) +
+                '/move',
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_leg_id: targetLegId }),
+            }
+        )
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    return payload.data;
+                });
             });
     }
 

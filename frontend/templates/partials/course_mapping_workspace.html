@@ -55,6 +55,7 @@
                 <div id="course-mapping-map" aria-label="Leg and course map">
                     <div class="map-loading">Loading map...</div>
                     <div id="leg-map-bounds-status" class="config-map-bounds-status" aria-live="polite"></div>
+                    <div id="leg-action-toast" class="leg-action-toast" hidden role="status" aria-live="polite"></div>
                     <div id="leg-map-toolbar" class="leg-map-toolbar">
                         <button type="button" id="btn-leg-draw" class="course-btn" title="Draw a new leg by clicking along roads and trails (snap to route)">Draw leg</button>
                         <span id="leg-draw-actions" class="leg-route-edit-actions" style="display: none;">
@@ -157,13 +158,15 @@
                 </div>
             </div>
             <p class="card-help course-derived-empty">
-                Every location across the org leg library. Use the view action to select the leg on the map and open the location editor.
-                Zone is set on the package <strong>Courses</strong> tab after build.
+                Scoped by the <strong>Organization leg library</strong> selection (click the selected leg again to clear and browse all legs).
+                With no leg selected, choosing a <strong>Zone</strong> shows matching pins and highlights their legs on the map.
+                Type and Search apply on top. Use view to open the location editor.
+                Zone on the leg is the default for new packages; package Course edits can still override per package.
             </p>
             <div class="leg-locations-browser-filters">
                 <label>
-                    <span class="course-label">Leg</span>
-                    <select id="leg-locations-filter-leg" class="course-btn leg-locations-filter-control"></select>
+                    <span class="course-label">Zone</span>
+                    <select id="leg-locations-filter-zone" class="course-btn leg-locations-filter-control"></select>
                 </label>
                 <label>
                     <span class="course-label">Type</span>
@@ -183,6 +186,7 @@
                             <th>ID</th>
                             <th>Label</th>
                             <th>Type</th>
+                            <th>Zone</th>
                             <th>Proxy</th>
                         </tr>
                     </thead>

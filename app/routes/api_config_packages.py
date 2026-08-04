@@ -55,6 +55,7 @@ from app.core.config_package.org_leg_library import (
     import_gpx_files_to_org_library,
     import_org_leg_to_package,
     list_org_legs,
+    move_org_leg_location,
     publish_package_leg_to_org_library,
     update_org_leg,
     update_org_leg_geometry,
@@ -1092,6 +1093,12 @@ class CopyOrgLegLocationsRequest(BaseModel):
     replace: bool = True
 
 
+class MoveOrgLegLocationRequest(BaseModel):
+    """Move one location pin onto another org leg."""
+
+    target_leg_id: str
+
+
 @router.post("/api/org/legs/{leg_id}/copy")
 async def api_copy_org_leg(
     request: Request,
@@ -1124,6 +1131,22 @@ async def api_copy_org_leg_locations(
             body.source_leg_id,
             replace=body.replace,
         )
+        return JSONResponse(content={"ok": True, **state})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/legs/{leg_id}/locations/{loc_index}/move")
+async def api_move_org_leg_location(
+    request: Request,
+    leg_id: str,
+    loc_index: int,
+    body: MoveOrgLegLocationRequest,
+) -> JSONResponse:
+    """Move one location pin from this org leg onto another org leg."""
+    require_auth(request)
+    try:
+        state = move_org_leg_location(leg_id, loc_index, body.target_leg_id)
         return JSONResponse(content={"ok": True, **state})
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

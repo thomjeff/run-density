@@ -556,6 +556,92 @@ def copy_org_leg_locations(
     }
 
 
+def move_org_leg_location(
+    source_leg_id: str,
+    loc_index: int,
+    target_leg_id: str,
+) -> Dict[str, Any]:
+    """
+    Move one location pin from ``source_leg_id`` onto ``target_leg_id``.
+
+    Preserves ``location_key`` and operational fields; drops leg-scoped keys so
+    the target gets a fresh ``leg_loc_key`` on course merge. Blocks when the
+    target already has a pin with the same ``location_key``.
+    """
+    import copy
+
+    from app.core.config_package.legs import _find_leg_index, _normalize_locations
+    from app.core.config_package.location_keys import is_valid_location_key
+
+    source_leg_id = str(source_leg_id).strip()
+    target_leg_id = str(target_leg_id).strip()
+    if not source_leg_id or not target_leg_id:
+        raise ValueError("Source and target leg ids are required")
+    if source_leg_id == target_leg_id:
+        raise ValueError("Source and target leg must differ")
+    try:
+        loc_index = int(loc_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid location index") from exc
+    if loc_index < 0:
+        raise ValueError("Invalid location index")
+
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    source_idx = _find_leg_index(legs, source_leg_id)
+    target_idx = _find_leg_index(legs, target_leg_id)
+    if source_idx < 0:
+        raise ValueError(f"Leg not found: {source_leg_id}")
+    if target_idx < 0:
+        raise ValueError(f"Leg not found: {target_leg_id}")
+
+    source_entry = dict(legs[source_idx])
+    source_locs = list(source_entry.get("locations") or [])
+    if loc_index >= len(source_locs):
+        raise ValueError(
+            f"Location index {loc_index} out of range on leg {source_leg_id}"
+        )
+
+    moving = copy.deepcopy(source_locs[loc_index])
+    if not isinstance(moving, dict):
+        raise ValueError("Invalid location")
+
+    moving_key = str(moving.get("location_key") or "").strip()
+    target_entry = dict(legs[target_idx])
+    target_locs = list(target_entry.get("locations") or [])
+    if is_valid_location_key(moving_key):
+        for existing in target_locs:
+            if not isinstance(existing, dict):
+                continue
+            if str(existing.get("location_key") or "").strip() == moving_key:
+                raise ValueError(
+                    f"Target leg {target_leg_id} already has a location "
+                    f"with key {moving_key}"
+                )
+
+    moving.pop("leg_loc_key", None)
+    moving.pop("id", None)
+    moving.pop("loc_id", None)
+
+    source_locs.pop(loc_index)
+    source_entry["locations"] = _normalize_locations(source_locs)
+    target_entry["locations"] = _normalize_locations(target_locs + [moving])
+    legs[source_idx] = source_entry
+    legs[target_idx] = target_entry
+    set_manifest_legs(manifest, legs)
+    save_org_leg_manifest(manifest)
+    sync_org_leg_changes_into_packages()
+
+    new_loc_index = len(target_entry["locations"]) - 1
+    return {
+        **get_org_leg_library_state(),
+        "source_leg_id": source_leg_id,
+        "target_leg_id": target_leg_id,
+        "loc_index": loc_index,
+        "new_loc_index": new_loc_index,
+    }
+
+
 def get_org_leg_library_state() -> Dict[str, Any]:
     """API state for org leg library management UI."""
     legs = list_org_legs()
