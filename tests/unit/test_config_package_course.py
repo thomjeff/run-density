@@ -121,6 +121,109 @@ def test_save_preserves_recipe_kms_from_stale_client(tmp_path, monkeypatch):
     assert seg["label"] == "Gibson (edited)"
 
 
+def test_save_skips_recipe_km_preserve_when_apply_requests_it(tmp_path, monkeypatch):
+    """Recipe re-apply must write newly measured km, not keep the previous apply."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Recipe Pkg", "", package_events=["full", "half"])
+    config_id = result["config_id"]
+
+    course = load_config_course(config_id)
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S26",
+            "label": "Trail At Aberdeen To Finish",
+            "leg_id": "14",
+            "leg_occurrence": 1,
+            "from_km": 0.0,
+            "to_km": 0.03,
+            "events": ["full", "half", "10k"],
+            "full_from_km": 0.0,
+            "full_to_km": 0.0,
+            "half_from_km": 5.027,
+            "half_to_km": 5.058,
+            "10k_from_km": 0.0,
+            "10k_to_km": 0.0,
+        }
+    ]
+    save_config_course(config_id, course)
+
+    fresh = load_config_course(config_id)
+    fresh["segments"][0].update(
+        {
+            "full_from_km": 41.551,
+            "full_to_km": 41.79,
+            "half_from_km": 21.048,
+            "half_to_km": 21.287,
+            "10k_from_km": 9.768,
+            "10k_to_km": 10.007,
+            "from_km": 41.551,
+            "to_km": 41.79,
+        }
+    )
+    save_config_course(config_id, fresh, preserve_recipe_kms=False)
+
+    seg = load_config_course(config_id)["segments"][0]
+    assert seg["full_from_km"] == 41.551
+    assert seg["half_from_km"] == 21.048
+    assert seg["10k_from_km"] == 9.768
+
+
+def test_save_does_not_preserve_kms_when_leg_identity_changes(tmp_path, monkeypatch):
+    """After copy/split, S7 may be a different leg — do not paste the old row's km."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Recipe Pkg", "", package_events=["full", "half"])
+    config_id = result["config_id"]
+
+    course = load_config_course(config_id)
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S7",
+            "label": "Old combined",
+            "leg_id": "12",
+            "leg_occurrence": 1,
+            "from_km": 17.04,
+            "to_km": 19.362,
+            "events": ["full", "half"],
+            "full_from_km": 17.04,
+            "full_to_km": 19.362,
+            "half_from_km": 2.705,
+            "half_to_km": 5.027,
+        }
+    ]
+    save_config_course(config_id, course)
+
+    stale = load_config_course(config_id)
+    stale.pop("segment_library_applied", None)
+    stale["segments"][0].update(
+        {
+            "leg_id": "44",
+            "label": "Split first half",
+            "full_from_km": 17.04,
+            "full_to_km": 17.536,
+            "half_from_km": 2.705,
+            "half_to_km": 3.201,
+            "from_km": 17.04,
+            "to_km": 17.536,
+        }
+    )
+    save_config_course(config_id, stale)
+
+    seg = load_config_course(config_id)["segments"][0]
+    assert seg["leg_id"] == "44"
+    assert seg["full_to_km"] == 17.536
+    assert seg["half_to_km"] == 3.201
+    assert stale.get("segment_library_applied") is None
+    assert load_config_course(config_id)["segment_library_applied"] is True
+
+
 def test_validate_config_course_rejects_id_mismatch():
     with pytest.raises(ValueError, match="config_id"):
         validate_config_course_data({"id": "other-id", "segments": []}, "abc123")

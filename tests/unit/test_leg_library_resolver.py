@@ -403,3 +403,70 @@ def test_update_org_leg_location_syncs_into_applied_packages(tmp_path, monkeypat
 
     untouched_course = load_config_course(untouched["config_id"])
     assert not untouched_course.get("locations")
+
+
+def test_reapply_rewrites_event_kms_when_recipe_gains_a_finish_leg(tmp_path, monkeypatch):
+    """Second apply must not keep the first apply's km on reused S-numbers."""
+    _patch_roots(tmp_path, monkeypatch)
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "05.gpx").write_text(_gpx_leg(-66.64, -66.63), encoding="utf-8")
+    (org_dir / "14.gpx").write_text(_gpx_leg(-66.63, -66.62), encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "05",
+                        "file": "05.gpx",
+                        "seg_label": "Start",
+                        "start_label": "S",
+                        "end_label": "M",
+                    },
+                    {
+                        "id": "14",
+                        "file": "14.gpx",
+                        "seg_label": "Finish",
+                        "start_label": "M",
+                        "end_label": "F",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = create_config_package("Pkg", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05"]},
+            "flow_overrides": [],
+        },
+    )
+    apply_package_recipes(config_id, export_csv=False)
+    first = load_config_course(config_id)["segments"]
+    assert len(first) == 1
+    first_to = first[0]["full_to_km"]
+    assert first_to > 0
+
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05", "14"]},
+            "flow_overrides": [],
+        },
+    )
+    apply_package_recipes(config_id, export_csv=False)
+    segs = load_config_course(config_id)["segments"]
+    assert [s["leg_id"] for s in segs] == ["05", "14"]
+    assert segs[0]["full_to_km"] == pytest.approx(first_to)
+    assert segs[1]["full_from_km"] == pytest.approx(first_to)
+    assert segs[1]["full_to_km"] > first_to

@@ -635,7 +635,7 @@ def apply_package_recipes(
     course = load_config_course(cid)
     course["segments"] = segments
     course["segment_library_applied"] = True
-    save_config_course(cid, course)
+    save_config_course(cid, course, preserve_recipe_kms=False)
 
     from app.core.config_package.legs import (
         merge_leg_locations_into_course,

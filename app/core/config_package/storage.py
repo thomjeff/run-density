@@ -237,6 +237,16 @@ def load_config_course(config_id: str) -> Dict[str, Any]:
     return data
 
 
+def _leg_occurrence(seg: Dict[str, Any]) -> int:
+    raw = seg.get("leg_occurrence")
+    if raw is None or raw == "":
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _preserve_recipe_segment_kms(
     data: Dict[str, Any], existing: Dict[str, Any]
 ) -> None:
@@ -246,7 +256,12 @@ def _preserve_recipe_segment_kms(
     A browser tab that loaded the course before a recipe apply can save a stale
     snapshot (old per-event kms, no segment_library_applied flag), silently
     reverting apply results. When the on-disk course is recipe-applied, keep the
-    flag and carry over km fields from disk segments matched by seg_id.
+    flag and carry over km fields from disk segments matched by seg_id **and**
+    the same ``leg_id`` / occurrence.
+
+    Recipe apply itself must pass ``preserve_recipe_kms=False`` on
+    ``save_config_course``; otherwise a second apply would copy the previous
+    apply's km onto the newly rebuilt rows (same S-numbers, different legs).
     """
     if not existing.get("segment_library_applied"):
         return
@@ -266,6 +281,12 @@ def _preserve_recipe_segment_kms(
         src = by_seg_id.get(str(seg.get("seg_id", "")))
         if not src:
             continue
+        src_leg = str(src.get("leg_id") or "").strip()
+        seg_leg = str(seg.get("leg_id") or "").strip()
+        if src_leg and seg_leg and src_leg != seg_leg:
+            continue
+        if _leg_occurrence(src) != _leg_occurrence(seg):
+            continue
         for key in km_keys:
             if key in src:
                 seg[key] = src[key]
@@ -273,7 +294,12 @@ def _preserve_recipe_segment_kms(
             seg["leg_id"] = src["leg_id"]
 
 
-def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
+def save_config_course(
+    config_id: str,
+    course_data: Dict[str, Any],
+    *,
+    preserve_recipe_kms: bool = True,
+) -> Path:
     """
     Save course workspace to runflow/config/{config_id}/course.json.
 
@@ -298,7 +324,7 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
         existing = load_config_course(cid)
     except (FileNotFoundError, ValueError):
         existing = None
-    if existing:
+    if existing and preserve_recipe_kms:
         _preserve_recipe_segment_kms(data, existing)
 
     segments = data.get("segments") or []
