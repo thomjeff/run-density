@@ -186,6 +186,10 @@ _RUNFLOW_ROOT_CONTAINER_DEFAULT = DEFAULT_RUNFLOW_ROOT_CONTAINER
 REPORTS_OVERLAPS_DIRNAME = "overlaps"
 REPORTS_OVERLAPS_SUMMARY_FILENAME = "overlaps_summary.json"
 
+# Flow consolidation (#845): additive segment-parent summary; does not replace flow_segments.json
+FLOW_SEGMENT_SUMMARY_FILENAME = "flow_segments_by_seg.json"
+FLOW_SEGMENT_SUMMARY_SCHEMA = "0.1.0-draft"
+
 # Data directory path (Issue #596)
 DATA_DIR = "data"
 

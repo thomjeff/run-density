@@ -344,7 +344,8 @@ def create_flow_segments_from_flow_csv(
             "width_m": width_m,  # Issue #549: Always from segments.csv (physical property)
             "flow_type": _get_required_flow_type(flow_row, seg_id, event_a, event_b),
             "notes": flow_row.get("notes", ""),
-            "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0
+            "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0,
+            "flow_id": str(flow_row.get("flow_id") or "").strip(),
         }
         flow_format_segments.append(flow_segment)
     

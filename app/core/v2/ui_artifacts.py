@@ -645,6 +645,17 @@ def _export_ui_artifacts_v2(
         # Issue #628: Write to metrics/ subdirectory
         (metrics_dir / "flow_segments.json").write_text(json.dumps(flow_segments, indent=2))
         logger.info(f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)")
+
+        # Issue #845/#847: additive segment-parent summary. Never fail the pipeline.
+        try:
+            from app.core.flow.segment_summary import write_segment_flow_summary
+            from app.utils.run_id import get_run_directory
+
+            day_dir = get_run_directory(run_id) / day.value
+            summary_path = write_segment_flow_summary(day_dir, day.value)
+            logger.info("   ✅ %s written", summary_path.name if summary_path else "flow_segments_by_seg.json")
+        except Exception as e:
+            logger.warning("   ⚠️  Could not generate flow_segments_by_seg.json: %s", e)
         
         # 5.6. Generate zone_captions.json (Issue #628)
         logger.info("5️⃣.6️⃣  Generating zone_captions.json...")
@@ -990,7 +1001,8 @@ def _generate_flow_segments_json(
             "width_m": float(width_m) if width_m else 0.0,
             "has_convergence": bool(has_convergence),
             "worst_zone": worst_zone_data,
-            "zones": zone_dicts
+            "zones": zone_dicts,
+            "flow_id": segment.get("flow_id") or composite_key,
         }
     
     logger.info(f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries")

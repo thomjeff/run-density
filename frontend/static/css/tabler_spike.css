@@ -239,6 +239,114 @@ html.rf-tabler .card h3 {
     font-weight: 650;
 }
 
+html.rf-tabler .flow-parent-row.is-open {
+    background: #e8f1fb;
+}
+
+html.rf-tabler .flow-parent-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+html.rf-tabler .flow-parent-tile-grid-secondary {
+    margin-top: 0.65rem;
+}
+
+html.rf-tabler .flow-parent-tile {
+    border: 1px solid var(--tblr-border-color, #e6e7e9);
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 1px 2px rgba(24, 36, 51, 0.04);
+}
+
+html.rf-tabler .flow-parent-tile-header {
+    background: #f8fafc;
+}
+
+html.rf-tabler .flow-parent-tile-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #182433;
+}
+
+html.rf-tabler .flow-parent-tile-kicker {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+html.rf-tabler .flow-parent-tile-value {
+    margin-top: 0.2rem;
+    font-size: 2rem;
+    font-weight: 750;
+    line-height: 1.05;
+    color: #206bc4;
+}
+
+html.rf-tabler .flow-parent-tile-secondary .flow-parent-tile-value {
+    font-size: 1.45rem;
+    color: #475569;
+}
+
+html.rf-tabler .flow-parent-tile-label {
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+html.rf-tabler .flow-parent-tile-meta {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+html.rf-tabler .flow-parent-chart {
+    position: relative;
+    width: 100%;
+}
+
+html.rf-tabler .flow-parent-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+html.rf-tabler .flow-parent-chart-occ {
+    height: 260px;
+}
+
+html.rf-tabler .flow-parent-mix-heading {
+    margin: 1.15rem 0 0.35rem;
+    font-size: 1rem;
+}
+
+html.rf-tabler .flow-parent-mix-read {
+    font-size: 0.8rem;
+    margin: 0 0 0.55rem;
+    max-width: 58rem;
+}
+
+html.rf-tabler .flow-parent-mix-table th,
+html.rf-tabler .flow-parent-mix-table td {
+    text-align: right;
+    white-space: nowrap;
+}
+
+html.rf-tabler .flow-parent-mix-table th:first-child,
+html.rf-tabler .flow-parent-mix-table td:first-child,
+html.rf-tabler .flow-parent-mix-table th[scope="row"] {
+    text-align: left;
+}
+
+html.rf-tabler .flow-parent-mix-unique {
+    font-weight: 700;
+}
+
 /* Buttons */
 html.rf-tabler .course-btn,
 html.rf-tabler .race-config-page .card-actions button {

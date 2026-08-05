@@ -138,3 +138,43 @@ async def get_flow_segments(
         logger.error(f"Error generating flow segments: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load flow data: {str(e)}")
 
+
+@router.get("/api/flow/segment-parents")
+async def get_flow_segment_parents(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
+):
+    """
+    Additive segment-parent Flow summary (#845/#847).
+
+    Does not change `/api/flow/segments`. Missing artifact falls back to an
+    on-the-fly O(pairs) build from existing pair files.
+    """
+    try:
+        from app.utils.run_id import get_latest_run_id, get_run_directory, resolve_selected_day
+        from app.core.flow.segment_summary import build_segment_flow_summary_from_day_dir
+
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
+        day_dir = get_run_directory(run_id) / selected_day
+        # Always rebuild from pair artifacts. The durable JSON may be written in
+        # Phase 7 before overlaps exist, so serving it stale drops t0/t1/occupancy.
+        if day_dir.is_dir():
+            summary = build_segment_flow_summary_from_day_dir(day_dir, selected_day)
+        else:
+            summary = {"schema_version": None, "segments": []}
+
+        response = JSONResponse(content={
+            "selected_day": selected_day,
+            "available_days": available_days,
+            "summary": summary,
+        })
+        response.headers["Cache-Control"] = "public, max-age=60"
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Error loading flow segment parents: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to load flow segment parents: {str(e)}")
+
