@@ -189,6 +189,7 @@ def _compute_flow_segment_task(
         "zones": zones,
         "worst_zone_index": worst_zone.zone_index if worst_zone else None,
         "worst_zone": worst_zone,
+        "flow_id": segment_data.get("flow_id") or "",
     }
     
     has_convergence = cp_km is not None and worst_zone is not None

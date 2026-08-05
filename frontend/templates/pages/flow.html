@@ -10,6 +10,34 @@
 </div>
 {% include "partials/run_context.html" %}
 
+<div id="flow-parent-preview" class="card" style="display:none;">
+    <h3 style="margin-bottom: 0.5rem;">Segment Flow (preview)</h3>
+    <p id="flow-parent-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+        Opt-in preview (<code>?flow_parent=1</code>). Unique overtakers lead; occupancy is context.
+        Existing Flow tables below are unchanged. Rollback: omit the query param or return to <code>main</code>.
+    </p>
+    <div class="scrollable-table-container">
+        <table id="flow-parent-table" class="table-sticky-header">
+            <thead>
+                <tr>
+                    <th>SEGMENT</th>
+                    <th>EVENTS</th>
+                    <th>UNION WINDOW</th>
+                    <th>UNIQUE OVERTAKERS</th>
+                    <th>SHARE OF STARTERS</th>
+                    <th>HIGHEST-SEVERITY PAIR</th>
+                </tr>
+            </thead>
+            <tbody id="flow-parent-tbody">
+                <tr>
+                    <td colspan="6" class="placeholder">Loading segment parents...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p id="flow-parent-secondary" class="text-secondary" style="font-size:0.8rem; margin:0.75rem 0 0;"></p>
+</div>
+
 <!-- Flow Overlaps -->
 <div class="card">
     <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
@@ -137,11 +165,91 @@
         initializeSorting();
         loadFlowData();
         loadOverlapData();
+        loadFlowParentPreview();
         window.addEventListener('runflow:context-ready', function () {
             loadFlowData();
             loadOverlapData();
+            loadFlowParentPreview();
         });
     });
+
+    function flowParentPreviewEnabled() {
+        return new URLSearchParams(window.location.search).get('flow_parent') === '1';
+    }
+
+    function loadFlowParentPreview() {
+        const wrap = document.getElementById('flow-parent-preview');
+        if (!wrap || !flowParentPreviewEnabled()) {
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        wrap.style.display = '';
+        const { day, run_id } = resolveRunAndDay();
+        if (!run_id) {
+            return;
+        }
+        const qp = new URLSearchParams({ run_id });
+        if (day) qp.set('day', day);
+        fetch(`/api/flow/segment-parents?${qp.toString()}`, { cache: 'no-store' })
+            .then(function (response) {
+                if (!response.ok) throw new Error(response.statusText);
+                return response.json();
+            })
+            .then(function (data) {
+                renderFlowParentPreview((data.summary && data.summary.segments) || []);
+            })
+            .catch(function (error) {
+                console.error('Error loading flow segment parents:', error);
+                const tbody = document.getElementById('flow-parent-tbody');
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="placeholder">Segment parent preview unavailable.</td></tr>';
+                }
+            });
+    }
+
+    function renderFlowParentPreview(segments) {
+        const tbody = document.getElementById('flow-parent-tbody');
+        const secondary = document.getElementById('flow-parent-secondary');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!segments.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No multi-event segment parents.</td></tr>';
+            return;
+        }
+        segments.forEach(function (seg) {
+            const events = (seg.events || []).join(' · ') || '—';
+            const windowLabel = (seg.t0 && seg.t1) ? (seg.t0 + '–' + seg.t1) : '—';
+            const status = seg.pace_mixing_status || '';
+            const overtakers = (seg.events || []).map(function (event) {
+                return status === 'ready' ? ((seg.unique_overtakers || {})[event] || 0) : '—';
+            }).join(' / ') || '—';
+            const shares = (seg.events || []).map(function (event) {
+                const value = (seg.share_of_starters_overtaking || {})[event];
+                return (status === 'ready' && value != null) ? (value + '%') : '—';
+            }).join(' · ') || '—';
+            const worst = seg.highest_severity_pair || {};
+            const worstLabel = worst.flow_id
+                ? (worst.flow_id + (worst.zone_index != null ? (' · zone ' + worst.zone_index) : ''))
+                : '—';
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + (seg.seg_id || '') + (seg.segment_label ? (' · ' + seg.segment_label) : '') + '</td>' +
+                '<td>' + events + '</td>' +
+                '<td>' + windowLabel + '</td>' +
+                '<td>' + overtakers + '</td>' +
+                '<td>' + shares + '</td>' +
+                '<td>' + worstLabel + '</td>';
+            tbody.appendChild(tr);
+        });
+        if (secondary) {
+            const gated = segments.some(function (seg) {
+                return seg.pace_mixing_status !== 'ready';
+            });
+            secondary.textContent = gated
+                ? 'Unique overtaker KPIs gated until pair-keyed fz_runners + same-pass filter. Denominator = starters in this analysis run. Occupancy source = same-pass overlap per-minute max.'
+                : 'Unique overtaken is secondary (expand later). Denominator = starters in this analysis run.';
+        }
+    }
 
     function resolveRunAndDay() {
         const params = new URLSearchParams(window.location.search);

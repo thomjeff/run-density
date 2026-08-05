@@ -1083,6 +1083,7 @@ def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, r
     - event: Event name (e.g., "10k", "half")
     - role: One of "overtaking", "overtaken", "copresent"
     - side: "a" or "b" (event A or event B)
+    - event_a / event_b / flow_id: pair identity (#845; additive, optional for older files)
     
     Args:
         segments: List of segment result dictionaries with zone data
@@ -1196,6 +1197,29 @@ def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                             f"Metrics keys: {list(metrics.keys())[:10]}..."
                         )
             
+            flow_id = (
+                segment.get("flow_id")
+                or f"{seg_id}_{event_a}_{event_b}"
+            )
+
+            def _runner_row(runner_id, event, role, side):
+                rid = (
+                    int(runner_id)
+                    if isinstance(runner_id, (int, str)) and str(runner_id).isdigit()
+                    else runner_id
+                )
+                return {
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": rid,
+                    "event": event,
+                    "role": role,
+                    "side": side,
+                    "event_a": event_a,
+                    "event_b": event_b,
+                    "flow_id": flow_id,
+                }
+
             # Convert sets to lists if needed (handle JSON deserialization)
             def normalize_set(s):
                 if isinstance(s, list):
@@ -1212,73 +1236,18 @@ def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, r
             b_bibs_overtaken = normalize_set(b_bibs_overtaken)
             b_bibs_copresence = normalize_set(b_bibs_copresence)
             
-            # Emit rows for event A runners
-            # Role: overtaking (A runners who overtook B runners)
             for runner_id in a_bibs_overtakes:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_a,
-                    "role": "overtaking",
-                    "side": "a",
-                })
-            
-            # Role: overtaken (A runners who were overtaken by B runners)
+                runners_rows.append(_runner_row(runner_id, event_a, "overtaking", "a"))
             for runner_id in a_bibs_overtaken:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_a,
-                    "role": "overtaken",
-                    "side": "a",
-                })
-            
-            # Role: copresent (A runners who were copresent with B runners)
+                runners_rows.append(_runner_row(runner_id, event_a, "overtaken", "a"))
             for runner_id in a_bibs_copresence:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_a,
-                    "role": "copresent",
-                    "side": "a",
-                })
-            
-            # Emit rows for event B runners
-            # Role: overtaking (B runners who overtook A runners)
+                runners_rows.append(_runner_row(runner_id, event_a, "copresent", "a"))
             for runner_id in b_bibs_overtakes:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_b,
-                    "role": "overtaking",
-                    "side": "b",
-                })
-            
-            # Role: overtaken (B runners who were overtaken by A runners)
+                runners_rows.append(_runner_row(runner_id, event_b, "overtaking", "b"))
             for runner_id in b_bibs_overtaken:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_b,
-                    "role": "overtaken",
-                    "side": "b",
-                })
-            
-            # Role: copresent (B runners who were copresent with A runners)
+                runners_rows.append(_runner_row(runner_id, event_b, "overtaken", "b"))
             for runner_id in b_bibs_copresence:
-                runners_rows.append({
-                    "seg_id": seg_id,
-                    "zone_index": zone_index,
-                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
-                    "event": event_b,
-                    "role": "copresent",
-                    "side": "b",
-                })
+                runners_rows.append(_runner_row(runner_id, event_b, "copresent", "b"))
         
         # Track segments that contributed runner data
         rows_after_segment = len(runners_rows)
