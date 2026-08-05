@@ -152,33 +152,18 @@ async def get_flow_segment_parents(
     """
     try:
         from app.utils.run_id import get_latest_run_id, get_run_directory, resolve_selected_day
-        from app.storage import create_runflow_storage
-        from app.utils.constants import FLOW_SEGMENT_SUMMARY_FILENAME
         from app.core.flow.segment_summary import build_segment_flow_summary_from_day_dir
 
         if not run_id:
             run_id = get_latest_run_id()
         selected_day, available_days = resolve_selected_day(run_id, day)
-        storage = create_runflow_storage(run_id)
-        artifact_path = f"{selected_day}/ui/metrics/{FLOW_SEGMENT_SUMMARY_FILENAME}"
-
-        summary = None
-        try:
-            content = storage.read_text(artifact_path)
-            if content:
-                summary = json.loads(content)
-        except FileNotFoundError:
-            summary = None
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", artifact_path, e)
-            summary = None
-
-        if not summary:
-            day_dir = get_run_directory(run_id) / selected_day
-            if day_dir.is_dir():
-                summary = build_segment_flow_summary_from_day_dir(day_dir, selected_day)
-            else:
-                summary = {"schema_version": None, "segments": []}
+        day_dir = get_run_directory(run_id) / selected_day
+        # Always rebuild from pair artifacts. The durable JSON may be written in
+        # Phase 7 before overlaps exist, so serving it stale drops t0/t1/occupancy.
+        if day_dir.is_dir():
+            summary = build_segment_flow_summary_from_day_dir(day_dir, selected_day)
+        else:
+            summary = {"schema_version": None, "segments": []}
 
         response = JSONResponse(content={
             "selected_day": selected_day,

@@ -380,6 +380,22 @@ def build_segment_flow_summary(
                     tables.append((events_in_table, rows))
             occupancy = merge_occupancy_series(tables)
 
+        state_cursor = cursor_hhmm
+        if not state_cursor and t0 and t1:
+            start_m = hhmm_to_minutes(t0)
+            end_m = hhmm_to_minutes(t1)
+            if start_m is not None and end_m is not None:
+                mid = (start_m + end_m) // 2
+                state_cursor = f"{mid // 60:02d}:{mid % 60:02d}"
+        if state_cursor:
+            for group in (same_pass, corridor, same_event):
+                for pair in group:
+                    pair["state"] = pair_temporal_state(
+                        state_cursor,
+                        pair.get("overlap_start") or "",
+                        pair.get("overlap_end") or "",
+                    )
+
         parents.append(
             {
                 "seg_id": seg_id,

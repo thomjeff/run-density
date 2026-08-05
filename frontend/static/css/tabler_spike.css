@@ -239,6 +239,36 @@ html.rf-tabler .card h3 {
     font-weight: 650;
 }
 
+html.rf-tabler .flow-parent-row.is-open {
+    background: #e8f1fb;
+}
+
+html.rf-tabler .flow-parent-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+html.rf-tabler .flow-parent-kpi {
+    border: 1px solid var(--tblr-border-color, #e6e7e9);
+    border-radius: 0.4rem;
+    background: #fff;
+    padding: 0.75rem 0.9rem;
+}
+
+html.rf-tabler .flow-parent-kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #206bc4;
+}
+
+html.rf-tabler .flow-parent-kpi-label {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: #526277;
+}
+
 /* Buttons */
 html.rf-tabler .course-btn,
 html.rf-tabler .race-config-page .card-actions button {

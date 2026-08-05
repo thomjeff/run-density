@@ -200,8 +200,11 @@ def test_existing_flow_segments_api_shape_unchanged():
 def test_flow_html_default_hides_parent_preview():
     source = Path("frontend/templates/pages/flow.html").read_text(encoding="utf-8")
     assert 'id="flow-parent-preview"' in source
-    assert "flow_parent=1" in source
+    assert 'id="flow-parent-detail"' in source
+    assert 'id="flow-legacy-wrap"' in source
+    assert "get('flow_parent')" in source
     assert "flowParentPreviewEnabled" in source
+    assert "selectParentSegment" in source
     assert "loadFlowData();" in source
     assert "loadOverlapData();" in source
 
@@ -229,3 +232,24 @@ def test_s8_reference_run_builds_parent_without_shipping_naive_unions():
     assert s8["occupancy"][0]["minute"] <= "08:13"
     dumped = json.dumps(summary)
     assert "313" not in dumped
+
+
+NEW_RUN = Path("/Users/jthompson/Documents/runflow/analysis/4WPc8TogaBYqRNVK7gswd7/sun")
+
+
+@pytest.mark.skipif(not NEW_RUN.is_dir(), reason="new analysis run not on this machine")
+def test_new_run_live_summary_has_windows_and_filtered_uniques():
+    summary = build_segment_flow_summary_from_day_dir(NEW_RUN, "sun")
+    s8 = next(seg for seg in summary["segments"] if seg["seg_id"] == "S8")
+    assert s8["t0"] == "08:13"
+    assert s8["t1"] == "09:56"
+    assert s8["pace_mixing_status"] == PACE_MIXING_READY
+    assert s8["unique_overtakers"]["full"] == 196
+    assert s8["unique_overtakers"]["half"] == 520
+    assert s8["unique_overtakers"]["10k"] == 0
+    assert s8["occupancy"]
+    assert {p["flow_id"] for p in s8["pairs"]["same_pass"]} == {
+        "S8_full_half",
+        "S8_full_10k",
+        "S8_half_10k",
+    }

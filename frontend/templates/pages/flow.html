@@ -10,34 +10,39 @@
 </div>
 {% include "partials/run_context.html" %}
 
-<div id="flow-parent-preview" class="card" style="display:none;">
-    <h3 style="margin-bottom: 0.5rem;">Segment Flow (preview)</h3>
-    <p id="flow-parent-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
-        Opt-in preview (<code>?flow_parent=1</code>). Unique overtakers lead; occupancy is context.
-        Existing Flow tables below are unchanged. Rollback: omit the query param or return to <code>main</code>.
-    </p>
-    <div class="scrollable-table-container">
-        <table id="flow-parent-table" class="table-sticky-header">
-            <thead>
-                <tr>
-                    <th>SEGMENT</th>
-                    <th>EVENTS</th>
-                    <th>UNION WINDOW</th>
-                    <th>UNIQUE OVERTAKERS</th>
-                    <th>SHARE OF STARTERS</th>
-                    <th>HIGHEST-SEVERITY PAIR</th>
-                </tr>
-            </thead>
-            <tbody id="flow-parent-tbody">
-                <tr>
-                    <td colspan="6" class="placeholder">Loading segment parents...</td>
-                </tr>
-            </tbody>
-        </table>
+<div id="flow-parent-preview" style="display:none;">
+    <div class="card">
+        <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
+        <p id="flow-parent-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+            Segment-first preview. <strong>Unique overtakers</strong> are the Flow insight (who had to work through another field).
+            Occupancy is crowding context. Pair rows are evidence — unions, not sums.
+            Denominator = starters in this analysis run.
+        </p>
+        <div class="scrollable-table-container">
+            <table id="flow-parent-table" class="table-sticky-header">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>SEGMENT</th>
+                        <th>EVENTS</th>
+                        <th>UNION WINDOW</th>
+                        <th>UNIQUE OVERTAKERS</th>
+                        <th>SHARE OF STARTERS</th>
+                        <th>HIGHEST-SEVERITY PAIR</th>
+                    </tr>
+                </thead>
+                <tbody id="flow-parent-tbody">
+                    <tr>
+                        <td colspan="7" class="placeholder">Loading segment parents...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-    <p id="flow-parent-secondary" class="text-secondary" style="font-size:0.8rem; margin:0.75rem 0 0;"></p>
+    <div id="flow-parent-detail"></div>
 </div>
 
+<div id="flow-legacy-wrap">
 <!-- Flow Overlaps -->
 <div class="card">
     <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
@@ -149,6 +154,7 @@
         </tbody>
     </table>
 </div>
+</div>
 
 {% endblock %}
 
@@ -159,6 +165,10 @@
     let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc' (Issue #596: Fix - moved outside DOMContentLoaded)
     let overlapSummary = null;
     let overlapChart = null;
+    let parentSegments = [];
+    let selectedParentSegId = null;
+    let parentMixChart = null;
+    let parentOccChart = null;
     
     // Load flow data on page load (and after chrome derives day — Issue #841)
     document.addEventListener('DOMContentLoaded', function() {
@@ -177,13 +187,28 @@
         return new URLSearchParams(window.location.search).get('flow_parent') === '1';
     }
 
+    function eventLabel(event) {
+        if (event === '10k') return '10K';
+        if (!event) return '—';
+        return String(event).charAt(0).toUpperCase() + String(event).slice(1);
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+        });
+    }
+
     function loadFlowParentPreview() {
         const wrap = document.getElementById('flow-parent-preview');
+        const legacy = document.getElementById('flow-legacy-wrap');
         if (!wrap || !flowParentPreviewEnabled()) {
             if (wrap) wrap.style.display = 'none';
+            if (legacy) legacy.style.display = '';
             return;
         }
         wrap.style.display = '';
+        if (legacy) legacy.style.display = 'none';
         const { day, run_id } = resolveRunAndDay();
         if (!run_id) {
             return;
@@ -196,28 +221,36 @@
                 return response.json();
             })
             .then(function (data) {
-                renderFlowParentPreview((data.summary && data.summary.segments) || []);
+                parentSegments = ((data.summary && data.summary.segments) || []).filter(function (seg) {
+                    return (seg.events || []).length > 1 || ((seg.pairs || {}).same_pass || []).length;
+                });
+                renderFlowParentPreview(parentSegments);
+                const preferred = parentSegments.find(function (seg) { return seg.seg_id === 'S8'; })
+                    || parentSegments.find(function (seg) { return (seg.events || []).length > 1; })
+                    || parentSegments[0];
+                if (preferred) {
+                    selectParentSegment(preferred.seg_id);
+                }
             })
             .catch(function (error) {
                 console.error('Error loading flow segment parents:', error);
                 const tbody = document.getElementById('flow-parent-tbody');
                 if (tbody) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="placeholder">Segment parent preview unavailable.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Segment parent preview unavailable.</td></tr>';
                 }
             });
     }
 
     function renderFlowParentPreview(segments) {
         const tbody = document.getElementById('flow-parent-tbody');
-        const secondary = document.getElementById('flow-parent-secondary');
         if (!tbody) return;
         tbody.innerHTML = '';
         if (!segments.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No multi-event segment parents.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No multi-event segment parents.</td></tr>';
             return;
         }
         segments.forEach(function (seg) {
-            const events = (seg.events || []).join(' · ') || '—';
+            const events = (seg.events || []).map(eventLabel).join(' · ') || '—';
             const windowLabel = (seg.t0 && seg.t1) ? (seg.t0 + '–' + seg.t1) : '—';
             const status = seg.pace_mixing_status || '';
             const overtakers = (seg.events || []).map(function (event) {
@@ -228,26 +261,156 @@
                 return (status === 'ready' && value != null) ? (value + '%') : '—';
             }).join(' · ') || '—';
             const worst = seg.highest_severity_pair || {};
-            const worstLabel = worst.flow_id
-                ? (worst.flow_id + (worst.zone_index != null ? (' · zone ' + worst.zone_index) : ''))
-                : '—';
+            const worstLabel = worst.event_a
+                ? (eventLabel(worst.event_a) + ' ↔ ' + eventLabel(worst.event_b) + (worst.zone_index != null ? (' · zone ' + worst.zone_index) : ''))
+                : (worst.flow_id || '—');
+            const open = seg.seg_id === selectedParentSegId;
             const tr = document.createElement('tr');
+            tr.className = 'flow-parent-row' + (open ? ' is-open' : '');
+            tr.dataset.segId = seg.seg_id;
+            tr.style.cursor = 'pointer';
             tr.innerHTML =
-                '<td>' + (seg.seg_id || '') + (seg.segment_label ? (' · ' + seg.segment_label) : '') + '</td>' +
-                '<td>' + events + '</td>' +
-                '<td>' + windowLabel + '</td>' +
-                '<td>' + overtakers + '</td>' +
-                '<td>' + shares + '</td>' +
-                '<td>' + worstLabel + '</td>';
+                '<td>' + (open ? '▾' : '▸') + '</td>' +
+                '<td>' + escapeHtml(seg.seg_id || '') + (seg.segment_label ? (' · ' + escapeHtml(seg.segment_label)) : '') + '</td>' +
+                '<td>' + escapeHtml(events) + '</td>' +
+                '<td>' + escapeHtml(windowLabel) + '</td>' +
+                '<td>' + escapeHtml(String(overtakers)) + '</td>' +
+                '<td>' + escapeHtml(String(shares)) + '</td>' +
+                '<td>' + escapeHtml(worstLabel) + '</td>';
+            tr.addEventListener('click', function () {
+                selectParentSegment(seg.seg_id);
+            });
             tbody.appendChild(tr);
         });
-        if (secondary) {
-            const gated = segments.some(function (seg) {
-                return seg.pace_mixing_status !== 'ready';
+    }
+
+    function selectParentSegment(segId) {
+        selectedParentSegId = segId;
+        renderFlowParentPreview(parentSegments);
+        const seg = parentSegments.find(function (item) { return item.seg_id === segId; });
+        renderFlowParentDetail(seg);
+    }
+
+    function renderFlowParentDetail(seg) {
+        const detail = document.getElementById('flow-parent-detail');
+        if (!detail) return;
+        if (!seg) {
+            detail.innerHTML = '';
+            return;
+        }
+        const events = seg.events || [];
+        const status = seg.pace_mixing_status || '';
+        const ready = status === 'ready';
+        const windowLabel = (seg.t0 && seg.t1) ? (seg.t0 + '–' + seg.t1) : '—';
+        const kpis = events.map(function (event) {
+            const count = ready ? ((seg.unique_overtakers || {})[event] || 0) : '—';
+            const share = ready ? (seg.share_of_starters_overtaking || {})[event] : null;
+            const field = (seg.field_sizes || {})[event];
+            return '<div class="flow-parent-kpi">' +
+                '<div class="flow-parent-kpi-value">' + escapeHtml(String(count)) + '</div>' +
+                '<div class="flow-parent-kpi-label">' + escapeHtml(eventLabel(event)) + ' unique overtakers' +
+                (share != null ? (' · ' + share + '% of starters') : '') +
+                (field ? (' <span class="text-secondary">(' + field + ')</span>') : '') +
+                '</div></div>';
+        }).join('');
+        const overtaken = events.map(function (event) {
+            return eventLabel(event) + ' ' + (ready ? ((seg.unique_overtaken || {})[event] || 0) : '—');
+        }).join(' · ');
+        const samePass = ((seg.pairs || {}).same_pass || []);
+        const corridor = ((seg.pairs || {}).corridor || []);
+        const sameEvent = ((seg.pairs || {}).same_event || []);
+        const pairRows = samePass.map(function (pair) {
+            const wz = pair.worst_zone || {};
+            return '<tr>' +
+                '<td>' + escapeHtml(eventLabel(pair.event_a) + ' ↔ ' + eventLabel(pair.event_b)) + '</td>' +
+                '<td>' + escapeHtml((pair.overlap_start && pair.overlap_end) ? (pair.overlap_start + '–' + pair.overlap_end) : '—') + '</td>' +
+                '<td>' + escapeHtml(pair.state || '—') + '</td>' +
+                '<td>' + escapeHtml((pair.peak_concurrent_a != null ? pair.peak_concurrent_a : '—') + ' / ' + (pair.peak_concurrent_b != null ? pair.peak_concurrent_b : '—')) + '</td>' +
+                '<td>' + escapeHtml((wz.overtaking_a != null ? wz.overtaking_a : '—') + ' / ' + (wz.overtaking_b != null ? wz.overtaking_b : '—')) + '</td>' +
+                '</tr>';
+        }).join('') || '<tr><td colspan="5" class="placeholder">No same-pass pairs.</td></tr>';
+        detail.innerHTML =
+            '<div class="card">' +
+            '<h3 style="margin-bottom:0.35rem;">' + escapeHtml(seg.seg_id) + ' — ' + escapeHtml(seg.segment_label || '') + '</h3>' +
+            '<p class="text-secondary" style="margin-bottom:1rem;">' + escapeHtml(events.map(eventLabel).join(' · ')) +
+            ' · union window ' + escapeHtml(windowLabel) + '</p>' +
+            '<div class="flow-parent-kpis">' + kpis + '</div>' +
+            '<p class="text-secondary" style="margin:0.75rem 0 0.25rem;">Unique overtaken (secondary): ' + escapeHtml(overtaken) + '</p>' +
+            '<p class="text-secondary" style="margin:0 0 1rem; font-size:0.8rem;">% of starters uses the analysis-run field size, not DNS and not “entered this segment only.” Parent totals are runner-ID unions across same-pass cross-event pairs.</p>' +
+            '<canvas id="flow-parent-mix-chart" height="90"></canvas>' +
+            '<h4 style="margin:1.25rem 0 0.5rem;">Pair evidence</h4>' +
+            '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Do not sum these overtaking columns into the parent KPIs. Corridor ' + corridor.length + ' · same-event ' + sameEvent.length + ' typed children stay out of the union.</p>' +
+            '<div class="scrollable-table-container"><table class="table-sticky-header"><thead><tr><th>PAIR</th><th>WINDOW</th><th>STATE</th><th>PEAK CONCURRENT</th><th>OVERTAKING A / B</th></tr></thead><tbody>' + pairRows + '</tbody></table></div>' +
+            '<h4 style="margin:1.25rem 0 0.35rem;">Crowding context</h4>' +
+            '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Concurrent occupancy from same-pass overlap minutes — secondary to pace mixing.</p>' +
+            '<canvas id="flow-parent-occ-chart" height="70"></canvas>' +
+            '</div>';
+        renderParentCharts(seg);
+    }
+
+    function downsampleOccupancy(points) {
+        if (!points || points.length <= 48) return points || [];
+        const step = Math.ceil(points.length / 48);
+        return points.filter(function (_, idx) { return idx % step === 0; });
+    }
+
+    function renderParentCharts(seg) {
+        const events = seg.events || [];
+        const ready = seg.pace_mixing_status === 'ready';
+        const mixEl = document.getElementById('flow-parent-mix-chart');
+        const occEl = document.getElementById('flow-parent-occ-chart');
+        const tones = ['#206bc4', '#d97706', '#2fb344', '#ae3ec9'];
+        if (parentMixChart) parentMixChart.destroy();
+        if (parentOccChart) parentOccChart.destroy();
+        if (mixEl && window.Chart) {
+            parentMixChart = new Chart(mixEl, {
+                type: 'bar',
+                data: {
+                    labels: events.map(eventLabel),
+                    datasets: [
+                        {
+                            label: 'Unique overtakers',
+                            data: events.map(function (event) { return ready ? ((seg.unique_overtakers || {})[event] || 0) : 0; }),
+                            backgroundColor: '#206bc4'
+                        },
+                        {
+                            label: 'Unique overtaken',
+                            data: events.map(function (event) { return ready ? ((seg.unique_overtaken || {})[event] || 0) : 0; }),
+                            backgroundColor: '#94a3b8'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Unique runners' } } }
+                }
             });
-            secondary.textContent = gated
-                ? 'Unique overtaker KPIs gated until pair-keyed fz_runners + same-pass filter. Denominator = starters in this analysis run. Occupancy source = same-pass overlap per-minute max.'
-                : 'Unique overtaken is secondary (expand later). Denominator = starters in this analysis run.';
+        }
+        const occ = downsampleOccupancy(seg.occupancy || []);
+        if (occEl && window.Chart && occ.length) {
+            parentOccChart = new Chart(occEl, {
+                type: 'line',
+                data: {
+                    labels: occ.map(function (point) { return point.minute; }),
+                    datasets: events.map(function (event, idx) {
+                        return {
+                            label: eventLabel(event),
+                            data: occ.map(function (point) { return point[event] || 0; }),
+                            borderColor: tones[idx % tones.length],
+                            backgroundColor: tones[idx % tones.length] + '22',
+                            fill: true,
+                            tension: 0.25,
+                            pointRadius: 0
+                        };
+                    })
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Concurrent runners' } } }
+                }
+            });
         }
     }
 

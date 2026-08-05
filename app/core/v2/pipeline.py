@@ -1814,6 +1814,16 @@ def create_full_analysis_pipeline(
                                 exc_info=True,
                             )
             
+            # Issue #845: rewrite segment-parent summary after overlaps exist.
+            try:
+                from app.core.flow.segment_summary import write_segment_flow_summary
+
+                for day_code in events_by_day:
+                    code = day_code.value if hasattr(day_code, "value") else str(day_code)
+                    write_segment_flow_summary(run_path / code, code)
+            except Exception as exc:
+                logger.warning("Could not refresh flow_segments_by_seg.json after overlaps: %s", exc)
+
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
             logger.info("[Phase 10] Updating metadata verification after report generation")
