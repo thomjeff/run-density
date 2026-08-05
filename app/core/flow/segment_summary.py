@@ -130,6 +130,83 @@ def unique_role_unions(
     return {event: len(ids) for event, ids in sorted(by_event.items())}
 
 
+def empty_mix_breakdown(events: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+    return {
+        event: {
+            "vs": {other: 0 for other in events if other != event},
+            "in_two_or_more": 0,
+            "unique": 0,
+        }
+        for event in events
+    }
+
+
+def event_mix_breakdown(
+    runner_rows: Sequence[Mapping[str, Any]],
+    *,
+    role: str,
+    events: Sequence[str],
+    same_pass_pairs: Sequence[Mapping[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    """Per-event counterpart unions for overtaking (→) or overtaken (←).
+
+    ``in_two_or_more`` is runners present in 2+ counterpart pairs — not a 2^n
+    subset enumeration. ``unique`` is the runner-ID union across counterparts.
+    """
+    result = empty_mix_breakdown(events)
+    if not events or not same_pass_pairs:
+        return result
+
+    allowed = {str(pair.get("flow_id") or "").strip() for pair in same_pass_pairs}
+    allowed.discard("")
+    pair_events = {
+        str(pair.get("flow_id") or "").strip(): (
+            _norm_event(pair.get("event_a")),
+            _norm_event(pair.get("event_b")),
+        )
+        for pair in same_pass_pairs
+        if str(pair.get("flow_id") or "").strip()
+    }
+    event_set = set(events)
+    by_event_vs: Dict[str, Dict[str, set]] = {
+        event: {other: set() for other in events if other != event}
+        for event in events
+    }
+
+    for row in runner_rows:
+        if str(row.get("role") or "") != role:
+            continue
+        flow_id = str(row.get("flow_id") or "").strip()
+        if flow_id not in allowed:
+            continue
+        event = _norm_event(row.get("event"))
+        runner_id = row.get("runner_id")
+        if event not in event_set or runner_id is None or runner_id == "":
+            continue
+        event_a, event_b = pair_events.get(flow_id, ("", ""))
+        if event == event_a:
+            counterpart = event_b
+        elif event == event_b:
+            counterpart = event_a
+        else:
+            continue
+        if counterpart in by_event_vs[event]:
+            by_event_vs[event][counterpart].add(str(runner_id))
+
+    for event in events:
+        vs_sets = by_event_vs[event]
+        membership: Dict[str, int] = defaultdict(int)
+        for ids in vs_sets.values():
+            for runner_id in ids:
+                membership[runner_id] += 1
+        result[event] = {
+            "vs": {other: len(vs_sets[other]) for other in events if other != event},
+            "in_two_or_more": sum(1 for count in membership.values() if count >= 2),
+            "unique": len(membership),
+        }
+    return result
+
+
 def _pct(count: int, field_size: int) -> Optional[float]:
     if field_size <= 0:
         return None
@@ -358,12 +435,26 @@ def build_segment_flow_summary(
         field_sizes = _field_sizes_from_pairs(same_pass)
         allowed_ids = [p["flow_id"] for p in same_pass]
         runner_keyed = bool(runner_rows) and any(str(r.get("flow_id") or "") for r in runner_rows or [])
+        mix_overtaking = empty_mix_breakdown(events)
+        mix_overtaken = empty_mix_breakdown(events)
         if runner_keyed and same_pass:
             overtakers = unique_role_unions(
                 runner_rows or [], role="overtaking", allowed_flow_ids=allowed_ids
             )
             overtaken = unique_role_unions(
                 runner_rows or [], role="overtaken", allowed_flow_ids=allowed_ids
+            )
+            mix_overtaking = event_mix_breakdown(
+                runner_rows or [],
+                role="overtaking",
+                events=events,
+                same_pass_pairs=same_pass,
+            )
+            mix_overtaken = event_mix_breakdown(
+                runner_rows or [],
+                role="overtaken",
+                events=events,
+                same_pass_pairs=same_pass,
             )
             status = PACE_MIXING_READY
         else:
@@ -415,6 +506,10 @@ def build_segment_flow_summary(
                 "share_of_starters_overtaking": {
                     event: _pct(overtakers.get(event, 0), field_sizes.get(event, 0))
                     for event in events
+                },
+                "mix_breakdown": {
+                    "overtaking": mix_overtaking,
+                    "overtaken": mix_overtaken,
                 },
                 "highest_severity_pair": _worst_pair_attribution(same_pass),
                 "occupancy_source": "same_pass_overlap_per_minute_max",

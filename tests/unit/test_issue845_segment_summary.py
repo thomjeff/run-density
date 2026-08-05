@@ -15,6 +15,7 @@ from app.core.flow.segment_summary import (
     build_segment_flow_summary,
     build_segment_flow_summary_from_day_dir,
     classify_pair_kind,
+    event_mix_breakdown,
     pair_temporal_state,
     unique_role_unions,
 )
@@ -54,6 +55,48 @@ def test_unique_unions_do_not_sum_or_include_corridor():
         allowed_flow_ids=["S8_full_half", "S8_full_10k", "S8_half_10k"],
     )
     assert counts == {"full": 2, "half": 1}
+
+
+def test_mix_breakdown_is_union_not_sum():
+    pairs = [
+        {"flow_id": "S8_full_half", "event_a": "full", "event_b": "half"},
+        {"flow_id": "S8_full_10k", "event_a": "full", "event_b": "10k"},
+        {"flow_id": "S8_half_10k", "event_a": "half", "event_b": "10k"},
+    ]
+    rows = [
+        {"flow_id": "S8_full_half", "event": "half", "runner_id": "h1", "role": "overtaking"},
+        {"flow_id": "S8_half_10k", "event": "half", "runner_id": "h1", "role": "overtaking"},
+        {"flow_id": "S8_full_half", "event": "half", "runner_id": "h2", "role": "overtaking"},
+        {"flow_id": "S8_half_10k", "event": "half", "runner_id": "h3", "role": "overtaking"},
+        {"flow_id": "S8_full_10k", "event": "full", "runner_id": "f1", "role": "overtaking"},
+        {"flow_id": "S8_S12_half_full", "event": "half", "runner_id": "corridor", "role": "overtaking"},
+        {"flow_id": "S8_full_half", "event": "full", "runner_id": "f9", "role": "overtaken"},
+        {"flow_id": "S8_half_10k", "event": "10k", "runner_id": "k1", "role": "overtaken"},
+        {"flow_id": "S8_full_10k", "event": "10k", "runner_id": "k1", "role": "overtaken"},
+        {"flow_id": "S8_full_10k", "event": "10k", "runner_id": "k2", "role": "overtaken"},
+    ]
+    overtaking = event_mix_breakdown(
+        rows,
+        role="overtaking",
+        events=["full", "half", "10k"],
+        same_pass_pairs=pairs,
+    )
+    assert overtaking["half"]["vs"] == {"full": 2, "10k": 2}
+    assert overtaking["half"]["in_two_or_more"] == 1
+    assert overtaking["half"]["unique"] == 3
+    assert overtaking["full"]["vs"] == {"half": 0, "10k": 1}
+    assert overtaking["full"]["unique"] == 1
+    assert overtaking["10k"]["unique"] == 0
+    overtaken = event_mix_breakdown(
+        rows,
+        role="overtaken",
+        events=["full", "half", "10k"],
+        same_pass_pairs=pairs,
+    )
+    assert overtaken["full"]["vs"] == {"half": 1, "10k": 0}
+    assert overtaken["10k"]["vs"] == {"full": 2, "half": 1}
+    assert overtaken["10k"]["in_two_or_more"] == 1
+    assert overtaken["10k"]["unique"] == 2
 
 
 def test_parent_summary_gates_kpis_without_pair_keys_and_excludes_corridor_events():
@@ -152,6 +195,11 @@ def test_parent_summary_gates_kpis_without_pair_keys_and_excludes_corridor_event
     assert ready["unique_overtakers"] == {"full": 1, "half": 1, "10k": 0}
     assert ready["unique_overtaken"] == {"full": 0, "half": 0, "10k": 1}
     assert ready["share_of_starters_overtaking"]["full"] == 0.2
+    assert ready["mix_breakdown"]["overtaking"]["full"]["vs"]["10k"] == 1
+    assert ready["mix_breakdown"]["overtaking"]["half"]["vs"]["full"] == 1
+    assert ready["mix_breakdown"]["overtaking"]["half"]["unique"] == 1
+    assert ready["mix_breakdown"]["overtaken"]["10k"]["vs"]["full"] == 1
+    assert "corridor" not in json.dumps(ready["mix_breakdown"])
 
 
 def test_fz_runners_export_adds_pair_keys_without_dropping_legacy_columns(tmp_path):
@@ -202,6 +250,14 @@ def test_flow_html_default_hides_parent_preview():
     assert 'id="flow-parent-preview"' in source
     assert 'id="flow-parent-detail"' in source
     assert 'id="flow-legacy-wrap"' in source
+    assert "flow-parent-tile" in source
+    assert "flow-parent-mix-table" in source
+    assert "renderMixMatrix" in source
+    assert "flow-parent-chart-mix" not in source
+    assert "Pair evidence" not in source
+    assert source.count("usePointStyle: true") >= 2
+    assert source.count("pointStyle: 'circle'") >= 2
+    assert source.count("mode: 'index', intersect: false") >= 2
     assert "get('flow_parent')" in source
     assert "flowParentPreviewEnabled" in source
     assert "selectParentSegment" in source
@@ -247,6 +303,18 @@ def test_new_run_live_summary_has_windows_and_filtered_uniques():
     assert s8["unique_overtakers"]["full"] == 196
     assert s8["unique_overtakers"]["half"] == 520
     assert s8["unique_overtakers"]["10k"] == 0
+    assert s8["mix_breakdown"]["overtaking"]["half"] == {
+        "vs": {"full": 426, "10k": 230},
+        "in_two_or_more": 136,
+        "unique": 520,
+    }
+    assert s8["mix_breakdown"]["overtaking"]["full"]["vs"] == {"half": 0, "10k": 196}
+    assert s8["mix_breakdown"]["overtaken"]["full"]["unique"] == 267
+    assert s8["mix_breakdown"]["overtaken"]["10k"] == {
+        "vs": {"full": 247, "half": 213},
+        "in_two_or_more": 99,
+        "unique": 361,
+    }
     assert s8["occupancy"]
     assert {p["flow_id"] for p in s8["pairs"]["same_pass"]} == {
         "S8_full_half",

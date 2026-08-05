@@ -15,7 +15,7 @@
         <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
         <p id="flow-parent-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
             Segment-first preview. <strong>Unique overtakers</strong> are the Flow insight (who had to work through another field).
-            Occupancy is crowding context. Pair rows are evidence — unions, not sums.
+            Occupancy is crowding context. Mix tables break uniques down by counterpart — unions, not sums.
             Denominator = starters in this analysis run.
         </p>
         <div class="scrollable-table-container">
@@ -167,7 +167,6 @@
     let overlapChart = null;
     let parentSegments = [];
     let selectedParentSegId = null;
-    let parentMixChart = null;
     let parentOccChart = null;
     
     // Load flow data on page load (and after chrome derives day — Issue #841)
@@ -302,50 +301,93 @@
         const status = seg.pace_mixing_status || '';
         const ready = status === 'ready';
         const windowLabel = (seg.t0 && seg.t1) ? (seg.t0 + '–' + seg.t1) : '—';
-        const kpis = events.map(function (event) {
+        const overtakerTiles = events.map(function (event) {
             const count = ready ? ((seg.unique_overtakers || {})[event] || 0) : '—';
             const share = ready ? (seg.share_of_starters_overtaking || {})[event] : null;
             const field = (seg.field_sizes || {})[event];
-            return '<div class="flow-parent-kpi">' +
-                '<div class="flow-parent-kpi-value">' + escapeHtml(String(count)) + '</div>' +
-                '<div class="flow-parent-kpi-label">' + escapeHtml(eventLabel(event)) + ' unique overtakers' +
-                (share != null ? (' · ' + share + '% of starters') : '') +
-                (field ? (' <span class="text-secondary">(' + field + ')</span>') : '') +
+            return '<div class="flow-parent-tile flow-parent-tile-primary">' +
+                '<div class="flow-parent-tile-kicker">' + escapeHtml(eventLabel(event)) + '</div>' +
+                '<div class="flow-parent-tile-value">' + escapeHtml(String(count)) + '</div>' +
+                '<div class="flow-parent-tile-label">Unique overtakers</div>' +
+                '<div class="flow-parent-tile-meta">' +
+                (share != null ? (share + '% of starters') : 'Share unavailable') +
+                (field ? (' · ' + field + ' starters') : '') +
                 '</div></div>';
         }).join('');
-        const overtaken = events.map(function (event) {
-            return eventLabel(event) + ' ' + (ready ? ((seg.unique_overtaken || {})[event] || 0) : '—');
-        }).join(' · ');
-        const samePass = ((seg.pairs || {}).same_pass || []);
-        const corridor = ((seg.pairs || {}).corridor || []);
-        const sameEvent = ((seg.pairs || {}).same_event || []);
-        const pairRows = samePass.map(function (pair) {
-            const wz = pair.worst_zone || {};
-            return '<tr>' +
-                '<td>' + escapeHtml(eventLabel(pair.event_a) + ' ↔ ' + eventLabel(pair.event_b)) + '</td>' +
-                '<td>' + escapeHtml((pair.overlap_start && pair.overlap_end) ? (pair.overlap_start + '–' + pair.overlap_end) : '—') + '</td>' +
-                '<td>' + escapeHtml(pair.state || '—') + '</td>' +
-                '<td>' + escapeHtml((pair.peak_concurrent_a != null ? pair.peak_concurrent_a : '—') + ' / ' + (pair.peak_concurrent_b != null ? pair.peak_concurrent_b : '—')) + '</td>' +
-                '<td>' + escapeHtml((wz.overtaking_a != null ? wz.overtaking_a : '—') + ' / ' + (wz.overtaking_b != null ? wz.overtaking_b : '—')) + '</td>' +
-                '</tr>';
-        }).join('') || '<tr><td colspan="5" class="placeholder">No same-pass pairs.</td></tr>';
+        const overtakenTiles = events.map(function (event) {
+            const count = ready ? ((seg.unique_overtaken || {})[event] || 0) : '—';
+            return '<div class="flow-parent-tile flow-parent-tile-secondary">' +
+                '<div class="flow-parent-tile-kicker">' + escapeHtml(eventLabel(event)) + '</div>' +
+                '<div class="flow-parent-tile-value">' + escapeHtml(String(count)) + '</div>' +
+                '<div class="flow-parent-tile-label">Unique overtaken</div>' +
+                '</div>';
+        }).join('');
+        const showMulti = events.length > 2;
+        const mix = seg.mix_breakdown || {};
         detail.innerHTML =
             '<div class="card">' +
-            '<h3 style="margin-bottom:0.35rem;">' + escapeHtml(seg.seg_id) + ' — ' + escapeHtml(seg.segment_label || '') + '</h3>' +
-            '<p class="text-secondary" style="margin-bottom:1rem;">' + escapeHtml(events.map(eventLabel).join(' · ')) +
-            ' · union window ' + escapeHtml(windowLabel) + '</p>' +
-            '<div class="flow-parent-kpis">' + kpis + '</div>' +
-            '<p class="text-secondary" style="margin:0.75rem 0 0.25rem;">Unique overtaken (secondary): ' + escapeHtml(overtaken) + '</p>' +
-            '<p class="text-secondary" style="margin:0 0 1rem; font-size:0.8rem;">% of starters uses the analysis-run field size, not DNS and not “entered this segment only.” Parent totals are runner-ID unions across same-pass cross-event pairs.</p>' +
-            '<canvas id="flow-parent-mix-chart" height="90"></canvas>' +
-            '<h4 style="margin:1.25rem 0 0.5rem;">Pair evidence</h4>' +
-            '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Do not sum these overtaking columns into the parent KPIs. Corridor ' + corridor.length + ' · same-event ' + sameEvent.length + ' typed children stay out of the union.</p>' +
-            '<div class="scrollable-table-container"><table class="table-sticky-header"><thead><tr><th>PAIR</th><th>WINDOW</th><th>STATE</th><th>PEAK CONCURRENT</th><th>OVERTAKING A / B</th></tr></thead><tbody>' + pairRows + '</tbody></table></div>' +
-            '<h4 style="margin:1.25rem 0 0.35rem;">Crowding context</h4>' +
+            '<div class="flow-parent-tile flow-parent-tile-header">' +
+            '<div class="flow-parent-tile-title">' + escapeHtml(seg.seg_id) + ' — ' + escapeHtml(seg.segment_label || '') + '</div>' +
+            '<div class="flow-parent-tile-meta">' + escapeHtml(events.map(eventLabel).join(' · ')) +
+            ' · union window ' + escapeHtml(windowLabel) + '</div>' +
+            '</div>' +
+            '<div class="flow-parent-tile-grid">' + overtakerTiles + '</div>' +
+            '<div class="flow-parent-tile-grid flow-parent-tile-grid-secondary">' + overtakenTiles + '</div>' +
+            '<p class="text-secondary" style="margin:0.85rem 0 0.25rem; font-size:0.8rem;">% of starters uses the analysis-run field size, not DNS and not “entered this segment only.” Parent totals are runner-ID unions across same-pass cross-event pairs.</p>' +
+            renderMixMatrix(
+                'Overtaking →',
+                'Each cell is unique runners from the row event who overtook at least one runner from the column event. Unique matches the tile above — a union, so do not sum the → columns. In 2+ pairs counts runners who overtook more than one other field. Corridor and same-event pairs are excluded.',
+                '→',
+                mix.overtaking || {},
+                events,
+                ready,
+                showMulti
+            ) +
+            renderMixMatrix(
+                'Overtaken ←',
+                'Each cell is unique runners from the row event who were overtaken by at least one runner from the column event. Unique is a union across those counterparts, not a sum. In 2+ pairs counts runners overtaken by more than one other field.',
+                '←',
+                mix.overtaken || {},
+                events,
+                ready,
+                showMulti
+            ) +
+            '<h4 class="flow-parent-mix-heading">Crowding context</h4>' +
             '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Concurrent occupancy from same-pass overlap minutes — secondary to pace mixing.</p>' +
-            '<canvas id="flow-parent-occ-chart" height="70"></canvas>' +
+            '<div class="flow-parent-chart flow-parent-chart-occ"><canvas id="flow-parent-occ-chart"></canvas></div>' +
             '</div>';
         renderParentCharts(seg);
+    }
+
+    function mixCell(value, ready) {
+        if (!ready || value == null) return '—';
+        return String(value);
+    }
+
+    function renderMixMatrix(title, readCopy, arrow, breakdown, events, ready, showMulti) {
+        const headCells = events.map(function (event) {
+            return '<th>' + escapeHtml(arrow + ' ' + eventLabel(event)) + '</th>';
+        }).join('');
+        const rows = events.map(function (event) {
+            const row = breakdown[event] || {};
+            const vs = row.vs || {};
+            const counterpartCells = events.map(function (other) {
+                if (other === event) return '<td>—</td>';
+                return '<td>' + escapeHtml(mixCell(vs[other], ready)) + '</td>';
+            }).join('');
+            return '<tr>' +
+                '<th scope="row">' + escapeHtml(eventLabel(event)) + '</th>' +
+                counterpartCells +
+                (showMulti ? ('<td>' + escapeHtml(mixCell(row.in_two_or_more, ready)) + '</td>') : '') +
+                '<td class="flow-parent-mix-unique">' + escapeHtml(mixCell(row.unique, ready)) + '</td>' +
+                '</tr>';
+        }).join('');
+        return '<h4 class="flow-parent-mix-heading">' + escapeHtml(title) + '</h4>' +
+            '<p class="text-secondary flow-parent-mix-read">' + escapeHtml(readCopy) + '</p>' +
+            '<div class="scrollable-table-container"><table class="table-sticky-header flow-parent-mix-table"><thead><tr>' +
+            '<th>Event</th>' + headCells +
+            (showMulti ? '<th>In 2+ pairs</th>' : '') +
+            '<th>Unique</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
     function downsampleOccupancy(points) {
@@ -356,37 +398,9 @@
 
     function renderParentCharts(seg) {
         const events = seg.events || [];
-        const ready = seg.pace_mixing_status === 'ready';
-        const mixEl = document.getElementById('flow-parent-mix-chart');
         const occEl = document.getElementById('flow-parent-occ-chart');
         const tones = ['#206bc4', '#d97706', '#2fb344', '#ae3ec9'];
-        if (parentMixChart) parentMixChart.destroy();
         if (parentOccChart) parentOccChart.destroy();
-        if (mixEl && window.Chart) {
-            parentMixChart = new Chart(mixEl, {
-                type: 'bar',
-                data: {
-                    labels: events.map(eventLabel),
-                    datasets: [
-                        {
-                            label: 'Unique overtakers',
-                            data: events.map(function (event) { return ready ? ((seg.unique_overtakers || {})[event] || 0) : 0; }),
-                            backgroundColor: '#206bc4'
-                        },
-                        {
-                            label: 'Unique overtaken',
-                            data: events.map(function (event) { return ready ? ((seg.unique_overtaken || {})[event] || 0) : 0; }),
-                            backgroundColor: '#94a3b8'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { position: 'bottom' } },
-                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Unique runners' } } }
-                }
-            });
-        }
         const occ = downsampleOccupancy(seg.occupancy || []);
         if (occEl && window.Chart && occ.length) {
             parentOccChart = new Chart(occEl, {
@@ -401,14 +415,43 @@
                             backgroundColor: tones[idx % tones.length] + '22',
                             fill: true,
                             tension: 0.25,
-                            pointRadius: 0
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointStyle: 'circle',
                         };
                     })
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { position: 'bottom' } },
-                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Concurrent runners' } } }
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                boxWidth: 8,
+                                boxHeight: 8,
+                                padding: 16,
+                            },
+                        },
+                        tooltip: {
+                            enabled: true,
+                            callbacks: {
+                                title: function (items) {
+                                    return items[0] ? ('Minute ' + items[0].label) : '';
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Time' },
+                            ticks: { maxTicksLimit: 10 },
+                        },
+                        y: { beginAtZero: true, title: { display: true, text: 'Concurrent runners' } },
+                    },
                 }
             });
         }
