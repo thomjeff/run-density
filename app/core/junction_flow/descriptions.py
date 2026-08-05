@@ -174,7 +174,7 @@ def role_headline_labels(
     Labels for analysis headlines (Issue #819 §5).
 
     Returns primary_label / secondary_label with events, e.g.
-    '10k Crossing (co-present)', 'Full Crossed (co-present)'.
+    'Unique 10k who met Full within 30s'.
     """
     nearby_by_id = nearby_by_id or {}
     itype = str(ix.get("type") or "").lower()
@@ -197,8 +197,16 @@ def role_headline_labels(
             joining = joining or roles["joining"]
             through = through or roles["through"]
         return {
-            "primary_label": f"{format_event_list(joining)} Joining (co-present)",
-            "secondary_label": f"{format_event_list(through)} Through (co-present)",
+            "primary_label": (
+                f"Unique {format_event_list(joining)} who met "
+                f"{format_event_list(through)} within 30s"
+            ),
+            "secondary_label": (
+                f"Unique {format_event_list(through)} who met "
+                f"{format_event_list(joining)} within 30s"
+            ),
+            "primary_role": "joining",
+            "secondary_role": "through",
             "primary_events": joining,
             "secondary_events": through,
         }
@@ -210,8 +218,16 @@ def role_headline_labels(
         crossing = crossing or roles["crossing"]
         crossed = crossed or roles["crossed"]
     return {
-        "primary_label": f"{format_event_list(crossing)} Crossing (co-present)",
-        "secondary_label": f"{format_event_list(crossed)} Crossed (co-present)",
+        "primary_label": (
+            f"Unique {format_event_list(crossing)} who met "
+            f"{format_event_list(crossed)} within 30s"
+        ),
+        "secondary_label": (
+            f"Unique {format_event_list(crossed)} who met "
+            f"{format_event_list(crossing)} within 30s"
+        ),
+        "primary_role": "crossing",
+        "secondary_role": "crossed",
         "primary_events": crossing,
         "secondary_events": crossed,
     }

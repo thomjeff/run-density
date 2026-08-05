@@ -147,6 +147,10 @@
     color: #2a7a6f;
 }
 
+.course-map-action-btn--split svg {
+    color: #a15c12;
+}
+
 .course-map-action-cell,
 .rf-table-actions {
     text-align: center;

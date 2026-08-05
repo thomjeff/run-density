@@ -372,6 +372,27 @@
     .leg-trim-endpoint.leaflet-dragging > div {
         cursor: grabbing;
     }
+    .leg-split-handle {
+        background: transparent !important;
+        border: none !important;
+    }
+    .leg-split-handle > div {
+        width: 18px;
+        height: 18px;
+        margin: 5px;
+        border-radius: 50%;
+        box-sizing: border-box;
+        cursor: grab;
+        background: #f59f00;
+        border: 3px solid #a15c12;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    }
+    .leg-split-handle.leaflet-dragging > div {
+        cursor: grabbing;
+    }
+    .leg-split-hit-line {
+        cursor: crosshair;
+    }
     .leg-route-anchor-pin {
         background: transparent !important;
         border: none !important;

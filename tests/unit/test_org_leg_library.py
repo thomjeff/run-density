@@ -624,3 +624,171 @@ def test_update_org_leg_locations_skips_packages_without_course_json(
     )
     leg = next(l for l in state["legs"] if l["id"] == "33")
     assert leg["locations"][0]["loc_type"] == "course"
+
+
+_SPLIT_GPX = """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Split trail</name><trkseg>
+    <trkpt lat="45.960000" lon="-66.640000"/>
+    <trkpt lat="45.965000" lon="-66.635000"/>
+    <trkpt lat="45.970000" lon="-66.630000"/>
+  </trkseg></trk>
+</gpx>"""
+
+
+def _write_split_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "12_trail.gpx").write_text(_SPLIT_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "12",
+                        "file": "12_trail.gpx",
+                        "seg_label": "Walking Bridge To George",
+                        "start_label": "Bridge",
+                        "end_label": "George",
+                        "width_m": 3,
+                        "schema": "on_course_open",
+                        "direction": "uni",
+                        "flow_type": "none",
+                        "paired_with": "04",
+                        "locations": [
+                            {
+                                "loc_label": "Start water",
+                                "loc_type": "water",
+                                "lat": 45.960000,
+                                "lon": -66.640000,
+                                "placement": "along",
+                            },
+                            {
+                                "loc_label": "Split water",
+                                "loc_type": "water",
+                                "lat": 45.965000,
+                                "lon": -66.635000,
+                                "placement": "along",
+                            },
+                            {
+                                "loc_label": "End water",
+                                "loc_type": "water",
+                                "lat": 45.970000,
+                                "lon": -66.630000,
+                                "placement": "along",
+                            },
+                            {
+                                "loc_label": "Traffic near end",
+                                "loc_type": "traffic",
+                                "lat": 45.970200,
+                                "lon": -66.630100,
+                                "placement": "off",
+                            },
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return org_dir
+
+
+def test_copy_split_org_leg_creates_two_legs_and_keeps_source(tmp_path, monkeypatch):
+    from app.core.config_package.org_leg_library import copy_split_org_leg, get_org_legs_dir
+    from app.core.course.segment_library import parse_leg_gpx
+
+    _write_split_source(tmp_path, monkeypatch)
+    state = copy_split_org_leg("12", split_lat=45.965000, split_lon=-66.635000)
+    assert state["source_leg_id"] == "12"
+    assert state["split_leg_ids"] == ["13", "14"]
+    legs = {row["id"]: row for row in state["legs"]}
+    source = legs["12"]
+    first = legs["13"]
+    second = legs["14"]
+    assert source["leg_label"] == "Walking Bridge To George"
+    assert source["paired_with"] == "04"
+    assert len(source["locations"]) == 4
+    assert first["leg_label"].endswith("(split 1)")
+    assert second["leg_label"].endswith("(split 2)")
+    assert first["start_label"] == "Bridge"
+    assert first["end_label"] == "Split"
+    assert second["start_label"] == "Split"
+    assert second["end_label"] == "George"
+    assert first.get("paired_with") in (None, "")
+    assert second.get("paired_with") in (None, "")
+    first_labels = {loc["loc_label"] for loc in first["locations"]}
+    second_labels = {loc["loc_label"] for loc in second["locations"]}
+    assert first_labels == {"Start water", "Split water"}
+    assert second_labels == {"Split water", "End water", "Traffic near end"}
+
+    org_dir = get_org_legs_dir()
+    source_parsed = parse_leg_gpx(org_dir / "12_trail.gpx")
+    first_parsed = parse_leg_gpx(org_dir / first["file"])
+    second_parsed = parse_leg_gpx(org_dir / second["file"])
+    assert len(source_parsed["coordinates"]) == 3
+    def round6(pt):
+        return [round(float(pt[0]), 6), round(float(pt[1]), 6)]
+
+    assert round6(first_parsed["coordinates"][-1]) == round6(second_parsed["coordinates"][0])
+    assert round6(first_parsed["coordinates"][0]) == round6(source_parsed["coordinates"][0])
+    assert round6(second_parsed["coordinates"][-1]) == round6(source_parsed["coordinates"][-1])
+
+
+def test_copy_split_org_leg_rejects_endpoint_and_offline_points(tmp_path, monkeypatch):
+    from app.core.config_package.org_leg_library import copy_split_org_leg
+
+    _write_split_source(tmp_path, monkeypatch)
+    try:
+        copy_split_org_leg("12", split_lat=45.960000, split_lon=-66.640000)
+        raise AssertionError("expected start-point split to fail")
+    except ValueError as exc:
+        assert "start or finish" in str(exc)
+    try:
+        copy_split_org_leg("12", split_lat=46.5, split_lon=-67.5)
+        raise AssertionError("expected off-line split to fail")
+    except ValueError as exc:
+        assert "too far" in str(exc)
+
+
+def test_copy_split_org_leg_rolls_back_if_second_create_fails(tmp_path, monkeypatch):
+    import app.core.config_package.org_leg_library as org_lib
+
+    _write_split_source(tmp_path, monkeypatch)
+    real_create = org_lib.create_org_leg_from_coordinates
+    calls = {"n": 0}
+
+    def flaky_create(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("boom")
+        return real_create(*args, **kwargs)
+
+    monkeypatch.setattr(org_lib, "create_org_leg_from_coordinates", flaky_create)
+    try:
+        org_lib.copy_split_org_leg("12", split_lat=45.965000, split_lon=-66.635000)
+        raise AssertionError("expected second create failure")
+    except RuntimeError:
+        pass
+    remaining = {row["id"] for row in org_lib.get_org_leg_library_state()["legs"]}
+    assert remaining == {"12"}
+    assert {path.name for path in (tmp_path / "org" / "legs").glob("*.gpx")} == {"12_trail.gpx"}
+
+
+def test_copy_split_api_and_ui_markers_exist():
+    from pathlib import Path
+
+    from app.main import app
+
+    routes = {route.path for route in app.routes}
+    assert "/api/org/legs/{leg_id}/copy-split" in routes
+    recipes = Path("frontend/static/js/map/segment_recipes.js").read_text(encoding="utf-8")
+    actions = Path("frontend/static/js/table_actions.js").read_text(encoding="utf-8")
+    assert "startLegCopySplit" in recipes
+    assert "confirmLegCopySplit" in recipes
+    assert "'split'" in actions or '"split"' in actions
+    assert "kind === 'split'" in actions

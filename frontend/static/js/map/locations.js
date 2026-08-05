@@ -967,10 +967,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         await waitForRunflowDay();
         
         // Initialize base map
-        const map = initMap('locations-map');
+        const map = initMap('locations-map', { zoomPosition: 'topleft' });
         
         // Make map globally available for table interactions
         window.map = map;
+        if (typeof enableBasemapToggle === 'function') {
+            enableBasemapToggle(map);
+        }
         
         // Render course overlay beneath markers
         await addSegmentsOverlay(map);

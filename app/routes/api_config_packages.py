@@ -46,6 +46,7 @@ from app.core.config_package.legs import (
 from app.core.config_package.org_leg_library import (
     copy_org_leg,
     copy_org_leg_locations,
+    copy_split_org_leg,
     create_org_leg,
     create_org_leg_from_coordinates,
     delete_org_leg,
@@ -1086,6 +1087,13 @@ class CopyOrgLegRequest(BaseModel):
     reverse: bool = False
 
 
+class CopySplitOrgLegRequest(BaseModel):
+    """Split point on the source route for copy/split."""
+
+    lat: float
+    lon: float
+
+
 class CopyOrgLegLocationsRequest(BaseModel):
     """Copy location pins from another org leg."""
 
@@ -1110,6 +1118,23 @@ async def api_copy_org_leg(
     try:
         payload = body
         state = copy_org_leg(leg_id, leg_label=payload.leg_label, reverse=payload.reverse)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/legs/{leg_id}/copy-split")
+async def api_copy_split_org_leg(
+    request: Request,
+    leg_id: str,
+    body: CopySplitOrgLegRequest,
+) -> JSONResponse:
+    """Copy an org leg and split the copy at a chosen route point. Source is unchanged."""
+    require_auth(request)
+    try:
+        state = copy_split_org_leg(leg_id, split_lat=body.lat, split_lon=body.lon)
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

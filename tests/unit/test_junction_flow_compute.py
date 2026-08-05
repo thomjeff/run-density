@@ -60,6 +60,83 @@ def test_copresence_requires_partner_within_dwell():
     assert stats["without_partner"] == 1
 
 
+def test_cross_mix_breakdown_is_union_not_sum():
+    nearby = {
+        "S28": {
+            "seg_id": "S28",
+            "near_endpoint": "end",
+            "events": ["10k"],
+            "event_kms": {"10k": {"from_km": 2.0, "to_km": 3.0}},
+        },
+        "S29": {
+            "seg_id": "S29",
+            "near_endpoint": "start",
+            "events": ["10k"],
+            "event_kms": {"10k": {"from_km": 3.0, "to_km": 6.0}},
+        },
+        "S7": {
+            "seg_id": "S7",
+            "near_endpoint": "end",
+            "events": ["full", "half"],
+            "event_kms": {
+                "full": {"from_km": 17.0, "to_km": 17.5},
+                "half": {"from_km": 2.7, "to_km": 3.2},
+            },
+        },
+    }
+    runners = {
+        "10k": pd.DataFrame(
+            {
+                "runner_id": ["k1", "k2", "k3"],
+                "event": ["10k"] * 3,
+                "pace": [5.0, 5.0, 5.0],
+                "start_offset": [0.0, 0.0, 0.0],
+                "quintile": [2, 2, 2],
+            }
+        ),
+        "full": pd.DataFrame(
+            {
+                "runner_id": ["f1"],
+                "event": ["full"],
+                "pace": [5.0],
+                "start_offset": [0.0],
+                "quintile": [1],
+            }
+        ),
+        "half": pd.DataFrame(
+            {
+                "runner_id": ["h1"],
+                "event": ["half"],
+                "pace": [5.0],
+                "start_offset": [0.0],
+                "quintile": [5],
+            }
+        ),
+    }
+    # node_time = gun*60 + offset + pace_sec/km * km
+    # Choose guns so k1 meets full, k2 meets half, k3 meets both, none are sums.
+    guns = {"10k": 0.0, "full": 0.0, "half": 0.0}
+    # Force node times via start_offset relative to km*pace
+    # 10k @ 3.0km * 5 min/km = 15 min = 900s; full @ 17.5*5 = 87.5 min
+    runners["10k"]["start_offset"] = [0.0, 30.0, 0.0]
+    runners["full"]["start_offset"] = [900.0 - (17.5 * 5.0 * 60.0)]  # align with k1/k3 @ 900s
+    runners["half"]["start_offset"] = [930.0 - (3.2 * 5.0 * 60.0)]  # align with k2/k3 @ 930s
+    ix = {
+        "id": "c1",
+        "type": "cross",
+        "from_seg_id": "S28",
+        "to_seg_ids": ["S29"],
+        "conflicts_with_seg_id": "S7",
+        "events": ["full", "half", "10k"],
+    }
+    result = analyze_interaction(ix, nearby, runners, guns)
+    mix = result.mix_breakdown["meeting"]["10k"]
+    assert mix["vs"]["full"] >= 1
+    assert mix["vs"]["half"] >= 1
+    assert mix["unique"] <= mix["vs"]["full"] + mix["vs"]["half"]
+    assert result.unique_by_role_event["crossing_with_copresence"]["10k"] == mix["unique"]
+
+
 def test_merge_empty_without_full_half_partners():
     runners = {
         "10k": pd.DataFrame(

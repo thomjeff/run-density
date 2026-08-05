@@ -697,8 +697,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // If map already exists (reload), just refresh data; otherwise init
         if (!window.map) {
-            const map = initMap('segments-map');
+            const map = initMap('segments-map', { zoomPosition: 'topleft' });
             window.map = map;
+        }
+        if (typeof enableBasemapToggle === 'function') {
+            enableBasemapToggle(window.map);
         }
         
         // Render/refresh segments for current day/run_id

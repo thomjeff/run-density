@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from app.core.config_package.legs import allocate_next_leg_id, leg_row_from_entry
 from app.core.config_package.segment_recipes import (
@@ -338,6 +338,7 @@ def create_org_leg_from_coordinates(
     flow_type: str = "none",
     flow_notes: str = "",
     description: str = "",
+    locations: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Create an org library leg from drawn [lon, lat] vertices (Issue #789 Create Leg).
@@ -364,6 +365,7 @@ def create_org_leg_from_coordinates(
         flow_type=flow_type,
         flow_notes=flow_notes,
         description=description,
+        locations=locations,
     )
 
 
@@ -383,6 +385,155 @@ def _reverse_leg_label(label: str) -> str:
     if base.endswith(suffix):
         return base
     return base + suffix
+
+
+def _split_leg_label(label: str, part: int) -> str:
+    """Default label for one half of a copy/split."""
+    base = (label or "Leg").strip()
+    return f"{base} (split {int(part)})"
+
+
+_SPLIT_MAX_DIST_M = 50.0
+_SPLIT_ENDPOINT_EPS_M = 1.0
+_SPLIT_JUNCTION_EPS_M = 2.0
+_SPLIT_VERTEX_T_EPS = 1e-6
+_SPLIT_MIN_HALF_M = 0.5
+
+
+def _polyline_cum_m(coords_lonlat: Sequence[Sequence[float]]) -> List[float]:
+    from app.core.gpx.processor import haversine_m
+
+    if not coords_lonlat:
+        return []
+    out = [0.0]
+    for idx in range(1, len(coords_lonlat)):
+        lon0, lat0 = float(coords_lonlat[idx - 1][0]), float(coords_lonlat[idx - 1][1])
+        lon1, lat1 = float(coords_lonlat[idx][0]), float(coords_lonlat[idx][1])
+        out.append(out[-1] + haversine_m(lat0, lon0, lat1, lon1))
+    return out
+
+
+def _project_point_onto_polyline(
+    lat: float,
+    lon: float,
+    coords_lonlat: Sequence[Sequence[float]],
+) -> Dict[str, Any]:
+    from app.core.gpx.processor import haversine_m
+
+    best: Optional[Dict[str, Any]] = None
+    for idx in range(len(coords_lonlat) - 1):
+        lon1, lat1 = float(coords_lonlat[idx][0]), float(coords_lonlat[idx][1])
+        lon2, lat2 = float(coords_lonlat[idx + 1][0]), float(coords_lonlat[idx + 1][1])
+        dx = lon2 - lon1
+        dy = lat2 - lat1
+        len2 = dx * dx + dy * dy
+        if len2 < 1e-18:
+            t = 0.0
+            plat, plon = lat1, lon1
+        else:
+            t = ((lon - lon1) * dx + (lat - lat1) * dy) / len2
+            t = max(0.0, min(1.0, t))
+            plat = lat1 + t * dy
+            plon = lon1 + t * dx
+        dist_m = haversine_m(lat, lon, plat, plon)
+        if best is None or dist_m < float(best["dist_m"]):
+            best = {
+                "seg_idx": idx,
+                "t": t,
+                "lat": plat,
+                "lon": plon,
+                "dist_m": dist_m,
+            }
+    if best is None:
+        raise ValueError("Leg route has insufficient points to split")
+    return best
+
+
+def _along_track_m(coords_lonlat: Sequence[Sequence[float]], proj: Mapping[str, Any]) -> float:
+    cum = _polyline_cum_m(coords_lonlat)
+    idx = int(proj["seg_idx"])
+    seg_len = cum[idx + 1] - cum[idx] if idx + 1 < len(cum) else 0.0
+    return cum[idx] + float(proj["t"]) * seg_len
+
+
+def _split_coordinates(
+    coords_lonlat: Sequence[Sequence[float]],
+    proj: Mapping[str, Any],
+) -> Tuple[List[List[float]], List[List[float]], List[float]]:
+    coords = [[float(pt[0]), float(pt[1])] for pt in coords_lonlat]
+    idx = int(proj["seg_idx"])
+    t = float(proj["t"])
+    split_pt = [float(proj["lon"]), float(proj["lat"])]
+    if t <= _SPLIT_VERTEX_T_EPS:
+        vertex = idx
+        left = coords[: vertex + 1]
+        right = coords[vertex:]
+    elif t >= 1.0 - _SPLIT_VERTEX_T_EPS:
+        vertex = idx + 1
+        left = coords[: vertex + 1]
+        right = coords[vertex:]
+    else:
+        left = coords[: idx + 1] + [split_pt]
+        right = [list(split_pt)] + coords[idx + 1 :]
+    if len(left) < 2 or len(right) < 2:
+        raise ValueError("Each split half must keep at least two route points")
+    left_m = _polyline_cum_m(left)[-1]
+    right_m = _polyline_cum_m(right)[-1]
+    if left_m < _SPLIT_MIN_HALF_M or right_m < _SPLIT_MIN_HALF_M:
+        raise ValueError("Split point is too close to the start or finish")
+    return left, right, split_pt
+
+
+def _clone_one_location(item: Mapping[str, Any]) -> Dict[str, Any]:
+    import copy
+
+    row = copy.deepcopy(dict(item))
+    row.pop("leg_loc_key", None)
+    row.pop("id", None)
+    row.pop("loc_id", None)
+    return row
+
+
+def _partition_locations_at_split(
+    locations: Any,
+    coords_lonlat: Sequence[Sequence[float]],
+    split_along_m: float,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    from app.core.config_package.legs import _normalize_locations
+
+    locs_a: List[Dict[str, Any]] = []
+    locs_b: List[Dict[str, Any]] = []
+    if not isinstance(locations, list):
+        return [], []
+    for item in locations:
+        if not isinstance(item, dict):
+            continue
+        try:
+            lat = float(item.get("lat"))
+            lon = float(item.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        proj = _project_point_onto_polyline(lat, lon, coords_lonlat)
+        along = _along_track_m(coords_lonlat, proj)
+        delta = along - split_along_m
+        if abs(delta) <= _SPLIT_JUNCTION_EPS_M:
+            locs_a.append(_clone_one_location(item))
+            locs_b.append(_clone_one_location(item))
+        elif delta < 0:
+            locs_a.append(_clone_one_location(item))
+        else:
+            locs_b.append(_clone_one_location(item))
+    return _normalize_locations(locs_a), _normalize_locations(locs_b)
+
+
+def _new_leg_id_from_state(state: Mapping[str, Any], before_ids: set) -> str:
+    for entry in state.get("legs") or []:
+        if not isinstance(entry, dict):
+            continue
+        lid = str(entry.get("id") or "").strip()
+        if lid and lid not in before_ids:
+            return lid
+    raise ValueError("Create succeeded but new leg id could not be determined")
 
 
 def _clone_leg_locations(raw: Any) -> List[Dict[str, Any]]:
@@ -497,6 +648,122 @@ def copy_org_leg(
         "copied_leg_id": copied_leg_id,
         "source_leg_id": leg_id,
         "reversed": bool(reverse),
+    }
+
+
+def copy_split_org_leg(
+    leg_id: str,
+    *,
+    split_lat: float,
+    split_lon: float,
+) -> Dict[str, Any]:
+    """
+    Copy an org library leg and split the copy at a point on the route.
+
+    Source geometry and locations are unchanged. Confirm writes two new legs;
+    nothing is persisted if either create fails.
+    """
+    from app.core.config_package.legs import _find_leg_index
+    from app.core.course.segment_library import parse_leg_gpx
+
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    source = legs[idx]
+    file_name = source.get("file")
+    if not file_name:
+        raise ValueError(f"Leg {leg_id} has no GPX file")
+    gpx_path = org_dir / str(file_name)
+    if not gpx_path.is_file():
+        raise FileNotFoundError(f"GPX not found: {file_name}")
+
+    parsed = parse_leg_gpx(gpx_path)
+    coords = parsed.get("coordinates") or []
+    if len(coords) < 2:
+        raise ValueError(f"Leg {leg_id} GPX has insufficient points")
+
+    try:
+        lat = float(split_lat)
+        lon = float(split_lon)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Split point must be lat/lon numbers") from exc
+
+    proj = _project_point_onto_polyline(lat, lon, coords)
+    if float(proj["dist_m"]) > _SPLIT_MAX_DIST_M:
+        raise ValueError("Split point is too far from the route")
+    split_along = _along_track_m(coords, proj)
+    total_m = _polyline_cum_m(coords)[-1]
+    if split_along <= _SPLIT_ENDPOINT_EPS_M or (total_m - split_along) <= _SPLIT_ENDPOINT_EPS_M:
+        raise ValueError("Split point is too close to the start or finish")
+
+    left_coords, right_coords, _split_pt = _split_coordinates(coords, proj)
+    locs_a, locs_b = _partition_locations_at_split(
+        source.get("locations"),
+        coords,
+        split_along,
+    )
+
+    source_label = str(source.get("seg_label") or "").strip()
+    source_start = str(source.get("start_label") or "")
+    source_end = str(source.get("end_label") or "")
+    source_description = str(source.get("description") or source.get("flow_notes") or "").strip()
+    width_m = float(source.get("width_m") or 3)
+    schema = str(source.get("schema") or "on_course_open")
+    direction = str(source.get("direction") or "uni")
+    flow_type = str(source.get("flow_type") or "none")
+    flow_notes = str(source.get("flow_notes") or "")
+
+    before_ids = {
+        str(entry.get("id") or "").strip()
+        for entry in legs
+        if isinstance(entry, dict) and str(entry.get("id") or "").strip()
+    }
+    first_id = ""
+    try:
+        state_a = create_org_leg_from_coordinates(
+            left_coords,
+            leg_label=_split_leg_label(source_label, 1),
+            start_label=source_start,
+            end_label="Split",
+            width_m=width_m,
+            schema=schema,
+            direction=direction,
+            flow_type=flow_type,
+            flow_notes=flow_notes,
+            description=source_description or _split_leg_label(source_label, 1),
+            locations=locs_a,
+        )
+        first_id = _new_leg_id_from_state(state_a, before_ids)
+        state_b = create_org_leg_from_coordinates(
+            right_coords,
+            leg_label=_split_leg_label(source_label, 2),
+            start_label="Split",
+            end_label=source_end,
+            width_m=width_m,
+            schema=schema,
+            direction=direction,
+            flow_type=flow_type,
+            flow_notes=flow_notes,
+            description=source_description or _split_leg_label(source_label, 2),
+            locations=locs_b,
+        )
+        second_id = _new_leg_id_from_state(state_b, before_ids | {first_id})
+    except Exception:
+        if first_id:
+            try:
+                delete_org_leg(first_id)
+            except Exception:
+                logger.exception("Failed to roll back split leg %s after error", first_id)
+        raise
+
+    return {
+        **state_b,
+        "source_leg_id": leg_id,
+        "split_leg_ids": [first_id, second_id],
     }
 
 

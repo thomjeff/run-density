@@ -57,6 +57,15 @@ function initMap(containerId, options) {
         attribution: '© OpenStreetMap contributors, © CARTO',
         maxZoom: 19
     });
+
+    // Satellite imagery (Build + Results Street/Satellite toggle)
+    const satelliteLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+            attribution: '© Esri',
+            maxZoom: 19
+        }
+    );
     
     // Add primary layer (light, minimal styling)
     cartoLayer.addTo(map);
@@ -64,7 +73,8 @@ function initMap(containerId, options) {
     // Store layer references for potential switching
     map._layers = {
         carto: cartoLayer,
-        cartoDark: cartoDarkLayer
+        cartoDark: cartoDarkLayer,
+        satellite: satelliteLayer
     };
     
     console.log(`Map initialized in container: ${containerId}`);
@@ -74,7 +84,7 @@ function initMap(containerId, options) {
 /**
  * Switch map tile layer
  * @param {L.Map} map - Leaflet map instance
- * @param {string} layerType - 'osm' or 'carto'
+ * @param {string} layerType - 'carto' | 'cartoDark' | 'satellite'
  */
 function switchTileLayer(map, layerType) {
     if (!map._layers || !map._layers[layerType]) {
@@ -92,6 +102,55 @@ function switchTileLayer(map, layerType) {
     // Add new layer
     map._layers[layerType].addTo(map);
     console.log(`Switched to ${layerType} tile layer`);
+}
+
+/**
+ * Wire a Street / Satellite basemap toggle (same pattern as Build course mapping).
+ * @param {L.Map} map
+ * @param {object} [options]
+ * @param {string} [options.toggleId='basemap-toggle']
+ * @param {string} [options.streetBtnId='btn-street']
+ * @param {string} [options.satelliteBtnId='btn-satellite']
+ */
+function enableBasemapToggle(map, options) {
+    options = options || {};
+    const toggleEl = document.getElementById(options.toggleId || 'basemap-toggle');
+    const btnStreet = document.getElementById(options.streetBtnId || 'btn-street');
+    const btnSatellite = document.getElementById(options.satelliteBtnId || 'btn-satellite');
+    if (!map || !toggleEl) return;
+
+    if (!map._layers) map._layers = {};
+    if (!map._layers.satellite) {
+        map._layers.satellite = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            { attribution: '© Esri', maxZoom: 19 }
+        );
+    }
+    if (!map._layers.carto) {
+        map._layers.carto = L.tileLayer(
+            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            { attribution: '© OpenStreetMap contributors, © CARTO', maxZoom: 19 }
+        );
+    }
+
+    L.DomEvent.disableClickPropagation(toggleEl);
+    L.DomEvent.disableScrollPropagation(toggleEl);
+    toggleEl.style.display = 'flex';
+
+    function setBasemap(layerKey) {
+        switchTileLayer(map, layerKey);
+        if (btnStreet) btnStreet.classList.toggle('active', layerKey === 'carto');
+        if (btnSatellite) btnSatellite.classList.toggle('active', layerKey === 'satellite');
+    }
+
+    if (btnStreet && !btnStreet.dataset.basemapBound) {
+        btnStreet.addEventListener('click', function () { setBasemap('carto'); });
+        btnStreet.dataset.basemapBound = '1';
+    }
+    if (btnSatellite && !btnSatellite.dataset.basemapBound) {
+        btnSatellite.addEventListener('click', function () { setBasemap('satellite'); });
+        btnSatellite.dataset.basemapBound = '1';
+    }
 }
 
 /**
@@ -124,4 +183,5 @@ function createEmptyStateControl(message = 'No data available') {
 // Export functions for use in other modules
 window.initMap = initMap;
 window.switchTileLayer = switchTileLayer;
+window.enableBasemapToggle = enableBasemapToggle;
 window.createEmptyStateControl = createEmptyStateControl;

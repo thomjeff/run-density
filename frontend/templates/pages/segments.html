@@ -42,6 +42,38 @@
         font-size: 0.75rem;
         color: #666;
     }
+
+    #basemap-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10000;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        display: none;
+        gap: 0.25rem;
+    }
+
+    #basemap-toggle button {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    #basemap-toggle button.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+
+    #basemap-toggle button:hover:not(.active) {
+        background: #ecf0f1;
+    }
 </style>
 {% endblock %}
 
@@ -58,6 +90,10 @@
     <h3 style="margin-bottom: 1rem;">Course Map</h3>
     <div id="segments-map" aria-label="Course segments map" style="position: relative;">
         <div class="map-loading">Loading map data...</div>
+        <div id="basemap-toggle" aria-label="Basemap style">
+            <button type="button" id="btn-street" class="active">Street</button>
+            <button type="button" id="btn-satellite">Satellite</button>
+        </div>
         
         <!-- Heatmap Preview Overlay -->
         <!-- Issue #532: Positioned at bottom left to avoid zoom controls -->
@@ -148,8 +184,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- External JavaScript modules (cache-busted for latest fixes) -->
-<script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/segments.js?v=842b"></script>
+<script src="/static/js/map/base_map.js?v=842c"></script>
+<script src="/static/js/map/segments.js?v=842c"></script>
 
 <!-- Table interaction script -->
 <script>

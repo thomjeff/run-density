@@ -42,6 +42,14 @@
     var legTrimMarkerLayer = null;
     var legTrimStartMarker = null;
     var legTrimEndMarker = null;
+    var legSplitActive = false;
+    var legSplitSavedLatLngs = null;
+    var legSplitLat = null;
+    var legSplitLon = null;
+    var legSplitMarkerLayer = null;
+    var legSplitHitLayer = null;
+    var legSplitSecondLine = null;
+    var legSplitSourceId = null;
     var legBoundsCache = {};
     var legsTableBoundsFilter = null;
     var coursePreviewBoundsFilter = null;
@@ -1586,7 +1594,7 @@
     }
 
     function isLegRouteEditActive() {
-        return legReshapeActive || legTrimActive || legExtendActive;
+        return legReshapeActive || legTrimActive || legExtendActive || legSplitActive;
     }
 
     function updateLegActionButtons() {
@@ -1759,6 +1767,9 @@
         }
         if (legExtendActive && legExtendSavedLatLngs) {
             return getLegExtendMergedLatLngs();
+        }
+        if (legSplitActive && legSplitSavedLatLngs) {
+            return legSplitSavedLatLngs;
         }
         return selectedLegLatLngs;
     }
@@ -2397,6 +2408,7 @@
         }
         stopLegReshapeRoute(true);
         stopLegTrimRoute(true);
+        stopLegCopySplit(true);
         if (addLocationOnMap) {
             if (!pendingLegLocations.length) {
                 stopLegLocationPinMode();
@@ -2689,6 +2701,7 @@
         }
         stopLegTrimRoute(true);
         stopLegExtendRoute(true);
+        stopLegCopySplit(true);
         if (addLocationOnMap) {
             if (!pendingLegLocations.length) {
                 stopLegLocationPinMode();
@@ -3253,6 +3266,7 @@
             return;
         }
         stopLegReshapeRoute(true);
+        stopLegCopySplit(true);
         if (addLocationOnMap) {
             if (!pendingLegLocations.length) {
                 stopLegLocationPinMode();
@@ -3355,6 +3369,286 @@
             });
     }
 
+    function defaultSplitPoint(latlngs) {
+        var total = 0;
+        var lens = [];
+        var i;
+        for (i = 0; i < latlngs.length - 1; i++) {
+            var dlat = latlngs[i + 1][0] - latlngs[i][0];
+            var dlon = latlngs[i + 1][1] - latlngs[i][1];
+            var dist = Math.sqrt(dlat * dlat + dlon * dlon);
+            lens.push(dist);
+            total += dist;
+        }
+        if (total <= 0) {
+            return { lat: latlngs[0][0], lon: latlngs[0][1] };
+        }
+        var target = total / 2;
+        var acc = 0;
+        for (i = 0; i < lens.length; i++) {
+            if (acc + lens[i] >= target || i === lens.length - 1) {
+                var t = lens[i] > 0 ? (target - acc) / lens[i] : 0.5;
+                t = Math.max(0.05, Math.min(0.95, t));
+                return {
+                    lat: latlngs[i][0] + t * (latlngs[i + 1][0] - latlngs[i][0]),
+                    lon: latlngs[i][1] + t * (latlngs[i + 1][1] - latlngs[i][1])
+                };
+            }
+            acc += lens[i];
+        }
+        return { lat: latlngs[0][0], lon: latlngs[0][1] };
+    }
+
+    function getLegSplitHalves() {
+        var base = legSplitSavedLatLngs;
+        if (!base || base.length < 2 || legSplitLat == null || legSplitLon == null) {
+            return null;
+        }
+        var best = findBestSegmentProjection(
+            legSplitLat,
+            legSplitLon,
+            base,
+            0,
+            base.length - 2
+        );
+        if (!best) {
+            return null;
+        }
+        var splitLl = [best.lat, best.lon];
+        var left;
+        var right;
+        if (best.t <= TRIM_VERTEX_EPS) {
+            left = base.slice(0, best.segIdx + 1);
+            right = base.slice(best.segIdx);
+        } else if (best.t >= 1 - TRIM_VERTEX_EPS) {
+            left = base.slice(0, best.segIdx + 2);
+            right = base.slice(best.segIdx + 1);
+        } else {
+            left = base.slice(0, best.segIdx + 1).concat([splitLl]);
+            right = [splitLl].concat(base.slice(best.segIdx + 1));
+        }
+        if (!left || left.length < 2 || !right || right.length < 2) {
+            return null;
+        }
+        return { left: left, right: right, split: splitLl };
+    }
+
+    function applySplitPoint(lat, lon) {
+        var base = legSplitSavedLatLngs;
+        if (!base) {
+            return false;
+        }
+        var best = findBestSegmentProjection(lat, lon, base, 0, base.length - 2);
+        if (!best) {
+            return false;
+        }
+        var prevLat = legSplitLat;
+        var prevLon = legSplitLon;
+        legSplitLat = best.lat;
+        legSplitLon = best.lon;
+        if (!getLegSplitHalves()) {
+            legSplitLat = prevLat;
+            legSplitLon = prevLon;
+            return false;
+        }
+        return true;
+    }
+
+    function clearLegSplitOverlay() {
+        var map = window.courseMappingMap;
+        if (map && legSplitMarkerLayer) {
+            map.removeLayer(legSplitMarkerLayer);
+        }
+        if (map && legSplitHitLayer) {
+            map.removeLayer(legSplitHitLayer);
+        }
+        if (map && legSplitSecondLine) {
+            map.removeLayer(legSplitSecondLine);
+        }
+        legSplitMarkerLayer = null;
+        legSplitHitLayer = null;
+        legSplitSecondLine = null;
+    }
+
+    function updateLegSplitDisplay(opts) {
+        opts = opts || {};
+        var map = window.courseMappingMap;
+        var halves = getLegSplitHalves();
+        if (!map || !halves || !legSplitActive) {
+            return;
+        }
+        setLegRoutePolyline(halves.left, { interactive: false });
+        if (legSplitSecondLine) {
+            map.removeLayer(legSplitSecondLine);
+        }
+        legSplitSecondLine = L.polyline(halves.right, {
+            color: '#0ca678',
+            weight: 5,
+            opacity: 0.92,
+            interactive: false
+        }).addTo(map);
+        if (legSplitHitLayer) {
+            map.removeLayer(legSplitHitLayer);
+        }
+        legSplitHitLayer = L.polyline(legSplitSavedLatLngs, {
+            color: '#000000',
+            weight: 18,
+            opacity: 0,
+            className: 'leg-split-hit-line'
+        });
+        legSplitHitLayer.on('click', function (ev) {
+            if (applySplitPoint(ev.latlng.lat, ev.latlng.lng)) {
+                updateLegSplitDisplay();
+            }
+        });
+        legSplitHitLayer.addTo(map);
+        if (opts.dragMarker) {
+            opts.dragMarker.setLatLng(halves.split);
+            return;
+        }
+        if (legSplitMarkerLayer) {
+            map.removeLayer(legSplitMarkerLayer);
+        }
+        legSplitMarkerLayer = L.layerGroup();
+        var marker = L.marker(halves.split, {
+            icon: L.divIcon({
+                className: 'leg-split-handle',
+                html: '<div></div>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            }),
+            draggable: true,
+            autoPan: true,
+            zIndexOffset: 2100
+        });
+        marker.on('drag', function (ev) {
+            var pos = ev.target.getLatLng();
+            applySplitPoint(pos.lat, pos.lng);
+            updateLegSplitDisplay({ dragMarker: ev.target });
+        });
+        marker.on('dragend', function () {
+            updateLegSplitDisplay();
+        });
+        marker.addTo(legSplitMarkerLayer);
+        legSplitMarkerLayer.addTo(map);
+        if (legMapLayers.start) {
+            map.removeLayer(legMapLayers.start);
+            legMapLayers.start = null;
+        }
+        if (legMapLayers.end) {
+            map.removeLayer(legMapLayers.end);
+            legMapLayers.end = null;
+        }
+    }
+
+    function stopLegCopySplit(discard) {
+        if (!legSplitActive && !legSplitSavedLatLngs) {
+            return;
+        }
+        var saved = legSplitSavedLatLngs;
+        legSplitActive = false;
+        clearLegSplitOverlay();
+        if (discard && saved && selectedLegId === legSplitSourceId) {
+            selectedLegLatLngs = copyLatLngs(saved);
+            setLegRoutePolyline(selectedLegLatLngs);
+        }
+        legSplitSavedLatLngs = null;
+        legSplitLat = null;
+        legSplitLon = null;
+        legSplitSourceId = null;
+        updateLegActionButtons();
+    }
+
+    function beginLegCopySplitMode() {
+        if (!selectedLegLatLngs || selectedLegLatLngs.length < 2) {
+            setLegStatus('Wait for the leg route to load on the map.', true);
+            return;
+        }
+        stopLegReshapeRoute(true);
+        stopLegTrimRoute(true);
+        stopLegExtendRoute(true);
+        if (addLocationOnMap) {
+            if (!pendingLegLocations.length) {
+                stopLegLocationPinMode();
+            } else {
+                setLegStatus('Save or cancel pending locations before splitting the route.', true);
+                return;
+            }
+        }
+        stopLegCopySplit(true);
+        legSplitSourceId = selectedLegId;
+        legSplitSavedLatLngs = copyLatLngs(selectedLegLatLngs);
+        var mid = defaultSplitPoint(legSplitSavedLatLngs);
+        legSplitLat = mid.lat;
+        legSplitLon = mid.lon;
+        if (!getLegSplitHalves()) {
+            stopLegCopySplit(true);
+            setLegStatus('This route is too short to split.', true);
+            return;
+        }
+        legSplitActive = true;
+        updateLegActionButtons();
+        updateLegSplitDisplay();
+        setLegStatus(
+            'Drag the split point or click the route. Confirm creates two new legs. The source leg is not changed.'
+        );
+    }
+
+    function startLegCopySplit(legId) {
+        if (!usesOrgLegLibrary()) {
+            setLegStatus('Copy / split is only available for the organization leg library.', true);
+            return;
+        }
+        if (selectedLegId === legId && selectedLegLatLngs && selectedLegLatLngs.length >= 2) {
+            beginLegCopySplitMode();
+            return;
+        }
+        selectLegById(legId, { onGeometryReady: beginLegCopySplitMode });
+    }
+
+    function confirmLegCopySplit() {
+        if (!legSplitActive || !legSplitSourceId || legSplitLat == null || legSplitLon == null) {
+            return;
+        }
+        if (!getLegSplitHalves()) {
+            setLegStatus('Move the split point so both halves have a route.', true);
+            return;
+        }
+        var sourceId = legSplitSourceId;
+        setLegStatus('Creating split copies of leg ' + sourceId + '…');
+        fetch('/api/org/legs/' + encodeURIComponent(sourceId) + '/copy-split', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: legSplitLat, lon: legSplitLon })
+        })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                var ids = payload.data.split_leg_ids || [];
+                stopLegCopySplit(false);
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    if (ids[0]) {
+                        selectLegById(ids[0]);
+                    }
+                    setLegStatus(
+                        'Created legs ' +
+                            ids.join(' and ') +
+                            ' from split of leg ' +
+                            sourceId +
+                            '. Edit labels if needed.'
+                    );
+                });
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
+    }
+
     function confirmLegRouteEdit() {
         if (legTrimActive) {
             confirmLegTrimRoute();
@@ -3362,6 +3656,8 @@
             confirmLegExtendRoute();
         } else if (legReshapeActive) {
             confirmLegReshapeRoute();
+        } else if (legSplitActive) {
+            confirmLegCopySplit();
         }
     }
 
@@ -3375,6 +3671,9 @@
         } else if (legReshapeActive) {
             stopLegReshapeRoute(true);
             setLegStatus('Route reshape cancelled.');
+        } else if (legSplitActive) {
+            stopLegCopySplit(true);
+            setLegStatus('Copy / split cancelled.');
         }
     }
 
@@ -3384,6 +3683,7 @@
         clearLegReshapeAnchorLayer();
         clearLegTrimGhostLayer();
         clearLegTrimMarkerLayer();
+        clearLegSplitOverlay();
         if (legMapLayers.line) {
             map.removeLayer(legMapLayers.line);
             legMapLayers.line = null;
@@ -4276,6 +4576,7 @@
         stopLegLocationPinMode();
         stopLegReshapeRoute(true);
         stopLegTrimRoute(true);
+        stopLegCopySplit(true);
         invalidateLegGeometryRequests();
         clearLegMapLayers();
         selectedLegId = null;
@@ -4348,6 +4649,9 @@
         if (!options.keepTrim) {
             stopLegTrimRoute(true);
         }
+        if (!options.keepSplit) {
+            stopLegCopySplit(true);
+        }
         selectedLegId = legId;
         updateLegActionButtons();
         document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
@@ -4406,6 +4710,9 @@
                 renderLegLocationsBrowser();
                 if (!options.preserveZoom) {
                     fitLegMapBounds(currentLeg);
+                }
+                if (typeof options.onGeometryReady === 'function') {
+                    options.onGeometryReady();
                 }
             })
             .catch(function (err) {
@@ -4792,6 +5099,16 @@
                             ev.stopPropagation();
                             copyLeg(ch.id);
                         })
+                    );
+                    actions.appendChild(
+                        ta.createIconButton(
+                            'split',
+                            'Copy this leg and split the copy at a point you choose. Source is unchanged.',
+                            function (ev) {
+                                ev.stopPropagation();
+                                startLegCopySplit(ch.id);
+                            }
+                        )
                     );
                     actions.appendChild(
                         ta.createIconButton(

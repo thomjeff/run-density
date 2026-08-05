@@ -6,7 +6,7 @@
 <div class="page-header">
     <h2>Junction Flow</h2>
     <p class="text-secondary" style="margin-top: 0.25rem;">
-        Cross and merge participation at authored junctions (dwell co-presence at the node).
+        Unique runners who met the other stream at the node within 30 seconds — not everyone who passed the location.
     </p>
 </div>
 {% include "partials/run_context.html" %}
@@ -51,12 +51,12 @@
                 <td>Presence is estimated at the junction endpoint (segment km at the pin) using gun time + start offset + pace × km. Each runner is treated as at the node for a short dwell (±15 s, 30 s total).</td>
             </tr>
             <tr>
-                <td><strong>Co-presence</strong></td>
-                <td>A runner counts only if a partner-stream runner is also at the node within dwell of their transit — not merely because both appear somewhere in the involvement window.</td>
+                <td><strong>Co-presence / “met within 30s”</strong></td>
+                <td>A runner counts in the headline only if someone from the other stream is at the node within 30&nbsp;s of their transit. Full or Half is enough — both events do not need to be present at once. One 10k meeting three Full runners still counts as one 10k.</td>
             </tr>
             <tr>
                 <td><strong>Involvement window</strong></td>
-                <td>First to last minute where both roles have concurrent presence at the node. Used for timeline span and peak concurrent; unique headlines use co-presence.</td>
+                <td>First to last minute where both roles have concurrent presence. Used for the timeline and “transited in window” context. Window traffic is larger than co-present uniques; do not read window counts as the headline.</td>
             </tr>
             <tr>
                 <td><strong>Pace quintiles</strong></td>
@@ -68,7 +68,11 @@
             </tr>
             <tr>
                 <td><strong>How to read</strong></td>
-                <td>Headline numbers are co-present uniques, labeled by event. Charts show concurrent count over time (hover for minute values). Crosstab answers “where in each field did mixing happen?”</td>
+                <td>
+                    Tiles are unique runners (a union — do not sum Full + Half to get the mixed total).
+                    Mix tables show event × event meetings; Unique matches the tile.
+                    The chart is concurrent occupancy over time, secondary to the unique mix.
+                </td>
             </tr>
         </tbody>
     </table>
@@ -145,43 +149,43 @@
         };
     }
 
+    function bucketAll(bucket) {
+        if (!bucket || bucket.all == null) return null;
+        return Number(bucket.all);
+    }
+
     function headlineUniques(ix) {
         const u = ix.unique_by_role_event || {};
         const hl = ix.headline_labels || {};
         const roles = roleEvents(ix);
-        const priEv = formatEventList(roles.primary);
-        const secEv = formatEventList(roles.secondary);
-        if (hl.primary_label && hl.secondary_label) {
-            return {
-                primaryLabel: hl.primary_label,
-                primary: ix.type === "merge"
-                    ? (u.joining_with_full_half_copresence || {}).all ?? "—"
-                    : (u.crossing_with_copresence || {}).all ?? "—",
-                secondaryLabel: hl.secondary_label,
-                secondary: ix.type === "merge"
-                    ? (u.through_full_half_with_joining_copresence || {}).all ?? "—"
-                    : (u.crossed_with_copresence || {}).all ?? "—",
-                primaryEvents: roles.primary,
-                secondaryEvents: roles.secondary,
-            };
-        }
-        if (ix.type === "merge") {
-            return {
-                primaryLabel: `${priEv ? priEv + " " : ""}Joining (co-present)`.trim(),
-                primary: (u.joining_with_full_half_copresence || {}).all ?? "—",
-                secondaryLabel: `${secEv ? secEv + " " : ""}Through (co-present)`.trim(),
-                secondary: (u.through_full_half_with_joining_copresence || {}).all ?? "—",
-                primaryEvents: roles.primary,
-                secondaryEvents: roles.secondary,
-            };
-        }
+        const priEv = formatEventList(roles.primary) || "runners";
+        const secEv = formatEventList(roles.secondary) || "the other stream";
+        const isMerge = ix.type === "merge";
+        const primaryBucket = isMerge
+            ? (u.joining_with_full_half_copresence || {})
+            : (u.crossing_with_copresence || {});
+        const secondaryBucket = isMerge
+            ? (u.through_full_half_with_joining_copresence || {})
+            : (u.crossed_with_copresence || {});
+        const windowPrimary = isMerge ? (u.joining_in_window || {}) : (u.crossing_in_window || {});
+        const windowSecondary = isMerge ? (u.through_in_window || {}) : (u.crossed_in_window || {});
+        const without = isMerge
+            ? (u.joining_without_full_half || {})
+            : (u.crossing_without_copresence || {});
         return {
-            primaryLabel: `${priEv ? priEv + " " : ""}Crossing (co-present)`.trim(),
-            primary: (u.crossing_with_copresence || {}).all ?? "—",
-            secondaryLabel: `${secEv ? secEv + " " : ""}Crossed (co-present)`.trim(),
-            secondary: (u.crossed_with_copresence || {}).all ?? "—",
+            primaryLabel: `Unique ${priEv} who met ${secEv} within 30s`,
+            primary: bucketAll(primaryBucket) ?? "—",
+            primaryBucket,
+            secondaryLabel: `Unique ${secEv} who met ${priEv} within 30s`,
+            secondary: bucketAll(secondaryBucket) ?? "—",
+            secondaryBucket,
+            primaryRole: hl.primary_role || (isMerge ? "joining" : "crossing"),
+            secondaryRole: hl.secondary_role || (isMerge ? "through" : "crossed"),
             primaryEvents: roles.primary,
             secondaryEvents: roles.secondary,
+            windowPrimary,
+            windowSecondary,
+            withoutPartner: without.all ?? null,
         };
     }
 
@@ -333,6 +337,48 @@
         );
     }
 
+    function eventTile(event, count, label, meta, secondary) {
+        return '<div class="flow-parent-tile' + (secondary ? ' flow-parent-tile-secondary' : '') + '">' +
+            '<div class="flow-parent-tile-kicker">' + escapeHtml(formatEventList([event]) || event) + '</div>' +
+            '<div class="flow-parent-tile-value">' + escapeHtml(String(count)) + '</div>' +
+            '<div class="flow-parent-tile-label">' + escapeHtml(label) + '</div>' +
+            (meta ? '<div class="flow-parent-tile-meta">' + escapeHtml(meta) + '</div>' : '') +
+            '</div>';
+    }
+
+    function windowCount(bucket, event) {
+        if (!bucket || bucket[event] == null) return null;
+        return Number(bucket[event]);
+    }
+
+    function renderMixMatrix(title, readCopy, arrow, breakdown, rowEvents, colEvents) {
+        const ready = breakdown && Object.keys(breakdown).length;
+        const head = (colEvents || []).map((event) =>
+            '<th>' + escapeHtml(arrow + ' ' + (formatEventList([event]) || event)) + '</th>'
+        ).join('');
+        const showMulti = (colEvents || []).length > 1;
+        const rows = (rowEvents || []).map((event) => {
+            const row = (breakdown || {})[event] || {};
+            const vs = row.vs || {};
+            const cells = (colEvents || []).map((other) =>
+                '<td>' + escapeHtml(vs[other] == null ? '—' : String(vs[other])) + '</td>'
+            ).join('');
+            return '<tr>' +
+                '<th scope="row">' + escapeHtml(formatEventList([event]) || event) + '</th>' +
+                cells +
+                (showMulti ? ('<td>' + escapeHtml(row.in_two_or_more == null ? '—' : String(row.in_two_or_more)) + '</td>') : '') +
+                '<td class="flow-parent-mix-unique">' + escapeHtml(row.unique == null ? '—' : String(row.unique)) + '</td>' +
+                '</tr>';
+        }).join('');
+        return '<h4 class="flow-parent-mix-heading">' + escapeHtml(title) + '</h4>' +
+            '<p class="text-secondary flow-parent-mix-read">' + escapeHtml(readCopy) + '</p>' +
+            '<div class="scrollable-table-container"><table class="table-sticky-header flow-parent-mix-table"><thead><tr>' +
+            '<th>Event</th>' + head +
+            (showMulti ? '<th>In 2+ events</th>' : '') +
+            '<th>Unique</th></tr></thead><tbody>' + (ready ? rows : '<tr><td colspan="8">Re-run analysis to build the event mix table.</td></tr>') +
+            '</tbody></table></div>';
+    }
+
     function renderInteraction(j, ix) {
         const h = headlineUniques(ix);
         const peaks = ix.peak_concurrent || {};
@@ -346,43 +392,70 @@
         const peakVals = Object.entries(peaks)
             .map(([k, v]) => `${peakMap[k] || k}: ${v}`)
             .join(" · ");
+        const secList = formatEventList(h.secondaryEvents) || "the other stream";
+        const priList = formatEventList(h.primaryEvents) || "runners";
+        const primaryTiles = (h.primaryEvents.length ? h.primaryEvents : ["all"]).map((event) => {
+            const count = event === "all" ? h.primary : (h.primaryBucket[event] ?? "—");
+            const transited = windowCount(h.windowPrimary, event);
+            const meta = transited == null ? "" : (String(transited) + " transited in window");
+            return eventTile(event, count, "Met " + secList + " within 30s", meta, false);
+        }).join("");
+        const secondaryTiles = (h.secondaryEvents.length ? h.secondaryEvents : []).map((event) => {
+            const count = h.secondaryBucket[event] ?? "—";
+            const transited = windowCount(h.windowSecondary, event);
+            const meta = transited == null ? "" : (String(transited) + " transited in window");
+            return eventTile(event, count, "Met " + priList + " within 30s", meta, true);
+        }).join("");
+        const mix = ix.mix_breakdown || {};
+        const meetingEvents = mix.primary_events || h.primaryEvents;
+        const metByEvents = mix.secondary_events || h.secondaryEvents;
+        const withoutBit = h.withoutPartner == null
+            ? ""
+            : (h.withoutPartner + " " + (priList.toLowerCase()) + " transited with no partner within 30s. ");
         const card = document.createElement("div");
         card.className = "card mb-3";
         card.innerHTML = `
             <div class="card-header">
                 <div>
                     <span class="badge ${ix.type === "merge" ? "bg-green-lt" : "bg-blue-lt"} me-2">${ix.type}</span>
-                    <strong>${ix.label || ""}</strong>
-                    <span class="text-secondary ms-2">${ix.window_start || "—"}–${ix.window_end || "—"}
+                    <strong>${escapeHtml(ix.label || "")}</strong>
+                    <span class="text-secondary ms-2">${escapeHtml(ix.window_start || "—")}–${escapeHtml(ix.window_end || "—")}
                     (${ix.window_minutes || 0} min)</span>
                 </div>
             </div>
             <div class="card-body">
                 ${ix.description ? `<p class="text-secondary mb-3" style="max-width:48rem;">${escapeHtml(ix.description)}</p>` : ""}
-                <div class="row g-3 mb-3">
-                    <div class="col-sm-4">
-                        <div class="text-secondary">${escapeHtml(h.primaryLabel)}</div>
-                        <div class="h2 mb-0">${h.primary}</div>
-                    </div>
-                    <div class="col-sm-4">
-                        <div class="text-secondary">${escapeHtml(h.secondaryLabel)}</div>
-                        <div class="h2 mb-0">${h.secondary}</div>
-                    </div>
-                    <div class="col-sm-4">
-                        <div class="text-secondary">Peak concurrent</div>
-                        <div class="mt-1">${peakVals || "—"}</div>
-                    </div>
+                <div class="flow-parent-tile flow-parent-tile-header">
+                    <div class="flow-parent-tile-title">${escapeHtml(h.primaryLabel)}</div>
+                    <div class="flow-parent-tile-meta">Unique = union across partner events. Do not add Full + Half to get the total. ${escapeHtml(withoutBit)}Peak concurrent: ${escapeHtml(peakVals || "—")}</div>
+                    <div class="flow-parent-tile-grid">${primaryTiles}</div>
+                    ${secondaryTiles ? '<div class="flow-parent-tile-grid flow-parent-tile-grid-secondary">' + secondaryTiles + '</div>' : ""}
                 </div>
-                <h4 class="mb-2">Concurrent at node</h4>
-                <div style="height:220px;"><canvas></canvas></div>
-                <p class="text-secondary small mt-2 mb-3">Hover for minute counts. Q1=lead (fastest) / Q5=rear (slowest) within each event.</p>
-                <h4 class="mb-2">Field position (pace quintile crosstab)</h4>
+                ${renderMixMatrix(
+                    (h.primaryRole === "joining" ? "Joining → through" : "Crossing → crossed"),
+                    "Each cell is unique " + priList + " runners who met at least one " + "column-event runner within 30s. Unique matches the tile — a union, so do not sum the → columns. In 2+ events counts runners who met more than one partner event.",
+                    "→",
+                    mix.meeting || {},
+                    meetingEvents,
+                    metByEvents
+                )}
+                ${renderMixMatrix(
+                    (h.secondaryRole === "through" ? "Through ← joining" : "Crossed ← crossing"),
+                    "Each cell is unique " + secList + " runners who were met by at least one " + "row-event runner within 30s. Unique matches the secondary tiles.",
+                    "←",
+                    mix.met_by || {},
+                    metByEvents,
+                    meetingEvents
+                )}
+                <h4 class="flow-parent-mix-heading">Concurrent at node</h4>
+                <p class="text-secondary flow-parent-mix-read">Occupancy over time — secondary to unique mix. Hover for minute counts.</p>
+                <div class="flow-parent-chart flow-parent-chart-occ"><canvas></canvas></div>
+                <h4 class="flow-parent-mix-heading">Field position (pace quintile)</h4>
                 <div class="table-responsive crosstab-wrap"></div>
             </div>
         `;
         card.querySelector(".crosstab-wrap").innerHTML = buildCrosstabTable(ix);
         const canvas = card.querySelector("canvas");
-        // Defer chart until in DOM
         setTimeout(() => renderChart(canvas, ix), 0);
         return card;
     }

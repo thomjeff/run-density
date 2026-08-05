@@ -92,8 +92,8 @@ def test_headline_labels_from_uniques():
             "crossed_with_copresence": {"all": 159, "full": 159},
         },
     )
-    assert labels["primary_label"] == "10k Crossing (co-present)"
-    assert labels["secondary_label"] == "Full Crossed (co-present)"
+    assert labels["primary_label"] == "Unique 10k who met Full within 30s"
+    assert labels["secondary_label"] == "Unique Full who met 10k within 30s"
 
 
 def test_normalize_preserves_description():

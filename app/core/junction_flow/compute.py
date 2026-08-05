@@ -65,6 +65,7 @@ class InteractionResult:
     notes: List[str] = field(default_factory=list)
     description: str = ""
     headline_labels: Dict[str, Any] = field(default_factory=dict)
+    mix_breakdown: Dict[str, Any] = field(default_factory=dict)
 
 
 def _hhmm(seconds: float) -> str:
@@ -215,19 +216,14 @@ def _nearest_partner_dt(
     return best_dt
 
 
-def _unique_with_copresence(
+def _copresent_runner_ids(
     primary: StreamPresence,
     partner: StreamPresence,
     start_sec: float,
     end_sec: float,
     dwell_sec: float = NODE_DWELL_SEC,
-) -> Dict[str, int]:
-    """
-    Per-runner co-presence at the node.
-
-    A primary runner counts as "with_partner" only if some partner runner's
-    node transit is within dwell_sec of theirs (not merely in the same window).
-    """
+) -> Tuple[set, set]:
+    """Return (ids with a partner within dwell, ids in window without a partner)."""
     p_mask = (primary.node_times_sec >= start_sec) & (primary.node_times_sec <= end_sec)
     partner_mask = (partner.node_times_sec >= start_sec - dwell_sec) & (
         partner.node_times_sec <= end_sec + dwell_sec
@@ -247,11 +243,59 @@ def _unique_with_copresence(
             without_ids.discard(rid)
         elif rid not in with_ids:
             without_ids.add(rid)
+    return with_ids, without_ids - with_ids
+
+
+def _unique_with_copresence(
+    primary: StreamPresence,
+    partner: StreamPresence,
+    start_sec: float,
+    end_sec: float,
+    dwell_sec: float = NODE_DWELL_SEC,
+) -> Dict[str, int]:
+    """
+    Per-runner co-presence at the node.
+
+    A primary runner counts as "with_partner" only if some partner runner's
+    node transit is within dwell_sec of theirs (not merely in the same window).
+    """
+    with_ids, without_ids = _copresent_runner_ids(
+        primary, partner, start_sec, end_sec, dwell_sec=dwell_sec
+    )
     return {
         "in_window": len(with_ids | without_ids),
         "with_partner": len(with_ids),
-        "without_partner": len(without_ids - with_ids),
+        "without_partner": len(without_ids),
     }
+
+
+def _event_mix_rows(
+    primary_by_event: Dict[str, StreamPresence],
+    partner_by_event: Dict[str, StreamPresence],
+    start_sec: float,
+    end_sec: float,
+) -> Dict[str, Any]:
+    """Unique primary runners who met each partner event within dwell (union ≠ sum)."""
+    out: Dict[str, Any] = {}
+    for event, primary in primary_by_event.items():
+        vs: Dict[str, int] = {}
+        id_sets: Dict[str, set] = {}
+        for other, partner in partner_by_event.items():
+            ids, _ = _copresent_runner_ids(primary, partner, start_sec, end_sec)
+            vs[other] = len(ids)
+            id_sets[other] = ids
+        union: set = set()
+        for ids in id_sets.values():
+            union |= ids
+        in_two = sum(
+            1 for rid in union if sum(1 for ids in id_sets.values() if rid in ids) >= 2
+        )
+        out[event] = {
+            "vs": vs,
+            "unique": len(union),
+            "in_two_or_more": in_two,
+        }
+    return out
 
 
 def _filter_presence_events(
@@ -609,6 +653,14 @@ def analyze_interaction(
             "crossed_without_copresence": {"all": crossed_cp["without_partner"]},
         }
         result.field_crosstab = _crosstab(primary, secondary, w0, w1)
+        pri_by_event = _by_event_combined(pri_parts)
+        sec_by_event = _by_event_combined(sec_parts)
+        result.mix_breakdown = {
+            "meeting": _event_mix_rows(pri_by_event, sec_by_event, w0, w1),
+            "met_by": _event_mix_rows(sec_by_event, pri_by_event, w0, w1),
+            "primary_events": list(pri_by_event.keys()),
+            "secondary_events": list(sec_by_event.keys()),
+        }
         result.label = f"{from_seg}→{to_seg} vs {conflicts}"
         return _enrich_interaction_result(result, ix, nearby_by_id)
 
@@ -735,6 +787,14 @@ def analyze_interaction(
         "through_all_deduped_in_window": {"all": len(through_ids)},
     }
     result.field_crosstab = _crosstab(primary, secondary, w0, w1)
+    join_by_event = _by_event_combined(join_parts)
+    partner_by_event = _by_event_combined(partner_parts)
+    result.mix_breakdown = {
+        "meeting": _event_mix_rows(join_by_event, partner_by_event, w0, w1),
+        "met_by": _event_mix_rows(partner_by_event, join_by_event, w0, w1),
+        "primary_events": list(join_by_event.keys()),
+        "secondary_events": list(partner_by_event.keys()),
+    }
     result.label = f"{from_seg}→{','.join(to_segs)}"
     return _enrich_interaction_result(result, ix, nearby_by_id)
 
@@ -781,6 +841,7 @@ def interaction_to_dict(result: InteractionResult) -> Dict[str, Any]:
         "field_crosstab": result.field_crosstab,
         "minute_rows": result.minute_rows,
         "headline_labels": getattr(result, "headline_labels", None) or {},
+        "mix_breakdown": getattr(result, "mix_breakdown", None) or {},
         "notes": result.notes,
     }
 
@@ -827,8 +888,8 @@ def analyze_junctions_doc(
             "node_dwell_sec": NODE_DWELL_SEC,
             "merge_partner_events": list(MERGE_PARTNER_EVENTS),
             "unique_count_rule": (
-                "runner counts only if a partner-stream runner is within "
-                "node_dwell_sec of their node transit"
+                "unique runners who met the other stream within "
+                "node_dwell_sec; Full or Half is sufficient (union, not both required)"
             ),
         },
         "junctions": junctions,
@@ -857,6 +918,7 @@ def result_to_ui_payload(day_result: Dict[str, Any]) -> Dict[str, Any]:
                     "field_crosstab": ix.get("field_crosstab"),
                     "minute_rows": ix.get("minute_rows"),
                     "headline_labels": ix.get("headline_labels") or {},
+                    "mix_breakdown": ix.get("mix_breakdown") or {},
                 }
             )
         junctions.append(
