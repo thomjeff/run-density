@@ -83,6 +83,11 @@ _LEG_LOC_PRESERVE_FIELDS = (
 # silently ignored otherwise).
 _LEG_OWNED_PLACEMENT_FIELDS = ("lat", "lon", "placement")
 
+# Off-course proxy timing is authored on the Legs tab (proxy_leg_loc_key).
+# Course.json must not keep stale numeric proxies (e.g. self-ref 91→91 after
+# copy/split when the leg key was updated to a package-local target).
+_LEG_OWNED_PROXY_FIELDS = ("proxy_loc_id", "proxy_pass_id", "proxy_leg_loc_key")
+
 # Zone is org-level (Build → Legs), snapshotted into Courses. Do not preserve
 # stale package course.json zone on merge / race export (Issue #836).
 _LEG_OWNED_ZONE_FIELD = "zone"
@@ -1204,6 +1209,9 @@ def merge_leg_locations_into_course(
     )
 
     cid = validate_config_id(config_id)
+    # Default package merge: legs own off-course proxy timing. Race export passes
+    # an explicit preserve list so package-course operational fields can win.
+    leg_owns_proxy_fields = preserve_from_course is None
     preserve_fields = (
         tuple(preserve_from_course)
         if preserve_from_course is not None
@@ -1305,10 +1313,14 @@ def merge_leg_locations_into_course(
                 row.setdefault(ev, "n")
 
             for field in preserve_fields:
-                if on_course and field in (
-                    "proxy_loc_id",
-                    "proxy_pass_id",
-                    "proxy_leg_loc_key",
+                if on_course and field in _LEG_OWNED_PROXY_FIELDS:
+                    continue
+                # Prefer leg-local key over stale numeric ids on the same row;
+                # resolve will rewrite proxy_loc_id after merge.
+                if (
+                    not on_course
+                    and field in ("proxy_loc_id", "proxy_pass_id")
+                    and str(loc.get("proxy_leg_loc_key") or "").strip()
                 ):
                     continue
                 if field in row and row[field] not in (None, ""):
@@ -1336,10 +1348,11 @@ def merge_leg_locations_into_course(
                         continue
                     if field == _LEG_OWNED_ZONE_FIELD:
                         continue
-                    if on_course and field in (
-                        "proxy_loc_id",
-                        "proxy_pass_id",
-                        "proxy_leg_loc_key",
+                    # On-course: never keep proxies. Default package merge: leg
+                    # owns off-course proxy timing (do not restore stale course
+                    # keys like 12:13 after Legs tab updates to 39:5).
+                    if field in _LEG_OWNED_PROXY_FIELDS and (
+                        on_course or leg_owns_proxy_fields
                     ):
                         continue
                     if field not in prev:
@@ -1388,8 +1401,13 @@ def _resolve_location_proxy_leg_keys(locations: Sequence[Dict[str, Any]]) -> Non
             continue
         target_id = by_key.get(proxy_key)
         if target_id is None:
+            # Drop stale numeric proxies so export fails on missing key instead
+            # of silently keeping a self-ref or wrong id from a prior package.
+            loc.pop("proxy_loc_id", None)
+            loc.pop("proxy_pass_id", None)
             continue
         loc["proxy_loc_id"] = target_id
+        loc["proxy_pass_id"] = target_id
 
 
 def _should_sync_leg_metadata_to_course(

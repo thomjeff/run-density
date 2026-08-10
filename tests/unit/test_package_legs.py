@@ -408,6 +408,111 @@ def test_merge_leg_locations_resolves_proxy_leg_loc_key(tmp_path, monkeypatch):
     assert traffic.get("proxy_leg_loc_key") == "33:0"
 
 
+def test_merge_prefers_leg_proxy_key_over_stale_course_proxy(tmp_path, monkeypatch):
+    """Legs-tab proxy_leg_loc_key must win over stale course.json self-proxies."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Stale proxy", "", event_day="sun", package_events=["10k"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "39",
+                        "seg_label": "Start to Friel",
+                        "file": "39.gpx",
+                        "locations": [
+                            {
+                                "loc_label": "Trail at Friel",
+                                "loc_type": "official",
+                                "lat": 45.97,
+                                "lon": -66.64,
+                                "placement": "along",
+                            },
+                            {
+                                "loc_label": "WSB PSAB On-Ramp (Northbound)",
+                                "loc_type": "traffic",
+                                "lat": 45.96,
+                                "lon": -66.64,
+                                "placement": "off",
+                                # Updated on Legs tab; stale numeric left behind.
+                                "proxy_leg_loc_key": "39:0",
+                                "proxy_loc_id": "91",
+                                "proxy_pass_id": "91",
+                            },
+                        ],
+                    }
+                ],
+                "recipes": {"10k": ["39"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S2",
+            "leg_id": "39",
+            "events": ["10k"],
+            "from_km": 0,
+            "to_km": 2.0,
+        }
+    ]
+    course["locations"] = [
+        {
+            "id": 108,
+            "loc_label": "Trail at Friel",
+            "loc_type": "official",
+            "lat": 45.97,
+            "lon": -66.64,
+            "leg_id": "39",
+            "leg_loc_key": "39:0",
+            "source": "leg",
+            "seg_id": "S2",
+            "10k": "y",
+        },
+        {
+            "id": 91,
+            "loc_label": "WSB PSAB On-Ramp (Northbound)",
+            "loc_type": "traffic",
+            "lat": 45.96,
+            "lon": -66.64,
+            "leg_id": "39",
+            "leg_loc_key": "39:1",
+            "source": "leg",
+            "seg_id": "",
+            # Stale course values from before Legs tab retargeted the proxy.
+            "proxy_leg_loc_key": "12:13",
+            "proxy_loc_id": "91",
+            "proxy_pass_id": "91",
+            "10k": "y",
+        },
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(config_id)
+    merged = load_config_course(config_id)
+    by_label = {loc["loc_label"]: loc for loc in merged["locations"]}
+    trail = by_label["Trail at Friel"]
+    psab = by_label["WSB PSAB On-Ramp (Northbound)"]
+    assert psab.get("proxy_leg_loc_key") == "39:0"
+    assert int(psab.get("proxy_loc_id")) == trail["id"]
+    assert int(psab.get("proxy_loc_id")) != psab["id"]
+    assert not validate_locations_for_export(merged)
+
+
 def test_merge_clears_stale_proxy_on_on_course_locations(tmp_path, monkeypatch):
     """Course-type leg rows must not keep package proxy_loc_id from a prior merge."""
     monkeypatch.setattr(

@@ -4194,11 +4194,19 @@
                 var proxyKey = (proxySel.value || '').trim();
                 if (proxyKey) {
                     target.proxy_leg_loc_key = proxyKey;
+                    // Numeric ids are course-export artifacts; clear so merge
+                    // resolve can rewrite from proxy_leg_loc_key.
+                    delete target.proxy_loc_id;
+                    delete target.proxy_pass_id;
                 } else {
                     delete target.proxy_leg_loc_key;
+                    delete target.proxy_loc_id;
+                    delete target.proxy_pass_id;
                 }
             } else {
                 delete target.proxy_leg_loc_key;
+                delete target.proxy_loc_id;
+                delete target.proxy_pass_id;
             }
         }
 
