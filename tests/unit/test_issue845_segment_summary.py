@@ -245,7 +245,7 @@ def test_existing_flow_segments_api_shape_unchanged():
         assert "summary" not in payload
 
 
-def test_flow_html_default_hides_parent_preview():
+def test_flow_html_defaults_to_segment_parent():
     source = Path("frontend/templates/pages/flow.html").read_text(encoding="utf-8")
     assert 'id="flow-parent-preview"' in source
     assert 'id="flow-parent-detail"' in source
@@ -259,8 +259,10 @@ def test_flow_html_default_hides_parent_preview():
     assert source.count("pointStyle: 'circle'") >= 2
     assert source.count("mode: 'index', intersect: false") >= 2
     assert "get('flow_parent')" in source
+    assert "flag !== '0'" in source
     assert "flowParentPreviewEnabled" in source
     assert "selectParentSegment" in source
+    assert "refreshFlowViews" in source
     assert "loadFlowData();" in source
     assert "loadOverlapData();" in source
 

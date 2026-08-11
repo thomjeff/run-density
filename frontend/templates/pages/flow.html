@@ -14,7 +14,7 @@
     <div class="card">
         <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
         <p id="flow-parent-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
-            Segment-first preview. <strong>Unique overtakers</strong> are the Flow insight (who had to work through another field).
+            Segment-first view. <strong>Unique overtakers</strong> are the Flow insight (who had to work through another field).
             Occupancy is crowding context. Mix tables break uniques down by counterpart — unions, not sums.
             Denominator = starters in this analysis run.
         </p>
@@ -169,21 +169,27 @@
     let selectedParentSegId = null;
     let parentOccChart = null;
     
-    // Load flow data on page load (and after chrome derives day — Issue #841)
+    // Load flow data on page load (and after chrome derives day — Issue #841).
+    // Segment-parent is default (#845/#848); ?flow_parent=0 restores legacy pair tables.
     document.addEventListener('DOMContentLoaded', function() {
         initializeSorting();
-        loadFlowData();
-        loadOverlapData();
-        loadFlowParentPreview();
-        window.addEventListener('runflow:context-ready', function () {
-            loadFlowData();
-            loadOverlapData();
-            loadFlowParentPreview();
-        });
+        refreshFlowViews();
+        window.addEventListener('runflow:context-ready', refreshFlowViews);
     });
 
     function flowParentPreviewEnabled() {
-        return new URLSearchParams(window.location.search).get('flow_parent') === '1';
+        const flag = new URLSearchParams(window.location.search).get('flow_parent');
+        return flag !== '0';
+    }
+
+    function refreshFlowViews() {
+        if (flowParentPreviewEnabled()) {
+            loadFlowParentPreview();
+            return;
+        }
+        loadFlowData();
+        loadOverlapData();
+        loadFlowParentPreview();
     }
 
     function eventLabel(event) {
@@ -235,7 +241,7 @@
                 console.error('Error loading flow segment parents:', error);
                 const tbody = document.getElementById('flow-parent-tbody');
                 if (tbody) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Segment parent preview unavailable.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Segment parent summary unavailable.</td></tr>';
                 }
             });
     }
