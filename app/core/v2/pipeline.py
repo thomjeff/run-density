@@ -85,6 +85,7 @@ def _convert_dataclasses_to_dicts(obj: Any) -> Any:
 PHASE_MAPPING = {
     "phase_1_pre_analysis": {"number": "Phase 1", "description": "Pre-Analysis & Validation"},
     "phase_2_data_loading": {"number": "Phase 2", "description": "Data Loading"},
+    "phase_2_5_motion": {"number": "Phase 2.5", "description": "Motion Clock Persist"},
     "phase_3_1_density_setup": {"number": "Phase 3.1", "description": "Density Setup"},
     "phase_3_2_density_compute": {"number": "Phase 3.2", "description": "Density Per-Day Compute"},
     "phase_4_1_flow_build_segments": {"number": "Phase 4.1", "description": "Flow Build Segments"},
@@ -847,6 +848,58 @@ def create_full_analysis_pipeline(
             phase_number="Phase 2",
             phase_description="Data Loading",
             summary_stats={"segments": segment_count, "runners": runner_count, "events": len(events)}
+        )
+
+        # Phase 2.5: Motion clock persist (#850 Child A) — always-on; fail the run on error.
+        motion_metrics = perf_monitor.start_phase(
+            "phase_2_5_motion",
+            phase_number="Phase 2.5",
+            phase_description="Motion Clock Persist",
+        )
+        from app.core.motion import build_and_persist_motion_for_day
+        from app.core.motion.build import resolve_motion_package_id
+
+        package_id = resolve_motion_package_id(
+            analysis_config=analysis_config if isinstance(analysis_config, dict) else None,
+            data_dir=data_dir,
+        )
+        course_json_path = Path(data_dir) / "course.json"
+        motion_summaries = []
+        try:
+            for day, day_events in events_by_day.items():
+                day_code = day.value
+                day_path = run_path / day_code
+                day_path.mkdir(parents=True, exist_ok=True)
+                day_runners = filter_runners_by_day(all_runners_df, day, events)
+                summary = build_and_persist_motion_for_day(
+                    day_path=day_path,
+                    day_code=day_code,
+                    day_events=day_events,
+                    runners_df=day_runners,
+                    segments_df=segments_df,
+                    gpx_paths=gpx_paths,
+                    runner_csv_paths=runner_paths,
+                    package_id=str(package_id) if package_id else None,
+                    course_json_path=course_json_path if course_json_path.is_file() else None,
+                )
+                motion_summaries.append(summary)
+                logger.info(
+                    "[Phase 2.5] Motion %s: %s rows",
+                    day_code,
+                    summary.get("row_count"),
+                )
+        except Exception:
+            logger.exception("[Phase 2.5] Motion clock persist failed — aborting analysis")
+            raise
+        motion_metrics.finish(memory_mb=get_memory_usage_mb())
+        perf_monitor.complete_phase(
+            motion_metrics,
+            phase_number="Phase 2.5",
+            phase_description="Motion Clock Persist",
+            summary_stats={
+                "days": len(motion_summaries),
+                "rows": sum(int(s.get("row_count") or 0) for s in motion_summaries),
+            },
         )
         
         # Phase 3: Density Computation
