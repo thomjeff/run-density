@@ -330,6 +330,22 @@ async def junctions(request: Request):
     )
 
 
+@router.get("/motion", response_class=HTMLResponse)
+async def motion(request: Request):
+    """
+    Motion / time-at-place query page (#850 Child B / #854).
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/motion.html",
+        context={"request": request, "meta": meta},
+    )
+
+
 @router.get("/locations", response_class=HTMLResponse)
 async def locations(request: Request):
     """

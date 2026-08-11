@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+
+{% block title %}Motion{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Motion / Time at Place</h2>
+    <p class="text-secondary" style="margin-top: 0.25rem;">
+        Query motion samples around a package location as a <strong>GPS pin ± radius</strong>
+        (planar disk). Enter local race-day clock times; results count who is inside
+        the disk and who enters/exits it.
+    </p>
+</div>
+{% include "partials/run_context.html" %}
+
+<div id="motion-empty" class="card" style="display:none;">
+    <p class="text-secondary mb-0">
+        No motion artifact for this run. Re-run analysis after motion persist
+        (#850 Child A) is available.
+    </p>
+</div>
+
+<div id="motion-root" class="card">
+    <h3 style="margin-bottom: 1rem;">Query</h3>
+    <p id="motion-clock-hint" class="text-secondary" style="margin-bottom: 1rem;"></p>
+    <div id="motion-form-error" class="alert alert-warning" style="display:none;" role="alert"></div>
+    <form id="motion-form" class="row g-3" novalidate>
+        <div class="col-md-6">
+            <label class="form-label" for="motion-place">Location</label>
+            <select id="motion-place" class="form-select">
+                <option value="">Loading locations…</option>
+            </select>
+            <div class="form-text">
+                Package locations by <code>loc_id</code>. Occupancy uses the pin’s
+                lat/lon ± radius (not segment streams).
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="motion-buffer">Radius (m)</label>
+            <input id="motion-buffer" class="form-control" type="number" min="1" step="1" value="30">
+            <div class="form-text">Planar disk around the location pin</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="motion-events">Events</label>
+            <input id="motion-events" class="form-control" type="text" placeholder="full,half,10k">
+            <div class="form-text">Blank = all events</div>
+        </div>
+
+        <div class="col-md-3" id="field-inst">
+            <label class="form-label" for="motion-t">Instantaneous clock time</label>
+            <input id="motion-t" class="form-control" type="time" step="1" value="08:00:00">
+            <div class="form-text">Required for Instantaneous — e.g. 08:00:00</div>
+        </div>
+        <div class="col-md-3" id="field-t0">
+            <label class="form-label" for="motion-t0">Window start</label>
+            <input id="motion-t0" class="form-control" type="time" step="1" value="07:30:00">
+            <div class="form-text">Required for window metrics</div>
+        </div>
+        <div class="col-md-3" id="field-t1">
+            <label class="form-label" for="motion-t1">Window end (exclusive)</label>
+            <input id="motion-t1" class="form-control" type="time" step="1" value="08:00:00">
+            <div class="form-text">Half-open interval [start, end)</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Metrics</label>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="m-inst" checked>
+                <label class="form-check-label" for="m-inst">Instantaneous</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="m-win" checked>
+                <label class="form-check-label" for="m-win">Window uniques</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="m-thru" checked>
+                <label class="form-check-label" for="m-thru">Throughput</label>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary" id="motion-run">Run query</button>
+            <span id="motion-status" class="text-secondary ms-2"></span>
+        </div>
+    </form>
+</div>
+
+<div id="motion-results" class="card" style="display:none; margin-top: 1rem;">
+    <h3 style="margin-bottom: 1rem;">Results</h3>
+    <div id="motion-results-body"></div>
+</div>
+
+<div class="card" style="margin-top: 1rem;">
+    <h3 style="margin-bottom: 1rem;">Metric reference</h3>
+    <table>
+        <thead>
+            <tr><th>Metric</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Clock times</strong></td>
+                <td>
+                    Local race-day wall clock (same as gun times), not “minutes into the race.”
+                    Internally: seconds from local midnight (e.g. 08:00:00 → 28800).
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Instantaneous</strong></td>
+                <td>Unique runners inside the GPS disk at one clock time.</td>
+            </tr>
+            <tr>
+                <td><strong>Window uniques</strong></td>
+                <td>Distinct runners with any sample inside the disk in [start, end).</td>
+            </tr>
+            <tr>
+                <td><strong>Throughput</strong></td>
+                <td>
+                    Enter events of the disk in [start, end) (outside→inside).
+                    Unique enterers should align with window uniques when the window
+                    covers full passage through the pin.
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+(function () {
+    function escapeHtml(str) {
+        return String(str == null ? "" : str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    function resolveRunId() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("run_id")
+            || (window.runflowDay && window.runflowDay.run_id)
+            || localStorage.getItem("selected_run_id")
+            || null;
+    }
+
+    function resolveDay() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("day")
+            || (window.runflowDay && window.runflowDay.day)
+            || null;
+    }
+
+    function setStatus(msg) {
+        const el = document.getElementById("motion-status");
+        if (el) el.textContent = msg || "";
+    }
+
+    function setFormError(msg) {
+        const el = document.getElementById("motion-form-error");
+        if (!el) return;
+        if (!msg) {
+            el.style.display = "none";
+            el.textContent = "";
+            return;
+        }
+        el.textContent = msg;
+        el.style.display = "";
+    }
+
+    /** Parse HTML time input (HH:MM or HH:MM:SS) → seconds from midnight. */
+    function clockToSec(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        const parts = raw.split(":").map((p) => Number(p));
+        if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) return null;
+        const h = parts[0];
+        const m = parts[1];
+        const s = parts.length >= 3 ? parts[2] : 0;
+        if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return null;
+        return (h * 3600) + (m * 60) + s;
+    }
+
+    /** Seconds from midnight → HH:MM:SS for display. */
+    function secToClock(sec) {
+        const t = Math.max(0, Math.floor(Number(sec) || 0));
+        const h = Math.floor(t / 3600);
+        const m = Math.floor((t % 3600) / 60);
+        const s = t % 60;
+        return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+    }
+
+    function selectedMetrics() {
+        const metrics = [];
+        if (document.getElementById("m-inst").checked) metrics.push("instantaneous");
+        if (document.getElementById("m-win").checked) metrics.push("window_uniques");
+        if (document.getElementById("m-thru").checked) metrics.push("throughput");
+        return metrics;
+    }
+
+    function syncTimeFields() {
+        const metrics = selectedMetrics();
+        const needInst = metrics.includes("instantaneous");
+        const needWindow = metrics.includes("window_uniques")
+            || metrics.includes("throughput");
+        document.getElementById("field-inst").style.opacity = needInst ? "1" : "0.45";
+        document.getElementById("field-t0").style.opacity = needWindow ? "1" : "0.45";
+        document.getElementById("field-t1").style.opacity = needWindow ? "1" : "0.45";
+        document.getElementById("motion-t").disabled = !needInst;
+        document.getElementById("motion-t0").disabled = !needWindow;
+        document.getElementById("motion-t1").disabled = !needWindow;
+    }
+
+    function validateForm() {
+        const locId = document.getElementById("motion-place").value;
+        if (!locId) {
+            return "Choose a location before running the query.";
+        }
+        const metrics = selectedMetrics();
+        if (!metrics.length) {
+            return "Select at least one metric.";
+        }
+        if (metrics.includes("instantaneous")) {
+            const t = clockToSec(document.getElementById("motion-t").value);
+            if (t == null) {
+                return "Instantaneous requires a clock time (e.g. 08:00:00).";
+            }
+        }
+        const needWindow = metrics.includes("window_uniques")
+            || metrics.includes("throughput");
+        if (needWindow) {
+            const t0 = clockToSec(document.getElementById("motion-t0").value);
+            const t1 = clockToSec(document.getElementById("motion-t1").value);
+            if (t0 == null || t1 == null) {
+                return "Window uniques and throughput require start and end clock times.";
+            }
+            if (t1 <= t0) {
+                return "Window end must be after window start (half-open [start, end)).";
+            }
+        }
+        return null;
+    }
+
+    function byEventHtml(byEvent) {
+        const entries = Object.entries(byEvent || {});
+        if (!entries.length) return "<em>none</em>";
+        return entries.map(([k, v]) => `${escapeHtml(k)}: <strong>${v}</strong>`).join(" · ");
+    }
+
+    async function loadMetadata() {
+        const runId = resolveRunId();
+        const day = resolveDay();
+        const hint = document.getElementById("motion-clock-hint");
+        if (!runId) {
+            hint.textContent = "";
+            return null;
+        }
+        const params = new URLSearchParams({ run_id: runId });
+        if (day) params.set("day", day);
+        const res = await fetch(`/api/motion/metadata?${params.toString()}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.metadata) {
+            hint.textContent = "Motion metadata unavailable for this run.";
+            return null;
+        }
+        const meta = data.metadata;
+        const minT = meta.min_t;
+        const maxT = meta.max_t;
+        const guns = meta.gun_sec_by_event || {};
+        const gunBits = Object.keys(guns).sort().map(
+            (k) => `${k} ${secToClock(guns[k])}`
+        ).join(", ");
+        let text = "Times are local race-day clock (seconds from midnight under the hood).";
+        if (minT != null && maxT != null) {
+            text += ` This run’s motion spans ${secToClock(minT)}–${secToClock(maxT)}.`;
+        }
+        if (gunBits) {
+            text += ` Guns: ${gunBits}.`;
+        }
+        hint.textContent = text;
+
+        // Prefill a sensible default window from metadata when still at page defaults.
+        if (minT != null && maxT != null) {
+            const t0El = document.getElementById("motion-t0");
+            const t1El = document.getElementById("motion-t1");
+            const tEl = document.getElementById("motion-t");
+            if (t0El.value === "07:30:00") t0El.value = secToClock(minT);
+            // Prefer a 30-minute first window, capped by max_t.
+            const preferEnd = Math.min(Number(minT) + 30 * 60, Number(maxT));
+            if (t1El.value === "08:00:00") t1El.value = secToClock(preferEnd);
+            if (tEl.value === "08:00:00") {
+                const mid = Math.min(Number(minT) + 15 * 60, Number(maxT));
+                tEl.value = secToClock(mid);
+            }
+        }
+        return meta;
+    }
+
+    async function loadPlaces() {
+        const runId = resolveRunId();
+        const day = resolveDay();
+        const empty = document.getElementById("motion-empty");
+        const select = document.getElementById("motion-place");
+        if (!runId) {
+            select.innerHTML = '<option value="">Select a run first</option>';
+            return;
+        }
+        const params = new URLSearchParams({ run_id: runId, mode: "planar" });
+        if (day) params.set("day", day);
+        const res = await fetch(`/api/motion/places?${params.toString()}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            empty.style.display = "";
+            select.innerHTML = '<option value="">No places</option>';
+            setStatus(data.error || "Failed to load places");
+            return;
+        }
+        empty.style.display = "none";
+        const places = data.places || [];
+        if (!places.length) {
+            select.innerHTML = '<option value="">No mappable locations</option>';
+            return;
+        }
+        select.innerHTML = places.map((p) => {
+            const label = `${p.label || "Location"} (loc ${p.loc_id})`;
+            return `<option value="${escapeHtml(p.loc_id)}">${escapeHtml(label)}</option>`;
+        }).join("");
+    }
+
+    async function runQuery(ev) {
+        ev.preventDefault();
+        setFormError(null);
+        const runId = resolveRunId();
+        const day = resolveDay();
+        if (!runId) {
+            setFormError("Select a run first.");
+            setStatus("");
+            return;
+        }
+        const validationError = validateForm();
+        if (validationError) {
+            setFormError(validationError);
+            setStatus("");
+            return;
+        }
+
+        const metrics = selectedMetrics();
+        const params = new URLSearchParams({
+            run_id: runId,
+            loc_id: document.getElementById("motion-place").value,
+            buffer_m: document.getElementById("motion-buffer").value || "30",
+            metrics: metrics.join(","),
+            mode: "planar",
+        });
+        if (day) params.set("day", day);
+        const events = document.getElementById("motion-events").value.trim();
+        if (events) params.set("events", events);
+
+        if (metrics.includes("instantaneous")) {
+            params.set("t", String(clockToSec(document.getElementById("motion-t").value)));
+        }
+        if (metrics.includes("window_uniques") || metrics.includes("throughput")) {
+            params.set("t0", String(clockToSec(document.getElementById("motion-t0").value)));
+            params.set("t1", String(clockToSec(document.getElementById("motion-t1").value)));
+        }
+
+        setStatus("Querying…");
+        const res = await fetch(`/api/motion/occupancy?${params.toString()}`);
+        const data = await res.json();
+        const results = document.getElementById("motion-results");
+        const body = document.getElementById("motion-results-body");
+        if (!res.ok || !data.ok) {
+            results.style.display = "";
+            body.innerHTML = `<p class="text-danger">${escapeHtml(data.error || "Query failed")}</p>`;
+            setStatus("Failed");
+            return;
+        }
+
+        const place = data.place || {};
+        const m = data.metrics || {};
+        let html = `<p class="text-secondary">Location <strong>${escapeHtml(place.label || place.place_id || "")}</strong>`;
+        html += ` · loc ${escapeHtml(place.place_id || "")}`;
+        html += ` · planar pin ± ${escapeHtml(place.radius_m ?? place.buffer_m)} m`;
+        if (place.lat != null && place.lon != null) {
+            html += ` · ${Number(place.lat).toFixed(5)}, ${Number(place.lon).toFixed(5)}`;
+        }
+        html += "</p><table><thead><tr><th>Metric</th><th>Total</th><th>By event</th><th>Notes</th></tr></thead><tbody>";
+
+        if (m.instantaneous) {
+            const x = m.instantaneous;
+            html += `<tr><td>Instantaneous @ ${escapeHtml(secToClock(x.t))}</td><td><strong>${x.total}</strong></td><td>${byEventHtml(x.by_event)}</td><td>inside disk</td></tr>`;
+        }
+        if (m.window_uniques) {
+            const x = m.window_uniques;
+            html += `<tr><td>Window uniques [${escapeHtml(secToClock(x.t0))}, ${escapeHtml(secToClock(x.t1))})</td><td><strong>${x.total}</strong></td><td>${byEventHtml(x.by_event)}</td><td>any sample in disk</td></tr>`;
+        }
+        if (m.throughput) {
+            const x = m.throughput;
+            const entries = x.entries != null ? x.entries : x.passages;
+            const exits = x.exits != null ? x.exits : "—";
+            html += `<tr><td>Throughput [${escapeHtml(secToClock(x.t0))}, ${escapeHtml(secToClock(x.t1))})</td><td><strong>${x.unique_runners}</strong> runners</td><td>${byEventHtml(x.by_event)}</td><td>${entries} enters · ${exits} exits</td></tr>`;
+        }
+        html += "</tbody></table>";
+        body.innerHTML = html;
+        results.style.display = "";
+        setStatus("Done");
+    }
+
+    async function boot() {
+        try {
+            syncTimeFields();
+            await Promise.all([loadPlaces(), loadMetadata()]);
+        } catch (err) {
+            console.error(err);
+            setStatus("Failed to load places");
+        }
+    }
+
+    ["m-inst", "m-win", "m-thru"].forEach((id) => {
+        document.getElementById(id).addEventListener("change", () => {
+            syncTimeFields();
+            setFormError(null);
+        });
+    });
+    document.getElementById("motion-form").addEventListener("submit", runQuery);
+    document.addEventListener("DOMContentLoaded", boot);
+    window.addEventListener("runflow:context-ready", boot);
+})();
+</script>
+{% endblock %}

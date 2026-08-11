@@ -199,6 +199,8 @@ MOTION_SCHEMA_VERSION = "1.0.0"
 MOTION_MODEL_VERSION = "constant_pace_v1"
 MOTION_TIME_SOURCE = "modeled_constant_pace"
 MOTION_POSITION_SOURCE = "course_geometry_interpolated"
+# Child B: along-course place zone half-width (metres) when caller omits buffer.
+MOTION_DEFAULT_PLACE_BUFFER_M = 30.0
 
 # Data directory path (Issue #596)
 DATA_DIR = "data"
