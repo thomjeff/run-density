@@ -190,6 +190,16 @@ REPORTS_OVERLAPS_SUMMARY_FILENAME = "overlaps_summary.json"
 FLOW_SEGMENT_SUMMARY_FILENAME = "flow_segments_by_seg.json"
 FLOW_SEGMENT_SUMMARY_SCHEMA = "0.1.0-draft"
 
+# Runflow motion clock (#850 Child A): persisted segment-mapped samples
+MOTION_DIRNAME = "motion"
+MOTION_SAMPLES_FILENAME = "samples.parquet"
+MOTION_METADATA_FILENAME = "metadata.json"
+MOTION_SAMPLE_INTERVAL_SEC = 5  # global ticks from local midnight; never hardcode in engines
+MOTION_SCHEMA_VERSION = "1.0.0"
+MOTION_MODEL_VERSION = "constant_pace_v1"
+MOTION_TIME_SOURCE = "modeled_constant_pace"
+MOTION_POSITION_SOURCE = "course_geometry_interpolated"
+
 # Data directory path (Issue #596)
 DATA_DIR = "data"
 
