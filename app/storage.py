@@ -14,6 +14,8 @@ import json
 import os
 import logging
 
+logger = logging.getLogger(__name__)
+
 # Single source of truth for dataset paths
 # These paths are relative to the ARTIFACTS_ROOT resolved from latest.json
 DATASET = {

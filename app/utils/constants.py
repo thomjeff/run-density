@@ -201,6 +201,11 @@ MOTION_TIME_SOURCE = "modeled_constant_pace"
 MOTION_POSITION_SOURCE = "course_geometry_interpolated"
 # Child B: along-course place zone half-width (metres) when caller omits buffer.
 MOTION_DEFAULT_PLACE_BUFFER_M = 30.0
+# Motion Stream Passage (#855): midnight-aligned time bins for pin enter/exit tables.
+MOTION_STREAM_WINDOW_SEC = 300  # 5 minutes; never hardcode in engines
+# Heuristic gap for grouping visit episodes into distinct course passages.
+# Product rule: separate materially distinct passages — tune via this constant.
+MOTION_VISIT_KM_GAP = 0.5
 
 # Data directory path (Issue #596)
 DATA_DIR = "data"

@@ -22,11 +22,13 @@ from app.core.motion.occupancy import (
     query_occupancy,
     query_planar_occupancy,
 )
+from app.core.motion.stream_passage import build_stream_passage_table
 from app.utils.constants import (
     MOTION_DEFAULT_PLACE_BUFFER_M,
     MOTION_DIRNAME,
     MOTION_METADATA_FILENAME,
     MOTION_SAMPLES_FILENAME,
+    MOTION_STREAM_WINDOW_SEC,
 )
 
 logger = logging.getLogger(__name__)
@@ -416,6 +418,90 @@ async def get_motion_occupancy(
         )
     except Exception as exc:
         logger.exception("get_motion_occupancy failed")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(exc)},
+        )
+
+
+@router.get("/api/motion/stream-passage")
+async def get_motion_stream_passage(
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+    loc_id: str = Query(..., description="Package location id"),
+    buffer_m: float = Query(MOTION_DEFAULT_PLACE_BUFFER_M),
+    window_sec: int = Query(MOTION_STREAM_WINDOW_SEC),
+    t0: Optional[int] = Query(None, description="Optional span start (sec)"),
+    t1: Optional[int] = Query(None, description="Optional span end exclusive"),
+    events: Optional[str] = Query(None, description="Comma event filter"),
+):
+    """
+    Time-windowed pin enter/exit table (Motion Stream Passage, #855).
+
+    Midnight-aligned bins; counts by event with median enter elapsed_km.
+    """
+    try:
+        from app.storage import create_runflow_storage
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
+
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
+        storage = create_runflow_storage(run_id)
+        samples = _load_motion_samples(storage, selected_day)
+        meta = _load_motion_metadata(storage, selected_day)
+
+        data_dir = _analysis_data_dir(run_id)
+        if data_dir is None or not (data_dir / "passes.csv").is_file():
+            return JSONResponse(
+                status_code=404,
+                content={"ok": False, "error": "passes.csv not found"},
+            )
+        pins = build_location_pins_from_passes(
+            pd.read_csv(data_dir / "passes.csv"),
+            default_radius_m=float(buffer_m),
+        )
+        match = next(
+            (p for p in pins if str(p["loc_id"]) == str(loc_id)),
+            None,
+        )
+        if match is None:
+            return JSONResponse(
+                status_code=404,
+                content={"ok": False, "error": f"loc_id {loc_id} not found"},
+            )
+        pin = pin_place_from_location(match, radius_m=float(buffer_m))
+        payload = build_stream_passage_table(
+            samples,
+            pin,
+            window_sec=int(window_sec),
+            t0=t0,
+            t1=t1,
+            events=_parse_events(events),
+        )
+        return JSONResponse(
+            {
+                "ok": True,
+                "run_id": run_id,
+                "selected_day": selected_day,
+                "available_days": available_days,
+                "sample_interval_sec": meta.get("sample_interval_sec"),
+                "clock": meta.get("clock"),
+                **payload,
+            }
+        )
+    except FileNotFoundError as exc:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": str(exc)},
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": str(exc)},
+        )
+    except Exception as exc:
+        logger.exception("get_motion_stream_passage failed")
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(exc)},
