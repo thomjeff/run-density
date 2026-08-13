@@ -7,15 +7,30 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import pandas as pd
 
 from app.core.motion.occupancy import PinPlace, _filter_events, _planar_inside_mask
-from app.utils.constants import MOTION_STREAM_WINDOW_SEC, MOTION_VISIT_KM_GAP
+from app.core.motion.movement_drilldown import (
+    COUNT_SEMANTICS,
+    COUNT_SEMANTICS_NOTE,
+    MATRIX_SEMANTICS_NOTE,
+    attach_quintile_matrices,
+    build_concurrent_pairs,
+    build_movement_spans,
+    build_runner_quintile_lookup,
+    quintile_profile_for_runners,
+    stream_key,
+)
+from app.utils.constants import (
+    MOTION_QUINTILE_PARTNER_DWELL_SEC,
+    MOTION_STREAM_WINDOW_SEC,
+    MOTION_VISIT_KM_GAP,
+)
 
 
 def _sec_to_clock(sec: int) -> str:
+    """Format midnight-aligned seconds as HH:MM (seconds omitted for UI density)."""
     t = max(0, int(sec))
     h = t // 3600
     m = (t % 3600) // 60
-    s = t % 60
-    return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{h:02d}:{m:02d}"
 
 
 def planar_crossing_events(
@@ -307,6 +322,8 @@ def build_stream_passage_table(
     t1: Optional[int] = None,
     events: Optional[Sequence[str]] = None,
     visit_km_gap: float = MOTION_VISIT_KM_GAP,
+    runners_df: Optional[pd.DataFrame] = None,
+    authored_movements: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Build a midnight-aligned enter/exit time-window table for a GPS pin.
@@ -315,12 +332,16 @@ def build_stream_passage_table(
     per-event enter/exit counts. Context lists enter counts by visit cluster
     (``event enter_km:count``) so co-present streams stay visible.
 
-    Also returns ``visit_summary``: (event, visit-cluster) rollups of
-    enter→exit episodes labeled by representative enter km.
+    Also returns ``visit_summary`` and movement drill-down fields (#856):
+    concurrent visit pairs per window, day-level movement spans, optional
+    authored movement labels, and per-visit pace quintile profiles.
     """
     window = int(window_sec)
     if window <= 0:
         raise ValueError("window_sec must be positive")
+
+    authored = list(authored_movements or [])
+    quintile_lookup = build_runner_quintile_lookup(runners_df)
 
     crossings = planar_crossing_events(
         samples, pin, t0=t0, t1=t1, events=events
@@ -357,8 +378,13 @@ def build_stream_passage_table(
         "t1": t1,
         "events": event_names,
         "visit_km_gap": float(visit_km_gap),
+        "count_semantics": COUNT_SEMANTICS,
+        "count_semantics_note": COUNT_SEMANTICS_NOTE,
+        "matrix_semantics_note": MATRIX_SEMANTICS_NOTE,
+        "authored_movements": authored,
         "rows": [],
         "visit_summary": [],
+        "movement_spans": [],
         "totals": {
             "enters_by_event": {},
             "exits_by_event": {},
@@ -410,6 +436,8 @@ def build_stream_passage_table(
         exits_by_event: Dict[str, int] = {}
         enter_km_by_event: Dict[str, Optional[float]] = {}
         enters_by_visit: List[Dict[str, Any]] = []
+        quintile_profiles: List[Dict[str, Any]] = []
+        visit_enters: Dict[str, List[Dict[str, Any]]] = {}
         for ev in event_names:
             e_ev = e_bin[e_bin["event"] == ev] if not e_bin.empty else e_bin
             x_ev = x_bin[x_bin["event"] == ev] if not x_bin.empty else x_bin
@@ -429,6 +457,7 @@ def build_stream_passage_table(
                     n = int(vg["runner_id"].nunique())
                     if n <= 0:
                         continue
+                    rids = sorted(vg["runner_id"].astype(str).unique().tolist())
                     enters_by_visit.append(
                         {
                             "event": str(ev),
@@ -436,6 +465,43 @@ def build_stream_passage_table(
                             "enters": n,
                         }
                     )
+                    sk = stream_key(str(ev), float(visit_km))
+                    # One enter row per unique runner (earliest enter in window).
+                    first_by_rid = (
+                        vg.sort_values("t", kind="mergesort")
+                        .drop_duplicates(subset=["runner_id"], keep="first")
+                    )
+                    visit_rows: List[Dict[str, Any]] = []
+                    for _, er in first_by_rid.iterrows():
+                        rid = str(er["runner_id"])
+                        entry: Dict[str, Any] = {
+                            "runner_id": rid,
+                            "t": int(er["t"]),
+                        }
+                        if quintile_lookup:
+                            q = quintile_lookup.get((str(ev).lower(), rid))
+                            if q is not None:
+                                entry["quintile"] = int(q)
+                        visit_rows.append(entry)
+                    visit_enters[sk] = visit_rows
+                    if quintile_lookup:
+                        quintile_profiles.append(
+                            {
+                                "event": str(ev),
+                                "visit_km": float(visit_km),
+                                "profile": quintile_profile_for_runners(
+                                    rids, ev, quintile_lookup
+                                ),
+                            }
+                        )
+
+        concurrent_pairs = attach_quintile_matrices(
+            build_concurrent_pairs(
+                enters_by_visit, authored_movements=authored
+            ),
+            visit_enters,
+            dwell_sec=float(MOTION_QUINTILE_PARTNER_DWELL_SEC),
+        )
 
         # Prefer visit-cluster context so co-present streams stay visible
         # (e.g. 10k@6.27 cross with full@22.7 vs parallel with full@20.61).
@@ -463,6 +529,8 @@ def build_stream_passage_table(
                 "exits_by_event": exits_by_event,
                 "enter_elapsed_km_by_event": enter_km_by_event,
                 "enters_by_visit": enters_by_visit,
+                "concurrent_pairs": concurrent_pairs,
+                "quintile_profiles": quintile_profiles,
                 "enter_total": int(sum(enters_by_event.values())),
                 "exit_total": int(sum(exits_by_event.values())),
                 "counts_display": " / ".join(
@@ -494,6 +562,11 @@ def build_stream_passage_table(
         gap_km=visit_km_gap,
         event_names=event_names,
     )
+    movement_spans = build_movement_spans(
+        rows,
+        window_sec=window,
+        authored_movements=authored,
+    )
 
     span_t0 = int(bin_starts[0]) if bin_starts else t0
     span_t1 = int(bin_starts[-1] + window) if bin_starts else t1
@@ -518,8 +591,13 @@ def build_stream_passage_table(
         "events": event_names,
         "legend": " / ".join(event_names) if event_names else "",
         "visit_km_gap": float(visit_km_gap),
+        "count_semantics": COUNT_SEMANTICS,
+        "count_semantics_note": COUNT_SEMANTICS_NOTE,
+        "matrix_semantics_note": MATRIX_SEMANTICS_NOTE,
+        "authored_movements": authored,
         "rows": rows,
         "visit_summary": visit_summary,
+        "movement_spans": movement_spans,
         "totals": {
             "enters_by_event": totals_enter,
             "exits_by_event": totals_exit,

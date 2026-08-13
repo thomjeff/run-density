@@ -23,6 +23,7 @@ from app.core.motion.occupancy import (
     query_planar_occupancy,
 )
 from app.core.motion.stream_passage import build_stream_passage_table
+from app.core.motion.movement_drilldown import load_authored_movements
 from app.utils.constants import (
     MOTION_DEFAULT_PLACE_BUFFER_M,
     MOTION_DIRNAME,
@@ -77,6 +78,27 @@ def _parse_events(events: Optional[str]) -> Optional[List[str]]:
         return None
     parts = [p.strip() for p in events.split(",") if p.strip()]
     return parts or None
+
+
+def _load_package_runners(data_dir: Path) -> Optional[pd.DataFrame]:
+    """Load event runners CSVs for pace quintiles (optional)."""
+    frames: List[pd.DataFrame] = []
+    for path in sorted(data_dir.glob("*_runners.csv")):
+        try:
+            frame = pd.read_csv(path)
+        except Exception:
+            continue
+        if frame.empty:
+            continue
+        if "event" not in frame.columns:
+            # Infer from filename: 10k_runners.csv → 10k
+            stem = path.stem.replace("_runners", "")
+            frame = frame.copy()
+            frame["event"] = stem.lower()
+        frames.append(frame)
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
 
 
 def _parse_metrics(metrics: Optional[str]) -> List[str]:
@@ -436,9 +458,10 @@ async def get_motion_stream_passage(
     events: Optional[str] = Query(None, description="Comma event filter"),
 ):
     """
-    Time-windowed pin enter/exit table (Motion Stream Passage, #855).
+    Time-windowed pin enter/exit table (Motion Stream Passage, #855 / #856).
 
-    Midnight-aligned bins; counts by event with median enter elapsed_km.
+    Midnight-aligned bins; visit-cluster context; movement drill-down with
+    same-window concurrent stream volumes (not Junctions).
     """
     try:
         from app.storage import create_runflow_storage
@@ -478,6 +501,8 @@ async def get_motion_stream_passage(
             t0=t0,
             t1=t1,
             events=_parse_events(events),
+            runners_df=_load_package_runners(data_dir),
+            authored_movements=load_authored_movements(data_dir, loc_id),
         )
         return JSONResponse(
             {
