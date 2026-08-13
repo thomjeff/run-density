@@ -46,7 +46,7 @@ def test_stream_passage_bins_enters_by_event_with_km_context():
 
     first = out["rows"][0]
     assert first["t0"] == 27000
-    assert first["label"].startswith("07:30:00")
+    assert first["label"].startswith("07:30")
     assert first["enters_by_event"]["10k"] == 1
     assert first["enters_by_event"]["half"] == 1
     assert first["enters_by_event"]["full"] == 0

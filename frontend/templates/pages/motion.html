@@ -3,6 +3,218 @@
 {% block title %}Motion{% endblock %}
 
 {% block content %}
+<style>
+    /* Motion page: dense, content-sized presentation */
+    .motion-form-row {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        gap: 0.55rem 0.7rem;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+    }
+    .motion-form-row .motion-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 0;
+        flex: 0 0 auto;
+    }
+    .motion-form-row .motion-field > label {
+        margin-bottom: 0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .motion-form-row .motion-field-place {
+        width: 15.5rem;
+        max-width: 15.5rem;
+    }
+    .motion-form-row .motion-field-narrow {
+        width: 4.25rem;
+    }
+    .motion-form-row .motion-field-narrow .form-control {
+        width: 4.25rem;
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+    }
+    .motion-form-row .motion-field-time {
+        width: 6.75rem;
+    }
+    .motion-form-row .motion-field-time .form-control {
+        width: 6.75rem;
+    }
+    .motion-form-row .motion-field-events {
+        flex: 0 0 auto;
+    }
+    .motion-event-checks {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.85rem;
+        min-height: 2.125rem;
+        padding: 0.2rem 0;
+    }
+    .motion-event-checks .form-check {
+        margin: 0;
+        padding-left: 1.4rem;
+        min-height: 0;
+    }
+    .motion-form-actions {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        align-self: flex-end;
+        height: 2.125rem;
+        white-space: nowrap;
+    }
+    .motion-hint {
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Tables: size to content, not stretch to viewport */
+    #motion-results table.motion-table-fit,
+    #motion-window-modal table.motion-table-fit,
+    #motion-visit-modal table.motion-table-fit,
+    table.motion-table-fit {
+        width: max-content !important;
+        max-width: none;
+        table-layout: auto;
+        margin-bottom: 0;
+    }
+    table.motion-table-fit th,
+    table.motion-table-fit td {
+        white-space: nowrap;
+        width: 1%;
+        padding: 0.35rem 0.65rem;
+        vertical-align: middle;
+    }
+    table.motion-table-fit th.text-end,
+    table.motion-table-fit td.text-end {
+        text-align: right;
+    }
+    /* Context column may wrap; keep numeric cols tight */
+    #motion-passage-table td:last-child,
+    #motion-passage-table th:last-child {
+        white-space: normal;
+        width: auto;
+        max-width: 28rem;
+    }
+    .motion-table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+        margin-bottom: 1rem;
+        width: max-content;
+        max-width: 100%;
+    }
+    .motion-table-scroll.motion-table-scroll-tall {
+        max-height: 40vh;
+        overflow-y: auto;
+    }
+
+    .motion-visit-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(7.5rem, max-content));
+        gap: 0.65rem 1.75rem;
+        margin: 0 0 1rem;
+        width: max-content;
+        max-width: 100%;
+    }
+    .motion-visit-stats > div {
+        min-width: 0;
+    }
+    .motion-visit-stats .motion-stat-label {
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--tblr-secondary, #6c7a91);
+        margin-bottom: 0.15rem;
+    }
+    .motion-visit-stats .motion-stat-value {
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+
+    .motion-matrix-block {
+        margin-bottom: 1.25rem;
+        width: max-content;
+        max-width: 100%;
+    }
+    .motion-matrix-block > h5 {
+        margin-bottom: 0.35rem;
+        font-size: 0.95rem;
+    }
+    .motion-matrix-meta {
+        font-size: 0.8rem;
+        color: var(--tblr-secondary, #6c7a91);
+        margin-bottom: 0.4rem;
+    }
+    .motion-matrix-grid {
+        width: max-content;
+        table-layout: fixed;
+        margin-bottom: 0;
+        border-collapse: collapse;
+    }
+    .motion-matrix-grid th,
+    .motion-matrix-grid td {
+        text-align: center;
+        white-space: nowrap;
+        padding: 0.28rem 0.45rem;
+        min-width: 2.4rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .motion-matrix-grid thead th.motion-matrix-stream {
+        font-weight: 600;
+        text-align: center;
+        padding: 0.35rem 0.5rem;
+    }
+    .motion-matrix-grid th.motion-matrix-corner,
+    .motion-matrix-grid th.motion-matrix-rowhead {
+        text-align: left;
+        font-weight: 600;
+        min-width: 2.75rem;
+        padding-left: 0.55rem;
+        padding-right: 0.55rem;
+    }
+    .motion-matrix-grid td.motion-matrix-zero {
+        color: var(--tblr-secondary, #9aa5b5);
+    }
+
+    #motion-window-modal .modal-dialog,
+    #motion-visit-modal .modal-dialog {
+        max-width: min(92vw, 1100px);
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    #motion-window-modal .modal-body,
+    #motion-visit-modal .modal-body {
+        overflow-x: auto;
+    }
+    #motion-window-modal .modal-content,
+    #motion-visit-modal .modal-content {
+        width: max-content;
+        min-width: min(28rem, 92vw);
+        max-width: min(92vw, 1100px);
+    }
+    #motion-window-modal .modal-header,
+    #motion-visit-modal .modal-header,
+    #motion-window-modal-note,
+    #motion-visit-modal-note {
+        max-width: 42rem;
+    }
+    #motion-window-modal .modal-title,
+    #motion-visit-modal .modal-title {
+        white-space: normal;
+    }
+</style>
+
 <div class="page-header">
     <h2>Motion / Stream Passage</h2>
     <p class="text-secondary" style="margin-top: 0.25rem;">
@@ -21,42 +233,48 @@
 </div>
 
 <div id="motion-root" class="card">
-    <h3 style="margin-bottom: 1rem;">Stream Passage</h3>
-    <p id="motion-clock-hint" class="text-secondary" style="margin-bottom: 1rem;"></p>
+    <h3 style="margin-bottom: 0.75rem;">Stream Passage</h3>
+    <p id="motion-clock-hint" class="text-secondary motion-hint"></p>
     <div id="motion-form-error" class="alert alert-warning" style="display:none;" role="alert"></div>
-    <form id="motion-form" class="row g-3" novalidate>
-        <div class="col-md-5">
-            <label class="form-label" for="motion-place">Location</label>
-            <select id="motion-place" class="form-select">
-                <option value="">Loading locations…</option>
-            </select>
+    <form id="motion-form" novalidate>
+        <div class="motion-form-row">
+            <div class="motion-field motion-field-place">
+                <label class="form-label" for="motion-place">Location</label>
+                <select id="motion-place" class="form-select form-select-sm">
+                    <option value="">Loading locations…</option>
+                </select>
+            </div>
+            <div class="motion-field motion-field-narrow">
+                <label class="form-label" for="motion-buffer">Radius (m)</label>
+                <input id="motion-buffer" class="form-control form-control-sm" type="number" min="1" step="1" value="30" title="metres" aria-describedby="motion-buffer-hint">
+            </div>
+            <div class="motion-field motion-field-narrow">
+                <label class="form-label" for="motion-window">Window (min)</label>
+                <input id="motion-window" class="form-control form-control-sm" type="number" min="1" step="1" value="5" title="minutes" aria-describedby="motion-window-hint">
+            </div>
+            <div class="motion-field motion-field-events">
+                <label class="form-label" id="motion-events-label">Events</label>
+                <div id="motion-event-checks" class="motion-event-checks" role="group" aria-labelledby="motion-events-label">
+                    <span class="text-secondary small">Loading…</span>
+                </div>
+            </div>
+            <div class="motion-field motion-field-time">
+                <label class="form-label" for="motion-t0">Span start</label>
+                <input id="motion-t0" class="form-control form-control-sm" type="time" step="60" title="Optional">
+            </div>
+            <div class="motion-field motion-field-time">
+                <label class="form-label" for="motion-t1">Span end</label>
+                <input id="motion-t1" class="form-control form-control-sm" type="time" step="60" title="Optional · blank = full span">
+            </div>
+            <div class="motion-form-actions">
+                <button type="submit" class="btn btn-primary btn-sm" id="motion-run">Build table</button>
+                <span id="motion-status" class="text-secondary small"></span>
+            </div>
         </div>
-        <div class="col-md-2">
-            <label class="form-label" for="motion-buffer">Radius (m)</label>
-            <input id="motion-buffer" class="form-control" type="number" min="1" step="1" value="30">
-        </div>
-        <div class="col-md-2">
-            <label class="form-label" for="motion-window">Window (min)</label>
-            <input id="motion-window" class="form-control" type="number" min="1" step="1" value="5">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label" for="motion-events">Events</label>
-            <input id="motion-events" class="form-control" type="text" placeholder="full,half,10k">
-            <div class="form-text">Blank = all events</div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label" for="motion-t0">Span start (optional)</label>
-            <input id="motion-t0" class="form-control" type="time" step="1">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label" for="motion-t1">Span end (optional)</label>
-            <input id="motion-t1" class="form-control" type="time" step="1">
-            <div class="form-text">Blank = full motion span</div>
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-primary" id="motion-run">Build table</button>
-            <span id="motion-status" class="text-secondary ms-2"></span>
-        </div>
+        <p class="form-text mb-0 mt-2" id="motion-form-hints">
+            Radius in metres · window in minutes · blank span = full motion day · unchecked events are excluded
+            (all checked = every event).
+        </p>
     </form>
 </div>
 
@@ -64,6 +282,36 @@
     <h3 style="margin-bottom: 0.5rem;">Stream Passage</h3>
     <p id="motion-legend" class="text-secondary" style="margin-bottom: 1rem;"></p>
     <div id="motion-results-body"></div>
+</div>
+
+<div class="modal modal-blur fade" id="motion-window-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="motion-window-modal-title">Window detail</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="motion-window-modal-note" class="text-secondary small"></p>
+                <div id="motion-window-modal-body"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal modal-blur fade" id="motion-visit-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="motion-visit-modal-title">Movements for visit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="motion-visit-modal-note" class="text-secondary small"></p>
+                <div id="motion-visit-modal-body"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card" style="margin-top: 1rem;">
@@ -83,7 +331,7 @@
             </tr>
             <tr>
                 <td><strong>Window</strong></td>
-                <td>Midnight-aligned interval (default 5 minutes), shown as clock time.</td>
+                <td>Midnight-aligned interval (default 5 minutes), shown as HH:MM.</td>
             </tr>
             <tr>
                 <td><strong>Counts</strong></td>
@@ -98,6 +346,16 @@
                 </td>
             </tr>
             <tr>
+                <td><strong>Movement drill-down</strong></td>
+                <td>
+                    Click a <strong>Visit summary</strong> row for that visit’s stats and concurrent partner
+                    streams (first / peak / last). Click a <strong>Passage window</strong> row for that window’s
+                    movement volumes and pace quintile profiles. Same-window concurrent volume
+                    is not a physical meeting. Optional cross/parallel/merge labels via package
+                    <code>motion_movements.json</code>.
+                </td>
+            </tr>
+            <tr>
                 <td><strong>TOTAL (Unique)</strong></td>
                 <td>Counts distinct runners who entered or exited the pin at least once, by event — not the sum of visit passages. Example: 700 10k runners each visiting twice → TOTAL (Unique) 700, Visit summary passages 1400.</td>
             </tr>
@@ -107,12 +365,359 @@
 
 <script>
 (function () {
+    let lastPassagePayload = null;
+    let windowModal = null;
+    let visitModal = null;
+    let availableEvents = [];
+
     function escapeHtml(str) {
         return String(str == null ? "" : str)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;");
+    }
+
+    function streamLabel(s) {
+        if (!s) return "—";
+        return `${s.event} @ ${Number(s.visit_km).toFixed(2)} km`;
+    }
+
+    function streamShort(s) {
+        if (!s) return "—";
+        return `${s.event}@${Number(s.visit_km).toFixed(2)}`;
+    }
+
+    function formatQuintileProfile(profile) {
+        if (!profile) return "—";
+        return [1, 2, 3, 4, 5]
+            .map((q) => `Q${q} ${profile[String(q)] || profile[q] || 0}`)
+            .join(" · ");
+    }
+
+    function renderQuintileMatrix(matrix, streamA, streamB) {
+        if (!matrix) {
+            return "<p class=\"text-secondary small mb-0\">Quintile matrix unavailable.</p>";
+        }
+        const cells = matrix.cells || [];
+        const aLabel = streamLabel(streamA);
+        const bLabel = streamLabel(streamB);
+        if (!cells.length) {
+            const aN = matrix.stream_a_with_q || 0;
+            const bN = matrix.stream_b_with_q || 0;
+            if (!aN || !bN) {
+                return "<p class=\"text-secondary small mb-0\">No pace quintiles for this pair"
+                    + " (need package runners).</p>";
+            }
+            return "<p class=\"text-secondary small mb-0\">No nearest-partner matches"
+                + ` within dwell (${matrix.dwell_sec || "?"}s).</p>`;
+        }
+        const grid = {};
+        cells.forEach((c) => {
+            grid[`${c.qa}:${c.qb}`] = c.n;
+        });
+        let html = '<div class="motion-matrix-block">';
+        html += `<div class="motion-matrix-meta">Matched ${matrix.matched_a || 0}`
+            + ` / ${matrix.stream_a_with_q || 0} ${escapeHtml(streamShort(streamA))} runners`
+            + ` · nearest partner in window</div>`;
+        html += '<table class="table table-sm table-bordered motion-matrix-grid">'
+            + "<thead>"
+            + "<tr>"
+            + `<th class="motion-matrix-corner" rowspan="2">${escapeHtml(streamShort(streamA))}</th>`
+            + `<th class="motion-matrix-stream" colspan="5">${escapeHtml(bLabel)}</th>`
+            + "</tr>"
+            + "<tr>";
+        for (let qb = 1; qb <= 5; qb++) {
+            html += `<th>Q${qb}</th>`;
+        }
+        html += "</tr></thead><tbody>";
+        for (let qa = 1; qa <= 5; qa++) {
+            html += `<tr><th scope="row" class="motion-matrix-rowhead">Q${qa}</th>`;
+            for (let qb = 1; qb <= 5; qb++) {
+                const n = grid[`${qa}:${qb}`] || 0;
+                html += n
+                    ? `<td>${n}</td>`
+                    : '<td class="motion-matrix-zero">·</td>';
+            }
+            html += "</tr>";
+        }
+        html += "</tbody></table></div>";
+        return html;
+    }
+
+    function isAuthoredPair(p) {
+        return !!(p && (p.movement_type || p.movement_name));
+    }
+
+    function streamMatchesVisit(stream, event, visitKm, tol) {
+        if (!stream) return false;
+        if (String(stream.event).toLowerCase() !== String(event).toLowerCase()) return false;
+        return Math.abs(Number(stream.visit_km) - Number(visitKm)) <= (tol == null ? 0.15 : tol);
+    }
+
+    function getBootstrapModal() {
+        if (typeof bootstrap !== "undefined" && bootstrap.Modal) return bootstrap.Modal;
+        if (window.tabler && window.tabler.Modal) return window.tabler.Modal;
+        if (window.tabler && window.tabler.bootstrap && window.tabler.bootstrap.Modal) {
+            return window.tabler.bootstrap.Modal;
+        }
+        return null;
+    }
+
+    function ensureModals() {
+        const Modal = getBootstrapModal();
+        if (!Modal) return false;
+        const wEl = document.getElementById("motion-window-modal");
+        const vEl = document.getElementById("motion-visit-modal");
+        [wEl, vEl].forEach((el) => {
+            if (el && el.parentElement !== document.body) {
+                document.body.appendChild(el);
+            }
+        });
+        if (wEl) {
+            windowModal = Modal.getOrCreateInstance
+                ? Modal.getOrCreateInstance(wEl)
+                : (windowModal || new Modal(wEl));
+        }
+        if (vEl) {
+            visitModal = Modal.getOrCreateInstance
+                ? Modal.getOrCreateInstance(vEl)
+                : (visitModal || new Modal(vEl));
+        }
+        return !!(windowModal && visitModal);
+    }
+
+    function openModal(inst, el) {
+        if (!inst || !el) return;
+        try {
+            inst.show();
+        } catch (err) {
+            console.error("Motion modal show failed", err);
+        }
+        if (!el.classList.contains("show")) {
+            el.classList.add("show");
+            el.style.display = "block";
+            el.removeAttribute("aria-hidden");
+            el.setAttribute("aria-modal", "true");
+            el.setAttribute("role", "dialog");
+            if (!document.querySelector(".modal-backdrop")) {
+                const backdrop = document.createElement("div");
+                backdrop.className = "modal-backdrop fade show";
+                backdrop.dataset.motionBackdrop = "1";
+                document.body.appendChild(backdrop);
+            }
+            document.body.classList.add("modal-open");
+        }
+    }
+
+    function closeMotionModals() {
+        [windowModal, visitModal].forEach((inst) => {
+            try { if (inst) inst.hide(); } catch (_e) { /* ignore */ }
+        });
+        ["motion-window-modal", "motion-visit-modal"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove("show");
+            el.style.display = "none";
+            el.setAttribute("aria-hidden", "true");
+        });
+        document.querySelectorAll('[data-motion-backdrop="1"]').forEach((b) => b.remove());
+        if (!document.querySelector(".modal.show")) {
+            document.body.classList.remove("modal-open");
+        }
+    }
+
+    function showWindowModal(rowIndex) {
+        const data = lastPassagePayload;
+        if (!data || !data.rows || !data.rows[rowIndex]) return;
+        if (!ensureModals()) {
+            console.error("Motion: Tabler/Bootstrap Modal unavailable");
+            window.alert("Detail pop-up unavailable (Modal library not loaded).");
+            return;
+        }
+        const row = data.rows[rowIndex];
+        document.getElementById("motion-window-modal-title").textContent =
+            `Detail for selected window · ${row.label}`;
+        document.getElementById("motion-window-modal-note").textContent =
+            (data.count_semantics_note || "Same-window concurrent stream volume.")
+            + " "
+            + (data.matrix_semantics_note
+                || "Each stream enter is paired with the nearest partner enter in this window.");
+
+        const allPairs = row.concurrent_pairs || [];
+        const pairs = allPairs.filter(isAuthoredPair);
+        const otherPairs = allPairs.filter((p) => !isAuthoredPair(p));
+        const profiles = row.quintile_profiles || [];
+        let html = "";
+
+        html += "<h4 class=\"mb-2\">Authored movements in this window</h4>";
+        if (!pairs.length) {
+            html += "<p class=\"text-secondary\">No authored movements present in this window"
+                + (otherPairs.length
+                    ? ` (${otherPairs.length} unlabeled concurrent pairs — matrices below).`
+                    : ".")
+                + "</p>";
+        } else {
+            html += '<div class="motion-table-scroll mb-3"><table class="table table-sm table-vcenter motion-table-fit">'
+                + "<thead><tr><th>Movement</th><th>Stream</th><th class=\"text-end\">Vol</th>"
+                + "<th>Partner</th><th class=\"text-end\">Vol</th></tr></thead><tbody>";
+            pairs.forEach((p) => {
+                const mov = p.movement_name || p.movement_type;
+                html += "<tr>"
+                    + `<td>${escapeHtml(mov)}</td>`
+                    + `<td>${escapeHtml(streamLabel(p.stream_a))}</td>`
+                    + `<td class="text-end">${p.volume_a}</td>`
+                    + `<td>${escapeHtml(streamLabel(p.stream_b))}</td>`
+                    + `<td class="text-end">${p.volume_b}</td>`
+                    + "</tr>";
+            });
+            html += "</tbody></table></div>";
+
+            pairs.forEach((p) => {
+                const mov = p.movement_name || p.movement_type;
+                html += `<h5 class="mb-1">${escapeHtml(mov)} · Q×Q</h5>`;
+                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b);
+            });
+        }
+
+        if (otherPairs.length) {
+            html += "<h4 class=\"mb-2 mt-3\">Other same-window stream pairs (unlabeled)</h4>";
+            html += "<p class=\"text-secondary small\">Not authored as movements; shown for field mix only.</p>";
+            otherPairs.forEach((p) => {
+                html += `<h5 class="mb-1">${escapeHtml(streamLabel(p.stream_a))} × `
+                    + `${escapeHtml(streamLabel(p.stream_b))} · Q×Q</h5>`;
+                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b);
+            });
+        }
+
+        html += "<h4 class=\"mb-2 mt-3\">Pace quintile profile (Q1 lead … Q5 rear)</h4>";
+        if (!profiles.length) {
+            html += "<p class=\"text-secondary\">Quintiles unavailable (no package runners pace loaded).</p>";
+        } else {
+            html += '<div class="motion-table-scroll"><table class="table table-sm table-vcenter motion-table-fit">'
+                + "<thead><tr><th>Visit stream</th><th>Profile</th></tr></thead><tbody>";
+            profiles.forEach((q) => {
+                html += "<tr>"
+                    + `<td>${escapeHtml(q.event)} @ ${Number(q.visit_km).toFixed(2)} km</td>`
+                    + `<td>${escapeHtml(formatQuintileProfile(q.profile))}</td>`
+                    + "</tr>";
+            });
+            html += "</tbody></table></div>";
+        }
+
+        document.getElementById("motion-window-modal-body").innerHTML = html;
+        openModal(windowModal, document.getElementById("motion-window-modal"));
+    }
+
+    function spansForVisit(data, eventName, visitKm) {
+        return (data.movement_spans || []).filter((m) =>
+            streamMatchesVisit(m.stream_a, eventName, visitKm)
+            || streamMatchesVisit(m.stream_b, eventName, visitKm)
+        );
+    }
+
+    function renderMovementSpansTable(spans, eventName, visitKm, options) {
+        const opts = options || {};
+        if (!spans.length) return "";
+        let html = '<div class="motion-table-scroll"><table class="table table-sm table-vcenter motion-table-fit">'
+            + "<thead><tr>"
+            + (opts.showMovementCol === false ? "" : "<th>Movement</th>")
+            + "<th>Partner stream</th>"
+            + "<th>First</th><th>Peak</th><th>Last</th>"
+            + "<th class=\"text-end\">Peak visit</th><th class=\"text-end\">Peak partner</th>"
+            + "</tr></thead><tbody>";
+        spans.forEach((m) => {
+            const aMatch = streamMatchesVisit(m.stream_a, eventName, visitKm);
+            const partner = aMatch ? m.stream_b : m.stream_a;
+            const volThis = aMatch ? m.peak_volume_a : m.peak_volume_b;
+            const volPartner = aMatch ? m.peak_volume_b : m.peak_volume_a;
+            const mov = m.movement_name || m.movement_type || "Concurrent streams";
+            html += "<tr>";
+            if (opts.showMovementCol !== false) {
+                html += `<td>${escapeHtml(mov)}</td>`;
+            }
+            html += `<td>${escapeHtml(streamLabel(partner))}</td>`
+                + `<td class="text-nowrap">${escapeHtml(m.first_window || "—")}</td>`
+                + `<td class="text-nowrap">${escapeHtml(m.peak_window || "—")}</td>`
+                + `<td class="text-nowrap">${escapeHtml(m.last_window || "—")}</td>`
+                + `<td class="text-end">${volThis}</td>`
+                + `<td class="text-end">${volPartner}</td>`
+                + "</tr>";
+        });
+        html += "</tbody></table></div>";
+        return html;
+    }
+
+    function showVisitMovementsModal(eventName, visitKm) {
+        const data = lastPassagePayload;
+        if (!data) return;
+        if (!ensureModals()) {
+            console.error("Motion: Tabler/Bootstrap Modal unavailable");
+            window.alert("Detail pop-up unavailable (Modal library not loaded).");
+            return;
+        }
+        const label = `${eventName} @ ${Number(visitKm).toFixed(2)} km`;
+        document.getElementById("motion-visit-modal-title").textContent =
+            `Movements involving visit · ${label}`;
+        document.getElementById("motion-visit-modal-note").textContent =
+            (data.count_semantics_note || "Same-window concurrent stream volume.")
+            + " First / peak / last windows where this visit co-occurs with another stream.";
+
+        const visit = (data.visit_summary || []).find((v) =>
+            streamMatchesVisit({ event: v.event, visit_km: v.visit_km }, eventName, visitKm)
+        );
+        const allSpans = spansForVisit(data, eventName, visitKm);
+        const authoredSpans = allSpans.filter(isAuthoredPair);
+        const otherSpans = allSpans.filter((m) => !isAuthoredPair(m));
+
+        let html = "";
+
+        html += "<h4 class=\"mb-2\">This visit</h4>";
+        if (visit) {
+            const stats = [
+                ["Passages", visit.passages],
+                ["Unique runners", visit.unique_runners],
+                ["First window", visit.first_window || "—"],
+                ["Last window", visit.last_window || "—"],
+            ];
+            if (visit.median_dwell_sec != null) {
+                stats.push(["Median dwell", `${visit.median_dwell_sec}s`]);
+            }
+            html += '<div class="motion-visit-stats">';
+            stats.forEach(([k, v]) => {
+                html += "<div>"
+                    + `<span class="motion-stat-label">${escapeHtml(k)}</span>`
+                    + `<span class="motion-stat-value">${escapeHtml(v)}</span>`
+                    + "</div>";
+            });
+            html += "</div>";
+        } else {
+            html += "<p class=\"text-secondary mb-3\">Visit stats unavailable.</p>";
+        }
+
+        if (authoredSpans.length) {
+            html += "<h4 class=\"mb-2\">Authored movements</h4>";
+            html += renderMovementSpansTable(authoredSpans, eventName, visitKm);
+        }
+
+        if (otherSpans.length) {
+            html += `<h4 class="mb-2${authoredSpans.length ? " mt-3" : ""}">Concurrent partner streams</h4>`;
+            if (!data.authored_movements || !data.authored_movements.length) {
+                html += "<p class=\"text-secondary small\">No <code>motion_movements.json</code> for this location — "
+                    + "showing same-window co-presence only (not labeled cross/parallel/merge).</p>";
+            } else {
+                html += "<p class=\"text-secondary small\">Unlabeled concurrent pairs (not authored as movements).</p>";
+            }
+            html += renderMovementSpansTable(otherSpans, eventName, visitKm, { showMovementCol: false });
+        }
+
+        if (!authoredSpans.length && !otherSpans.length) {
+            html += "<p class=\"text-secondary\">No concurrent partner streams for this visit in the selected span "
+                + "(needs at least two visit clusters in the same reporting window).</p>";
+        }
+
+        document.getElementById("motion-visit-modal-body").innerHTML = html;
+        openModal(visitModal, document.getElementById("motion-visit-modal"));
     }
 
     function resolveRunId() {
@@ -159,12 +764,41 @@
         return (h * 3600) + (m * 60) + s;
     }
 
-    function secToClock(sec) {
+    function secToClock(sec, withSeconds) {
         const t = Math.max(0, Math.floor(Number(sec) || 0));
         const h = Math.floor(t / 3600);
         const m = Math.floor((t % 3600) / 60);
         const s = t % 60;
-        return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+        const hm = [h, m].map((n) => String(n).padStart(2, "0")).join(":");
+        if (withSeconds) return `${hm}:${String(s).padStart(2, "0")}`;
+        return hm;
+    }
+
+    function renderEventChecks(events) {
+        const host = document.getElementById("motion-event-checks");
+        if (!host) return;
+        const list = (events || []).map((e) => String(e).toLowerCase()).filter(Boolean);
+        availableEvents = list.slice();
+        if (!list.length) {
+            host.innerHTML = '<span class="text-secondary small">No events in metadata</span>';
+            return;
+        }
+        host.innerHTML = list.map((ev) => {
+            const id = `motion-event-${escapeHtml(ev)}`;
+            return `<div class="form-check">`
+                + `<input class="form-check-input motion-event-cb" type="checkbox" value="${escapeHtml(ev)}" id="${id}" checked>`
+                + `<label class="form-check-label" for="${id}">${escapeHtml(ev)}</label>`
+                + `</div>`;
+        }).join("");
+    }
+
+    function selectedEventsParam() {
+        const boxes = Array.from(document.querySelectorAll(".motion-event-cb"));
+        if (!boxes.length) return null;
+        const checked = boxes.filter((b) => b.checked).map((b) => b.value);
+        if (!checked.length) return "__none__";
+        if (checked.length === boxes.length) return null; // all = omit filter
+        return checked.join(",");
     }
 
     async function loadMetadata() {
@@ -187,6 +821,7 @@
             empty.style.display = "";
             root.style.display = "none";
             results.style.display = "none";
+            renderEventChecks([]);
             return;
         }
         empty.style.display = "none";
@@ -197,9 +832,20 @@
             text += ` Motion span ${secToClock(meta.min_t)}–${secToClock(meta.max_t)}.`;
         }
         const guns = meta.gun_sec_by_event || {};
-        const gunBits = Object.keys(guns).sort().map((k) => `${k} ${secToClock(guns[k])}`).join(", ");
+        const gunKeys = Object.keys(guns).sort();
+        const gunBits = gunKeys.map((k) => `${k} ${secToClock(guns[k])}`).join(", ");
         if (gunBits) text += ` Guns: ${gunBits}.`;
         hint.textContent = text;
+        renderEventChecks(gunKeys.length ? gunKeys : (meta.events || []));
+    }
+
+    function pickDefaultLocId(places) {
+        const byId = (id) => places.find((p) => String(p.loc_id) === String(id));
+        if (byId("38")) return "38";
+        if (byId("44")) return "44";
+        const george = places.find((p) => /george/i.test(String(p.label || "")));
+        if (george) return String(george.loc_id);
+        return places[0] ? String(places[0].loc_id) : "";
     }
 
     async function loadPlaces() {
@@ -227,9 +873,10 @@
             select.innerHTML = '<option value="">No locations</option>';
             return;
         }
+        const preferred = pickDefaultLocId(places);
         select.innerHTML = places.map((p) => {
             const label = `${p.label || "Location"} (loc ${p.loc_id})`;
-            const selected = String(p.loc_id) === "44" ? " selected" : "";
+            const selected = String(p.loc_id) === preferred ? " selected" : "";
             return `<option value="${escapeHtml(p.loc_id)}"${selected}>${escapeHtml(label)}</option>`;
         }).join("");
     }
@@ -240,6 +887,8 @@
         }
         const mins = Number(document.getElementById("motion-window").value);
         if (!mins || mins <= 0) return "Window minutes must be positive.";
+        const eventsParam = selectedEventsParam();
+        if (eventsParam === "__none__") return "Select at least one event.";
         const t0 = document.getElementById("motion-t0").value.trim();
         const t1 = document.getElementById("motion-t1").value.trim();
         if ((t0 && !t1) || (!t0 && t1)) {
@@ -277,7 +926,7 @@
             window_sec: String(Math.round(windowMin * 60)),
         });
         if (day) params.set("day", day);
-        const events = document.getElementById("motion-events").value.trim();
+        const events = selectedEventsParam();
         if (events) params.set("events", events);
         const t0 = clockToSec(document.getElementById("motion-t0").value);
         const t1 = clockToSec(document.getElementById("motion-t1").value);
@@ -303,10 +952,14 @@
         const rows = data.rows || [];
         const visitSummary = data.visit_summary || [];
         const totals = data.totals || {};
+        lastPassagePayload = data;
         legend.innerHTML = `Location <strong>${escapeHtml(place.label || place.place_id || "")}</strong>`
             + ` · loc ${escapeHtml(place.place_id || "")}`
             + ` · ± ${escapeHtml(place.radius_m)} m`
-            + (data.legend ? ` · counts = <strong>${escapeHtml(data.legend)}</strong>` : "");
+            + (data.legend ? ` · counts = <strong>${escapeHtml(data.legend)}</strong>` : "")
+            + (data.authored_movements && data.authored_movements.length
+                ? ` · ${data.authored_movements.length} authored movement(s)`
+                : "");
 
         if (!rows.length) {
             body.innerHTML = `<p class="text-secondary">No enter/exit passages in this span.</p>`;
@@ -321,10 +974,12 @@
 
         let html = "";
 
-        // Visit Summary (above passage windows)
         html += "<h4 style=\"margin: 0 0 0.5rem;\">Visit summary</h4>";
-        html += '<div class="scrollable-table-container" style="margin-bottom: 1.25rem; max-height: 40vh;">';
-        html += '<table class="table-sticky-header" id="motion-visit-summary-table">';
+        html += `<p class="text-secondary" style="font-size: 0.875rem; margin-bottom: 0.5rem;">`
+            + `Click a visit row to open movements for that event + enter km (first / peak / last).`
+            + `</p>`;
+        html += '<div class="motion-table-scroll motion-table-scroll-tall">';
+        html += '<table class="table table-sm table-vcenter table-hover motion-table-fit" id="motion-visit-summary-table">';
         html += "<thead><tr>"
             + "<th>Event</th>"
             + "<th class=\"text-end\">Visit (enter km)</th>"
@@ -336,14 +991,14 @@
         if (!visitSummary.length) {
             html += "<tr><td colspan=\"6\" class=\"text-secondary\">No paired visit episodes.</td></tr>";
         } else {
-            visitSummary.forEach((v) => {
-                html += "<tr>"
+            visitSummary.forEach((v, idx) => {
+                html += `<tr class="motion-visit-row" data-visit-index="${idx}" style="cursor:pointer;">`
                     + `<td>${escapeHtml(v.event)}</td>`
                     + `<td class="text-end">${Number(v.visit_km).toFixed(2)}</td>`
                     + `<td class="text-end">${v.passages}</td>`
                     + `<td class="text-end">${v.unique_runners}</td>`
-                    + `<td>${escapeHtml(v.first_window || "—")}</td>`
-                    + `<td>${escapeHtml(v.last_window || "—")}</td>`
+                    + `<td class="text-nowrap">${escapeHtml(v.first_window || "—")}</td>`
+                    + `<td class="text-nowrap">${escapeHtml(v.last_window || "—")}</td>`
                     + "</tr>";
             });
         }
@@ -358,15 +1013,17 @@
             + `<th class="text-end">${passagesTotal}</th>`
             + `<th class="text-end">${uniqueTotal}</th>`
             + "<th colspan=\"2\"></th></tr></tfoot></table></div>";
-        html += `<p class="text-secondary" style="margin: -0.75rem 0 1.25rem; font-size: 0.875rem;">`
+        html += `<p class="text-secondary" style="margin: -0.25rem 0 1.25rem; font-size: 0.875rem;">`
             + `Passages = visit episodes (enter→exit). Unique runners = distinct people at this location `
             + `(a runner counted in two visit rows is still one person). `
             + `Clusters use a ${escapeHtml(data.visit_km_gap != null ? data.visit_km_gap : "0.5")} km enter-km gap.`
             + `</p>`;
 
-        // Passage windows (unchanged layout)
         html += "<h4 style=\"margin: 0 0 0.5rem;\">Passage windows</h4>";
-        html += '<div class="scrollable-table-container"><table class="table-sticky-header" id="motion-passage-table">';
+        html += `<p class="text-secondary" style="font-size: 0.875rem; margin-bottom: 0.5rem;">`
+            + `Click a window row to open a detail pop-up for that selection (authored movements + quintiles).`
+            + `</p>`;
+        html += '<div class="motion-table-scroll"><table class="table table-sm table-vcenter table-hover motion-table-fit" id="motion-passage-table">';
         html += "<thead><tr><th>Window</th>";
         eventNames.forEach((ev) => {
             html += `<th class="text-end">${escapeHtml(ev)} enter</th>`;
@@ -376,8 +1033,9 @@
         });
         html += "<th>Context (enter km)</th></tr></thead><tbody>";
 
-        rows.forEach((r) => {
-            html += `<tr><td>${escapeHtml(r.label)}</td>`;
+        rows.forEach((r, idx) => {
+            html += `<tr class="motion-window-row" data-row-index="${idx}" style="cursor:pointer;" title="Open detail for ${escapeHtml(r.label)}">`
+                + `<td class="text-nowrap">${escapeHtml(r.label)}</td>`;
             eventNames.forEach((ev) => {
                 const n = (r.enters_by_event || {})[ev] || 0;
                 html += `<td class="text-end">${n}</td>`;
@@ -400,11 +1058,24 @@
         html += "<th></th></tr></tfoot></table></div>";
 
         body.innerHTML = html;
-        // Prefer a single results heading; body now has section titles
-        const resultsTitle = results.querySelector("h3");
-        if (resultsTitle) resultsTitle.textContent = "Stream Passage";
+        body.querySelectorAll(".motion-visit-row").forEach((tr) => {
+            tr.addEventListener("click", () => {
+                const idx = Number(tr.getAttribute("data-visit-index"));
+                const v = visitSummary[idx];
+                if (!v) return;
+                showVisitMovementsModal(v.event, v.visit_km);
+            });
+        });
+        body.querySelectorAll(".motion-window-row").forEach((tr) => {
+            tr.addEventListener("click", () => {
+                const idx = Number(tr.getAttribute("data-row-index"));
+                showWindowModal(idx);
+            });
+        });
         results.style.display = "";
-        setStatus(`Done · ${visitSummary.length} visits · ${rows.length} windows`);
+        const authoredN = (data.authored_movements || []).length;
+        setStatus(`Done · ${visitSummary.length} visits · ${rows.length} windows`
+            + (authoredN ? ` · ${authoredN} authored movements` : ""));
     }
 
     async function boot() {
@@ -417,6 +1088,10 @@
     }
 
     document.getElementById("motion-form").addEventListener("submit", runQuery);
+    document.addEventListener("click", (ev) => {
+        const closeBtn = ev.target.closest("[data-bs-dismiss='modal']");
+        if (closeBtn) closeMotionModals();
+    });
     document.addEventListener("DOMContentLoaded", boot);
     window.addEventListener("runflow:context-ready", boot);
 })();

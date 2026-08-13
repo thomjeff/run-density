@@ -206,6 +206,9 @@ MOTION_STREAM_WINDOW_SEC = 300  # 5 minutes; never hardcode in engines
 # Heuristic gap for grouping visit episodes into distinct course passages.
 # Product rule: separate materially distinct passages — tune via this constant.
 MOTION_VISIT_KM_GAP = 0.5
+# Motion movement Q×Q (#856): max |Δt| for nearest same-window partner pairing.
+# Default equals the reporting window so any co-binned enters can match.
+MOTION_QUINTILE_PARTNER_DWELL_SEC = MOTION_STREAM_WINDOW_SEC
 
 # Data directory path (Issue #596)
 DATA_DIR = "data"
