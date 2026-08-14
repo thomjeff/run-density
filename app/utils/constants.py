@@ -194,6 +194,7 @@ FLOW_SEGMENT_SUMMARY_SCHEMA = "0.1.0-draft"
 MOTION_DIRNAME = "motion"
 MOTION_SAMPLES_FILENAME = "samples.parquet"
 MOTION_METADATA_FILENAME = "metadata.json"
+MOTION_RUNNERS_SNAPSHOT_FILENAME = "runners_snapshot.parquet"
 MOTION_SAMPLE_INTERVAL_SEC = 5  # global ticks from local midnight; never hardcode in engines
 MOTION_SCHEMA_VERSION = "1.0.0"
 MOTION_MODEL_VERSION = "constant_pace_v1"

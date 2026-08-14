@@ -24,6 +24,7 @@ from pyproj import Transformer
 
 from app.io.loader import load_locations, load_runners, load_segments
 from app.core.gpx.processor import load_all_courses, GPXCourse
+from app.core.trajectory.crossing import arrival_at_km
 from app.utils.constants import (
     LOCATION_SNAP_THRESHOLD_M,
     LOCATION_SEGMENT_CLAMP_M,
@@ -804,11 +805,13 @@ def calculate_arrival_times_for_location(
                     pace_min_per_km = runner.get("pace", 0)
                     if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
                         continue
-                    
-                    pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
-                    
-                    # Arrival time = start_time + offset (seconds) + pace * distance
-                    arrival_time = event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
+
+                    arrival_time = arrival_at_km(
+                        gun_sec=event_start_sec,
+                        start_offset_sec=start_offset,
+                        pace_min_per_km=pace_min_per_km,
+                        km=seg_distance_km,
+                    )
                     event_arrivals.append(arrival_time)
                 
                 processed_segments.append(seg_id)
@@ -851,11 +854,13 @@ def calculate_arrival_times_for_location(
             pace_min_per_km = runner.get("pace", 0)
             if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
                 continue
-            
-            pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
-            
-            # Arrival time = start_time + offset (seconds) + pace * distance
-            arrival_time = event_start_sec + start_offset + pace_sec_per_km * distance_km
+
+            arrival_time = arrival_at_km(
+                gun_sec=event_start_sec,
+                start_offset_sec=start_offset,
+                pace_min_per_km=pace_min_per_km,
+                km=distance_km,
+            )
             event_arrivals.append(arrival_time)
         
         logger.debug(

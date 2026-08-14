@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from app.core.gpx.processor import cumulative_km, parse_gpx_file
+from app.core.trajectory.crossing import arrival_at_km, runner_start_sec
 from app.core.motion.course_map import (
     compiled_course_length_km,
     event_spans,
@@ -150,8 +151,13 @@ def _runner_samples(
     if pace_min_per_km <= 0:
         raise ValueError(f"Motion: non-positive pace for runner {runner_id}")
     pace_sec = float(pace_min_per_km) * 60.0
-    runner_start = float(ctx.gun_sec) + float(start_offset_sec)
-    finish_t = runner_start + pace_sec * float(ctx.finish_km)
+    runner_start = runner_start_sec(ctx.gun_sec, start_offset_sec)
+    finish_t = arrival_at_km(
+        gun_sec=ctx.gun_sec,
+        start_offset_sec=start_offset_sec,
+        pace_min_per_km=pace_min_per_km,
+        km=ctx.finish_km,
+    )
 
     rows: List[Dict[str, Any]] = []
 

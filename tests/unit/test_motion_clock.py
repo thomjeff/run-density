@@ -137,6 +137,9 @@ def test_build_and_persist_motion_deterministic(tmp_path: Path):
     assert meta1["compiled_course_lengths_km"]["10k"] == pytest.approx(2.0)
     assert meta1["sample_interval_sec"] == MOTION_SAMPLE_INTERVAL_SEC
     assert meta1["min_t"] <= meta1["max_t"]
+    assert Path(first["runners_snapshot_path"]).is_file()
+    snap = pd.read_parquet(first["runners_snapshot_path"])
+    assert set(snap["runner_id"]) == {"r1", "r2"}
 
     # Start on global grid for r1 (offset 0, gun 07:15:00)
     gun = (7 * 60 + 15) * 60

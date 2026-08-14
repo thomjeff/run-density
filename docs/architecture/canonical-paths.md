@@ -25,11 +25,23 @@ app/core/v2/analysis_submit.py  (submit_v2_analysis / run_analysis_background)
 app/core/v2/pipeline.py
         │
         ├─ analysis.json (SSOT for the run)
+        ├─ trajectory layer (Phase 2.5): app/core/motion/persist.py
+        │     samples.parquet + runners_snapshot.parquet + metadata.json
         ├─ density:  app/core/v2/density.py  → analyze_density_segments_v2
         ├─ flow:     app/core/v2/flow.py     → analyze_temporal_flow_segments_v2
         ├─ bins:     app/core/v2/bins.py     → generate_bins_v2
         ├─ reports:  app/core/v2/reports.py  → generate_reports_per_day
         └─ artifacts / overlaps / UI helpers as invoked by the pipeline
+
+Staged stop-points (#860), also `through` on POST `/runflow/v2/analyze`:
+
+```text
+python -m app.cli analyze --run-id <id> --through trajectory   # Phase 1–2.5
+python -m app.cli analyze --run-id <id> --through locations    # + Locations.csv
+python -m app.cli analyze --run-id <id> --through full         # default
+```
+
+**Trajectory layer** is the persisted runner clock. **Motion** (Stream Passage UI) is a consumer of that layer, not the layer name. Locations first/last at a point uses `app.core.trajectory.crossing.arrival_at_km` (#861).
 ```
 
 **Run storage root:** `runflow/analysis/{run_id}/` (container: `/app/runflow/...`).  

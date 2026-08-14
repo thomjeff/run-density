@@ -12,7 +12,7 @@ Issue #600: Flow.md generation deprecated (only Flow.csv is used)
 Issue #682: Updated to use runflow/analysis/{run_id} structure
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Sequence
 from pathlib import Path
 import logging
 
@@ -142,7 +142,8 @@ def generate_reports_per_day(
     segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
     locations_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to locations file
-    gpx_paths: Optional[Dict[str, str]] = None
+    gpx_paths: Optional[Dict[str, str]] = None,
+    report_kinds: Optional[Sequence[str]] = None,
 ) -> Dict[Day, Dict[str, str]]:
     """
     Generate all reports per day in day-partitioned structure.
@@ -208,6 +209,7 @@ def generate_reports_per_day(
         )
     # locations_file_path can be None if locations_file is not provided (optional)
     # But if it's provided, it should come from analysis.json
+    kinds = set(report_kinds) if report_kinds is not None else {"density", "flow", "locations"}
     
     report_paths_by_day: Dict[Day, Dict[str, str]] = {}
     
@@ -239,7 +241,7 @@ def generate_reports_per_day(
         )
         
         # Generate Density.md
-        if day in density_results:
+        if "density" in kinds and day in density_results:
             try:
                 density_path = generate_density_report_v2(
                     run_id=run_id,
@@ -259,101 +261,111 @@ def generate_reports_per_day(
         
         # Generate Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
         # Issue #600: Load from flow_results.json (SSOT - mandatory)
-        try:
-            # Issue #682: Use centralized get_run_directory() for correct path
-            from app.utils.run_id import get_run_directory
-            run_dir = get_run_directory(run_id)
-            computation_dir = run_dir / day.value / "computation"
-            flow_results_json_path = computation_dir / "flow_results.json"
-            
-            if not flow_results_json_path.exists():
-                error_msg = f"Issue #600: flow_results.json is required (SSOT) but not found at {flow_results_json_path}"
-                logger.error(error_msg)
-                raise FileNotFoundError(error_msg)
-            
-            logger.info(f"Issue #600: Using flow_results.json as SSOT: {flow_results_json_path}")
-            
-            flow_paths = generate_flow_report_v2(
-                run_id=run_id,
-                day=day,
-                day_events=day_events,
-                flow_results_json_path=flow_results_json_path,  # Issue #600: Pass JSON path (required)
-                reports_path=reports_path
-            )
-            day_report_paths.update(flow_paths)
-        except FileNotFoundError:
-            raise  # Re-raise FileNotFoundError
-        except Exception as e:
-            logger.error(f"Failed to generate flow report for day {day.value}: {e}", exc_info=True)
-            # Continue with other reports even if flow fails
-        
-        # Generate Locations.csv (Issue #600: Load from locations_results.json - SSOT mandatory if file exists)
-        try:
-            # Issue #682: Use centralized get_run_directory() for correct path
-            from app.utils.run_id import get_run_directory
-            run_dir = get_run_directory(run_id)
-            computation_dir = run_dir / day.value / "computation"
-            locations_results_json_path = computation_dir / "locations_results.json"
-            
-            if not locations_results_json_path.exists():
-                # Locations report is optional (only generated if locations file provided)
-                logger.debug(f"Issue #600: locations_results.json not found at {locations_results_json_path}, skipping locations report")
-            else:
-                logger.info(f"Issue #600: Using locations_results.json as SSOT: {locations_results_json_path}")
+        if "flow" in kinds:
+            try:
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_dir = get_run_directory(run_id)
+                computation_dir = run_dir / day.value / "computation"
+                flow_results_json_path = computation_dir / "flow_results.json"
                 
-                # Filter gpx_paths to only include day events
-                day_gpx_paths = {
-                    event.name.lower(): gpx_paths[event.name.lower()]
-                    for event in day_events
-                    if event.name.lower() in gpx_paths
-                }
+                if not flow_results_json_path.exists():
+                    error_msg = f"Issue #600: flow_results.json is required (SSOT) but not found at {flow_results_json_path}"
+                    logger.error(error_msg)
+                    raise FileNotFoundError(error_msg)
                 
-                locations_path = generate_locations_report_v2(
+                logger.info(f"Issue #600: Using flow_results.json as SSOT: {flow_results_json_path}")
+                
+                flow_paths = generate_flow_report_v2(
                     run_id=run_id,
                     day=day,
                     day_events=day_events,
-                    locations_results_json_path=locations_results_json_path,  # Issue #600: Pass JSON path (required)
-                    all_runners_df=all_runners_df,
-                    reports_path=reports_path,
-                    segments_df=day_segments_df,
-                    segments_file_path=segments_file_path,  # Issue #616: Pass segments path for fallback safety
-                    gpx_paths=day_gpx_paths  # Issue #655: Pass gpx_paths for location report generation
+                    flow_results_json_path=flow_results_json_path,  # Issue #600: Pass JSON path (required)
+                    reports_path=reports_path
                 )
-                if locations_path:
-                    day_report_paths["locations"] = str(locations_path)
-                    logger.info(f"Successfully generated locations report for day {day.value}")
+                day_report_paths.update(flow_paths)
+            except FileNotFoundError:
+                raise  # Re-raise FileNotFoundError
+            except Exception as e:
+                logger.error(f"Failed to generate flow report for day {day.value}: {e}", exc_info=True)
+                # Continue with other reports even if flow fails
+        
+        # Generate Locations.csv (Issue #600: Load from locations_results.json - SSOT mandatory if file exists)
+        if "locations" in kinds:
+            try:
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_dir = get_run_directory(run_id)
+                computation_dir = run_dir / day.value / "computation"
+                locations_results_json_path = computation_dir / "locations_results.json"
 
-                    # Issue #702: Generate one-pager PDFs for locations flagged onepage='y'
-                    try:
-                        # Lazy import to avoid loading ReportLab/PIL during density phases
-                        from app.one_pager import generate_location_onepagers
-                        maps_dir = get_day_output_path(run_id, day, "maps")
-                        maps_dir.mkdir(parents=True, exist_ok=True)
-                        loc_sheets_dir = reports_path / "loc_sheets"
-                        loc_sheets_dir.mkdir(parents=True, exist_ok=True)
-                        generated = generate_location_onepagers(
-                            run_id=run_id,
-                            day=day.value,
-                            locations_results_json_path=locations_results_json_path,
-                            locations_report_csv_path=locations_path,
-                            maps_dir=maps_dir,
-                            output_dir=loc_sheets_dir
-                        )
-                        logger.info(
-                            f"Issue #702: Generated {generated} one-pagers for day {day.value}"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"Issue #702: One-pager generation failed for day {day.value}: {e}"
-                        )
+                if not locations_results_json_path.exists():
+                    # Locations report is optional (only generated if locations file provided)
+                    logger.debug(
+                        f"Issue #600: locations_results.json not found at {locations_results_json_path}, skipping locations report"
+                    )
                 else:
-                    logger.warning(f"Locations report generation returned None for day {day.value}")
-        except FileNotFoundError:
-            # Locations report is optional - skip if file not found
-            logger.debug(f"Locations report skipped for day {day.value} (locations_results.json not found)")
-        except Exception as e:
-            logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
-            # Continue with other reports even if locations fails
+                    logger.info(
+                        f"Issue #600: Using locations_results.json as SSOT: {locations_results_json_path}"
+                    )
+
+                    # Filter gpx_paths to only include day events
+                    day_gpx_paths = {
+                        event.name.lower(): gpx_paths[event.name.lower()]
+                        for event in day_events
+                        if event.name.lower() in gpx_paths
+                    }
+
+                    locations_path = generate_locations_report_v2(
+                        run_id=run_id,
+                        day=day,
+                        day_events=day_events,
+                        locations_results_json_path=locations_results_json_path,
+                        all_runners_df=all_runners_df,
+                        reports_path=reports_path,
+                        segments_df=day_segments_df,
+                        segments_file_path=segments_file_path,
+                        gpx_paths=day_gpx_paths,
+                    )
+                    if locations_path:
+                        day_report_paths["locations"] = str(locations_path)
+                        logger.info(f"Successfully generated locations report for day {day.value}")
+
+                        # Issue #702: Generate one-pager PDFs for locations flagged onepage='y'
+                        try:
+                            from app.one_pager import generate_location_onepagers
+                            maps_dir = get_day_output_path(run_id, day, "maps")
+                            maps_dir.mkdir(parents=True, exist_ok=True)
+                            loc_sheets_dir = reports_path / "loc_sheets"
+                            loc_sheets_dir.mkdir(parents=True, exist_ok=True)
+                            generated = generate_location_onepagers(
+                                run_id=run_id,
+                                day=day.value,
+                                locations_results_json_path=locations_results_json_path,
+                                locations_report_csv_path=locations_path,
+                                maps_dir=maps_dir,
+                                output_dir=loc_sheets_dir,
+                            )
+                            logger.info(
+                                f"Issue #702: Generated {generated} one-pagers for day {day.value}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Issue #702: One-pager generation failed for day {day.value}: {e}"
+                            )
+                    else:
+                        logger.warning(
+                            f"Locations report generation returned None for day {day.value}"
+                        )
+            except FileNotFoundError:
+                logger.debug(
+                    f"Locations report skipped for day {day.value} (locations_results.json not found)"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to generate locations report for day {day.value}: {e}",
+                    exc_info=True,
+                )
         
         report_paths_by_day[day] = day_report_paths
         
