@@ -132,6 +132,16 @@ class SaveConfigJunctionsRequest(BaseModel):
     updated: Optional[str] = None
 
 
+class SaveConfigClearanceRequest(BaseModel):
+    """Issue #832: package clearance.json document."""
+
+    assets: Optional[List[Dict[str, Any]]] = None
+    rules: Optional[List[Dict[str, Any]]] = None
+    version: Optional[int] = 1
+    clear_when: Optional[str] = None
+    updated: Optional[str] = None
+
+
 class JunctionNearbyRequest(BaseModel):
     lat: float
     lon: float
@@ -471,6 +481,121 @@ async def api_save_config_junctions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save junctions: {e}",
         )
+
+
+@router.get("/api/config/packages/{config_id}/clearance")
+async def api_load_config_clearance(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Load clearance.json for a config package (Issue #832)."""
+    require_auth(request)
+    try:
+        from app.core.clearance.storage import load_config_clearance
+
+        doc = load_config_clearance(config_id)
+        return JSONResponse(content={"ok": True, "config_id": config_id, **doc})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/clearance")
+async def api_save_config_clearance(
+    request: Request,
+    config_id: str,
+    body: SaveConfigClearanceRequest,
+) -> JSONResponse:
+    """Save clearance.json for a config package (Issue #832)."""
+    require_auth(request)
+    try:
+        from app.core.clearance.storage import (
+            load_config_clearance,
+            save_config_clearance,
+        )
+
+        payload = {
+            "version": body.version or 1,
+            "clear_when": body.clear_when or "last_runner",
+            "assets": body.assets or [],
+            "rules": body.rules or [],
+            "updated": body.updated,
+        }
+        save_config_clearance(config_id, payload)
+        doc = load_config_clearance(config_id)
+        return JSONResponse(content={"ok": True, "config_id": config_id, **doc})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save config package clearance")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save clearance: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/clearance/subjects")
+async def api_clearance_subjects(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Locations available as clearance subjects."""
+    require_auth(request)
+    try:
+        from app.core.clearance.subjects import list_package_clearance_subjects
+
+        payload = list_package_clearance_subjects(config_id)
+        return JSONResponse(content={"ok": True, **payload})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/clearance/playbook")
+async def api_clearance_playbook(
+    request: Request,
+    config_id: str,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+) -> JSONResponse:
+    """Static playbook preview (optional analysis timings from a run)."""
+    require_auth(request)
+    try:
+        from app.core.clearance.playbook import (
+            build_clearance_playbook,
+            playbook_for_run,
+        )
+        from app.core.clearance.storage import load_config_clearance
+        from app.core.clearance.subjects import list_package_locations
+        from app.utils.run_id import get_run_directory, resolve_selected_day
+
+        doc = load_config_clearance(config_id)
+        if not run_id:
+            labels = {s["id"]: s.get("label") or s["id"] for s in list_package_locations(config_id)}
+            playbook = build_clearance_playbook(
+                doc,
+                location_labels=labels,
+                config_id=config_id,
+            )
+            return JSONResponse(content=playbook)
+
+        selected_day, _available = resolve_selected_day(run_id, day)
+        csv_path = get_run_directory(run_id) / selected_day / "reports" / "Locations.csv"
+        playbook = playbook_for_run(
+            run_id,
+            day=selected_day,
+            locations_csv=csv_path,
+            config_id=config_id,
+        )
+        return JSONResponse(content=playbook)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/api/config/packages/{config_id}/junctions/nearby")

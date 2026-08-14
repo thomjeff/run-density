@@ -40,6 +40,7 @@
         const raw = getQuery().get('tab');
         if (raw === 'runners') return 'runners';
         if (raw === 'junctions') return 'junctions';
+        if (raw === 'clearance') return 'clearance';
         if (raw === 'legs') return 'course'; // Legs moved to global hub
         return 'course';
     }
@@ -344,6 +345,18 @@
         );
     }
 
+    function isClearanceDirty() {
+        return !!(window.clearanceAuthoring && window.clearanceAuthoring.isDirty());
+    }
+
+    function confirmLeaveDirtyClearance() {
+        if (!isClearanceDirty()) return true;
+        return window.confirm(
+            'You have unsaved clearance changes. Leave without saving?\n\n' +
+                'Use Save clearance to write clearance.json.'
+        );
+    }
+
     function showWorkspace(manifest, configId) {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
@@ -397,10 +410,12 @@
         });
         const workspacePanel = document.getElementById('race-config-tab-workspace');
         const junctionsPanel = document.getElementById('race-config-tab-junctions');
+        const clearancePanel = document.getElementById('race-config-tab-clearance');
         const runnersPanel = document.getElementById('race-config-tab-runners');
         const isWorkspace = tab === 'course';
         if (workspacePanel) workspacePanel.style.display = isWorkspace ? 'block' : 'none';
         if (junctionsPanel) junctionsPanel.style.display = tab === 'junctions' ? 'block' : 'none';
+        if (clearancePanel) clearancePanel.style.display = tab === 'clearance' ? 'block' : 'none';
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         syncConfigPackagePanels(tab);
         if (tab === 'runners' && window.initRunnersBaseline) {
@@ -408,6 +423,9 @@
         }
         if (tab === 'junctions' && window.initJunctionsAuthoring) {
             window.initJunctionsAuthoring();
+        }
+        if (tab === 'clearance' && window.initClearanceAuthoring) {
+            window.initClearanceAuthoring();
         }
     }
 
@@ -932,6 +950,7 @@
                 if (tab === getTab()) return;
                 e.preventDefault();
                 if (getTab() === 'junctions' && !confirmLeaveDirtyJunctions()) return;
+                if (getTab() === 'clearance' && !confirmLeaveDirtyClearance()) return;
                 if (isPackageWorkspaceDirty() && window.configPackageCourse && window.configPackageCourse.saveAll) {
                     window.configPackageCourse
                         .saveAll()
