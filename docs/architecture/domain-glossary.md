@@ -22,7 +22,6 @@
 | **Pass** | Timed instance at a Location (`pass_id`; outbound/return share one `loc_id`) |
 | **Configuration package** | Race package: assigned courses, runners, resources, analysis launch (`runflow/config/{config_id}/`) |
 | **Run** | One analysis execution under `runflow/analysis/{run_id}/` |
-| **Clearance rule** | Authored H&S dependency: a location stays closed until listed until-locations are clear (`clearance.json`). Clear time = last runner at the location **point**. Not a Flow zone. Off-course holds are locations (`loc_id`), not a separate asset type. |
 
 ## Units (prefer explicit suffixes in internal code)
 

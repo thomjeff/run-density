@@ -17,7 +17,6 @@ This documentation is organized by audience and topic for easy navigation.
 | Document | Purpose |
 |----------|---------|
 | [Race Configuration Guide](user-guide/race-configuration.md) | **START HERE** - Leg-based course authoring (leg library, event recipes, corridor pairing, locations) |
-| [Clearance playbook](user-guide/clearance.md) | Health & Safety reopen dependencies (`clearance.json`, last runner at point) |
 | [API User Guide](user-guide/api-user-guide.md) | Complete API usage guide |
 | [Course Mapping Guide](user-guide/course-mapping.md) | Legacy draw-the-line course authoring (simple races) |
 | [Cloud Container Guide](user-guide/cloud-container.md) | Skinny cloud Locations UI (read-only) |

@@ -62,11 +62,6 @@
         text-transform: uppercase;
         margin-right: 0.25rem;
     }
-    #locations-table .loc-reopen-until {
-        margin-top: 0.2rem;
-        font-size: 0.8rem;
-        color: #6c757d;
-    }
 
     #basemap-toggle {
         position: absolute;
@@ -223,12 +218,11 @@
                     <th>Operational Window</th>
                     <th class="table-sortable" data-sort="first_runner">First/Last Runner <span class="table-sortable-indicator"></span></th>
                     <th>Peak Window</th>
-                    <th>Reopen</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="9" class="placeholder">Loading locations data...</td>
+                    <td colspan="8" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -294,7 +288,7 @@
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js?v=842c"></script>
 <script src="/static/js/map/location_pairing.js?v=2026-07-28-810"></script>
-<script src="/static/js/map/locations.js?v=832a"></script>
+<script src="/static/js/map/locations.js?v=842c"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -1313,24 +1307,7 @@
             const flagValue = location.flag === true || location.flag === "true" || location.flag === "Y" ? "Y" : "N";
             const flagDisplay = flagValue;
             
-            // Column order: ID, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window, Reopen
-            let reopenHtml = '—';
-            const clr = location.clearance;
-            if (clr && clr.blocked) {
-                const reopenClock = clr.reopen_at ? (formatTimeToHHMM(clr.reopen_at) || clr.reopen_at) : '—';
-                const untilBits = Array.isArray(clr.until)
-                    ? clr.until.map(function (u) {
-                        const name = (u && (u.label || u.id)) || '';
-                        return escapeHtml(String(name));
-                    }).join(', ')
-                    : '';
-                const title = clr.explanation ? ' title="' + escapeHtml(clr.explanation) + '"' : '';
-                reopenHtml = '<span class="loc-reopen"' + title + '>' + escapeHtml(reopenClock) + '</span>';
-                if (untilBits) {
-                    reopenHtml += '<div class="loc-reopen-until">until ' + untilBits + '</div>';
-                }
-            }
-
+            // Column order: ID, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window
             row.innerHTML = `
                 <td>${escapeHtml(String(locId))}</td>
                 <td>${formatLocationCellHtml(location)}</td>
@@ -1340,7 +1317,6 @@
                 <td>${operationalWindow}</td>
                 <td>${firstLastRunner}</td>
                 <td>${peakWindow}</td>
-                <td>${reopenHtml}</td>
             `;
             
             // Add click handler for table-to-map filtering
