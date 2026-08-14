@@ -134,10 +134,12 @@ app/core/config_package/*   (legs, saved courses, org library, recipes, analysis
         │
         ▼
 Package on disk under runflow/config/...
-        │
+        │  clearance.json (#832) — H&S reopen dependencies (not Flow zones)
         ▼
 Run analysis → v2 pipeline (section 1)
 ```
+
+Clearance playbook (static): `app/core/clearance/` joins package `clearance.json` with run `Locations.csv` `last_runner`. Live race-day clock is #830 (not this path).
 
 Legacy course-mapping routes may still exist for compatibility; Race Configuration / Build is the supported authoring UX.
 
@@ -157,5 +159,6 @@ Legacy course-mapping routes may still exist for compatibility; Race Configurati
 
 - [Deprecation ledger](deprecation-ledger.md) — dispositions and removal gates  
 - [Domain glossary](domain-glossary.md) — Phase 3 (naming)  
+- [Clearance playbook](../user-guide/clearance.md) — Issue #832  
 - [Frontend UI contract](../dev-guides/frontend-ui.md)  
 - [Developer guide](../dev-guides/developer-guide.md)

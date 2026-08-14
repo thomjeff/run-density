@@ -43,11 +43,13 @@ Open **Race Configuration** from the main menu. The hub has three top-level view
 | **Legs** | Organization leg library — import/draw routes, edit metadata, place locations |
 | **Courses** | Create and manage named frozen courses by distance (**New course**) |
 
-Inside a package, the workspace has two tabs:
+Inside a package, the workspace has these tabs:
 
 | Tab | Purpose |
 |-----|---------|
 | **Courses** | Assign one global course per distance; **Build race exports** |
+| **Junctions** | Author stream interactions at course pins |
+| **Clearance** | Health & Safety reopen dependencies (see [Clearance playbook](clearance.md)) |
 | **Runners** | Install actual race-result runner files; baseline scenario generation |
 
 ---

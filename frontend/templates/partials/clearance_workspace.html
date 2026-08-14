@@ -1,0 +1,152 @@
+{# Issue #832: Clearance / dependency authoring (package-scoped) #}
+<style>
+.clearance-until-list {
+    max-height: 22rem;
+    overflow: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 0.25rem 0;
+}
+.clearance-until-group {
+    padding: 0.35rem 0.75rem 0.15rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #666;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.clearance-until-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+}
+.clearance-until-option:hover { background: #f5f5f5; }
+.clearance-until-option input { margin-top: 0.2rem; }
+#clearance-rules-table {
+    width: 100%;
+}
+#clearance-rules-table th:nth-child(3),
+#clearance-rules-table td:nth-child(3) { width: 5.5rem; }
+#clearance-rules-tbody tr[data-rule-index] { cursor: pointer; }
+#clearance-rules-tbody tr[data-rule-index]:hover { background: #f5f5f5; }
+#clearance-rule-note { min-height: 6rem; width: 100%; }
+</style>
+<div id="clearance-authoring-root">
+    <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; margin-bottom:1rem;">
+        <h3 style="margin:0; flex:1 1 auto;">Clearance</h3>
+        <button type="button" id="clearance-btn-save" class="course-btn primary">Save clearance</button>
+        <span id="clearance-status" class="text-secondary" style="font-size:0.875rem;"></span>
+    </div>
+    <p style="margin:0 0 1rem; color:#666; font-size:0.9rem; max-width:52rem;">
+        Health &amp; Safety reopen rules for this package. A location stays closed until
+        <strong>every</strong> listed until-location is clear (AND). Clearance time is
+        <strong>last runner at that location point</strong> from analysis — not peak, not a pin radius,
+        and not Stream Passage. Off-course holds (traffic, extract) are locations if they have a
+        <code>loc_id</code>.
+    </p>
+
+    <h4 class="card-title" style="margin:0 0 0.5rem;">Rules</h4>
+    <div class="scrollable-table-container" style="margin-bottom:1rem;">
+        <table class="table-sticky-header" id="clearance-rules-table">
+            <thead>
+                <tr>
+                    <th>Blocked</th>
+                    <th>Until (AND)</th>
+                    <th class="course-map-action-cell">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="clearance-rules-tbody"></tbody>
+        </table>
+    </div>
+    <button type="button" id="clearance-btn-add-rule" class="course-btn" style="margin-bottom:1.5rem;">Add rule</button>
+
+    <h4 class="card-title" style="margin:0 0 0.5rem;">Reopen order</h4>
+    <p style="margin:0 0 0.75rem; color:#666; font-size:0.9rem; max-width:52rem;">
+        This is the <strong>sequence your rules produce</strong> once last-runner times exist — not a test of a single rule.
+        Save the rules, then pick a prior analysis of this package so each until-location gets its clock.
+        Race-day “now vs reopen” is a later clock (#830).
+    </p>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:flex-end; margin-bottom:0.75rem;">
+        <label>
+            <span style="display:block; font-size:0.8rem; color:#666;">Analysis run (last-runner times)</span>
+            <select id="clearance-preview-run" class="config-package-input" style="min-width:22rem;"></select>
+        </label>
+        <button type="button" id="clearance-btn-preview" class="course-btn">Refresh times</button>
+    </div>
+    <p id="clearance-playbook-empty" class="text-secondary" style="font-size:0.875rem;">No rules yet, or last-runner times are not loaded.</p>
+    <div class="scrollable-table-container">
+        <table class="table-sticky-header" id="clearance-playbook-table">
+            <thead>
+                <tr>
+                    <th>Reopen</th>
+                    <th>Blocked</th>
+                    <th>Until</th>
+                    <th>Why</th>
+                </tr>
+            </thead>
+            <tbody id="clearance-playbook-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="clearance-rule-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop" id="clearance-rule-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="clearance-rule-modal-title">
+        <div class="course-location-modal-header">
+            <h4 id="clearance-rule-modal-title">Edit rule</h4>
+            <button type="button" id="clearance-rule-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="course-location-modal-body">
+            <div style="display:grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+                <label>
+                    <span>Zone</span>
+                    <select id="clearance-rule-zone" class="config-package-input"></select>
+                </label>
+                <label>
+                    <span>Blocked location</span>
+                    <select id="clearance-rule-blocked" class="config-package-input"></select>
+                </label>
+            </div>
+            <label style="display:block; margin-bottom:0.75rem;">
+                <span>Until (AND)</span>
+                <div id="clearance-rule-until-summary" class="text-secondary" style="margin:0.25rem 0 0.5rem; font-size:0.9rem;">None selected</div>
+                <button type="button" id="clearance-btn-choose-until" class="course-btn">Choose locations…</button>
+            </label>
+            <label style="display:block;">
+                <span>Note</span>
+                <textarea id="clearance-rule-note" class="config-package-input" maxlength="2000" placeholder="H&amp;S context for why this stays closed"></textarea>
+            </label>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="clearance-rule-modal-cancel" class="course-btn">Cancel</button>
+            <button type="button" id="clearance-rule-modal-apply" class="course-btn primary">Apply</button>
+        </div>
+    </div>
+</div>
+
+<div id="clearance-until-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop" id="clearance-until-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="clearance-until-modal-title">
+        <div class="course-location-modal-header">
+            <h4 id="clearance-until-modal-title">Until locations (AND)</h4>
+            <button type="button" id="clearance-until-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="course-location-modal-body">
+            <p class="text-secondary" style="margin:0 0 0.75rem; font-size:0.875rem;">
+                Every selected location must be clear (last runner at the point) before the blocked location may reopen.
+                Same-zone locations are listed first.
+            </p>
+            <label style="display:block; margin-bottom:0.75rem;">
+                <span>Search by name or id</span>
+                <input type="search" id="clearance-until-search" class="config-package-input" placeholder="Bridge, 18, …" />
+            </label>
+            <div id="clearance-until-list" class="clearance-until-list"></div>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="clearance-until-modal-cancel" class="course-btn">Cancel</button>
+            <button type="button" id="clearance-until-modal-apply" class="course-btn primary">Apply</button>
+        </div>
+    </div>
+</div>
