@@ -139,7 +139,8 @@ Package on disk under runflow/config/...
 Run analysis → v2 pipeline (section 1)
 ```
 
-Clearance playbook (static): `app/core/clearance/` joins package `clearance.json` with run `Locations.csv` `last_runner`. Live race-day clock is #830 (not this path).
+Clearance playbook (static): `app/core/clearance/` joins package `clearance.json` with run `Locations.csv` `last_runner`.  
+Race-day clock (v1): Results **Execute** (`/execute`, `app/core/execute/clock.py`) compares wall/preview time to that playbook (#830). Live GPS is out of scope.
 
 Legacy course-mapping routes may still exist for compatibility; Race Configuration / Build is the supported authoring UX.
 

@@ -86,6 +86,9 @@
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations" data-rf-run-view="1">Locations</a>
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-run-view="1">Execute</a>
+                        </li>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
                         {# Issue #842: Package jumps to source config; replaces Active-run strip link #}
@@ -199,6 +202,7 @@
             "/junctions",
             "/motion",
             "/locations",
+            "/execute",
             "/reports",
         ];
 

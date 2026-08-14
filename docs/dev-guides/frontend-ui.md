@@ -70,7 +70,7 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar (Results): **Runflow** | **Results ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Reports | Logout
+- Top bar (Results): **Runflow** | **Results ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Execute · Reports | Logout
 - Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Packages | Logout
 - Workspace control switches Results ↔ Build (mutually exclusive chrome; Issue #842)
 - **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Results only)

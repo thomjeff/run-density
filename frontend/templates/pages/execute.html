@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Execute{% endblock %}
+
+{% block extra_head %}
+<style>
+.execute-clock {
+    font-variant-numeric: tabular-nums;
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+}
+.execute-clock-meta { color: #666; font-size: 0.9rem; margin-top: 0.35rem; }
+.execute-guns { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.75rem 0 0; }
+.execute-gun { font-size: 0.9rem; }
+.execute-status-closed { color: #9b1c1c; font-weight: 700; }
+.execute-status-open { color: #0f7b3a; font-weight: 700; }
+.execute-status-unknown { color: #6c757d; }
+.execute-row-closed { background: #fff6f6; }
+.execute-row-open { background: #f4fbf6; }
+.execute-row-next td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
+#execute-playbook-table td { vertical-align: top; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Execute</h2>
+    <p class="text-secondary" style="margin-top: 0.25rem;">
+        Race-day clock and reopen playbook (v1). Times are last runner at the location point from this analysis — not live GPS.
+        This page will move when Build / Plan / Execute chrome lands.
+    </p>
+</div>
+{% include "partials/run_context.html" %}
+
+<div class="card" style="margin-bottom: 1.25rem;">
+    <div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start; justify-content:space-between;">
+        <div>
+            <div class="text-secondary" style="font-size:0.8rem; font-weight:600; letter-spacing:0.04em;">CLOCK</div>
+            <div id="execute-clock" class="execute-clock">—:—:—</div>
+            <div id="execute-clock-meta" class="execute-clock-meta">Waiting for a run…</div>
+            <div id="execute-guns" class="execute-guns"></div>
+        </div>
+        <div>
+            <label style="display:block; font-size:0.8rem; color:#666; margin-bottom:0.35rem;">
+                Preview time (rehearsal)
+            </label>
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+                <input type="time" id="execute-preview-time" class="config-package-input" step="1" />
+                <button type="button" id="execute-use-wall" class="course-btn">Wall clock</button>
+                <button type="button" id="execute-jump-gun" class="course-btn">First gun</button>
+            </div>
+            <p class="text-secondary" style="margin:0.5rem 0 0; font-size:0.8rem; max-width:22rem;">
+                Leave preview empty to follow the device clock. Set a time to walk the playbook before race day.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 0.75rem;">Reopen playbook</h3>
+    <p id="execute-playbook-empty" class="text-secondary" style="font-size:0.9rem;">
+        No clearance rules on this package yet. Author them under Build → package → Clearance.
+    </p>
+    <div class="scrollable-table-container">
+        <table class="table-sticky-header" id="execute-playbook-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Reopen</th>
+                    <th>Blocked</th>
+                    <th>Until (AND)</th>
+                    <th>Why</th>
+                </tr>
+            </thead>
+            <tbody id="execute-playbook-tbody"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/execute_clock.js?v=830a"></script>
+{% endblock %}

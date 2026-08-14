@@ -50,6 +50,8 @@ Race Configuration → open the package → **Clearance** tab.
 
 On **Locations**, a **Reopen** column appears for blocked locations: reopen clock plus the until-members. Hover the clock for the full explanation.
 
+Race-day **Execute** (`/execute`) ticks a clock against the same playbook. See [Execute clock](execute.md).
+
 ## Out of scope here
 
 - Live “now vs reopen” clock (#830)

@@ -346,6 +346,22 @@ async def motion(request: Request):
     )
 
 
+@router.get("/execute", response_class=HTMLResponse)
+async def execute(request: Request):
+    """
+    Race-day Execute clock + reopen playbook (Issue #830 v1).
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/execute.html",
+        context={"request": request, "meta": meta},
+    )
+
+
 @router.get("/locations", response_class=HTMLResponse)
 async def locations(request: Request):
     """
