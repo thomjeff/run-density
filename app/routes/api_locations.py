@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 from app.location_report import generate_location_report
-from app.utils.run_id import get_latest_run_id, get_run_directory
+from app.utils.run_id import get_latest_run_id
 from app.storage import create_runflow_storage
 from app.utils.env import env_bool
 from app.utils.auth import is_session_valid
@@ -139,23 +139,6 @@ async def get_locations_report(
                 if "by_event" in row:
                     row["by_event"] = parse_by_event(row.get("by_event"))
             _merge_onepage_into_report_rows(report_data, locations_results, selected_day)
-            from app.core.clearance.playbook import (
-                attach_clearance_to_locations,
-                playbook_for_run,
-            )
-
-            csv_path = get_run_directory(run_id) / selected_day / "reports" / "Locations.csv"
-            try:
-                playbook = playbook_for_run(
-                    run_id,
-                    day=selected_day,
-                    locations_csv=csv_path,
-                )
-                attach_clearance_to_locations(report_data, playbook)
-            except Exception as exc:
-                logger.warning("Could not attach clearance playbook for %s: %s", run_id, exc)
-                for row in report_data:
-                    row.setdefault("clearance", None)
         elif generate:
             # Generate new report
             # Issue #512: Start times must be provided - cannot use hardcoded constants
