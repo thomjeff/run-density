@@ -47,6 +47,7 @@ def run_analysis_background(
     try:
         logger.info("Starting background analysis for run_id: %s", run_id)
         enable_audit = request_payload.get("enableAudit", "n").lower()
+        through = request_payload.get("through") or "full"
         pipeline_result = create_full_analysis_pipeline(
             events=events,
             segments_file=segments_file,
@@ -56,6 +57,7 @@ def run_analysis_background(
             run_id=run_id,
             request_payload=request_payload,
             enable_audit=enable_audit,
+            through=through,
         )
 
         run_path = get_run_directory(run_id)

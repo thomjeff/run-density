@@ -86,6 +86,17 @@ class V2AnalyzeRequest(BaseModel):
     events: List[V2EventRequest] = Field(..., min_length=1, description="List of events to analyze")
     event_group: Optional[Dict[str, str]] = Field(None, description="Optional event grouping for RES calculation (format: {\"group_id\": \"event1, event2, ...\"})")
     enableAudit: str = Field(default='n', pattern='^[yn]$', description="Enable detailed flow audit generation ('y' or 'n')")
+    through: Optional[str] = Field(
+        default="full",
+        description="Staged pipeline stop: full | trajectory | locations (#860)",
+    )
+
+    @field_validator("through")
+    @classmethod
+    def validate_through(cls, v: Optional[str]) -> str:
+        from app.core.v2.through import normalize_through
+
+        return normalize_through(v)
     
     model_config = {
         "json_schema_extra": {

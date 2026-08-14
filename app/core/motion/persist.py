@@ -21,6 +21,7 @@ from app.core.v2.models import Event
 from app.utils.constants import (
     MOTION_DIRNAME,
     MOTION_METADATA_FILENAME,
+    MOTION_RUNNERS_SNAPSHOT_FILENAME,
     MOTION_SAMPLE_INTERVAL_SEC,
     MOTION_SAMPLES_FILENAME,
 )
@@ -83,6 +84,11 @@ def build_and_persist_motion_for_day(
     # Deterministic column order + row order already enforced in build.
     samples.to_parquet(samples_path, index=False, compression="zstd", compression_level=3)
 
+    snapshot_cols = [c for c in ("runner_id", "event", "pace", "start_offset") if c in runners_df.columns]
+    snapshot = runners_df.loc[:, snapshot_cols].copy()
+    snapshot_path = motion_dir / MOTION_RUNNERS_SNAPSHOT_FILENAME
+    snapshot.to_parquet(snapshot_path, index=False, compression="zstd", compression_level=3)
+
     meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     logger.info(
@@ -95,6 +101,7 @@ def build_and_persist_motion_for_day(
         "day": day_code,
         "samples_path": str(samples_path),
         "metadata_path": str(meta_path),
+        "runners_snapshot_path": str(snapshot_path),
         "row_count": metadata["row_count"],
         "event_counts": metadata["event_counts"],
     }

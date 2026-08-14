@@ -249,6 +249,9 @@ def generate_analysis_json(
     
     # Issue #635: Add enableAudit to analysis.json (always include, default "n")
     analysis_json["enableAudit"] = enableAudit
+
+    through = request_payload.get("through") or "full"
+    analysis_json["through"] = str(through).strip().lower()
     
     # Write to run directory
     analysis_json_path = run_path / "analysis.json"

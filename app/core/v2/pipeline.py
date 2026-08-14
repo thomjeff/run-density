@@ -17,6 +17,13 @@ import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import generate_day_timelines
+from app.core.v2.through import (
+    THROUGH_LOCATIONS,
+    THROUGH_TRAJECTORY,
+    normalize_through,
+    run_locations_report,
+    run_plan_engines,
+)
 from app.core.v2.density import (
     load_all_runners_for_events,
     analyze_density_segments_v2,
@@ -301,13 +308,14 @@ def _format_start_time(minutes_after_midnight: float) -> str:
 
 
 def _list_files_by_category(day_path: Path) -> Dict[str, List[str]]:
-    """Build file lists for reports/bins/maps/heatmaps/ui (day-scoped)."""
+    """Build file lists for reports/bins/maps/heatmaps/ui/motion (day-scoped)."""
     categories = {
         "reports": day_path / "reports",
         "bins": day_path / "bins",
         "maps": day_path / "maps",
         "ui": day_path / "ui",
         "heatmaps": day_path / "ui" / "visualizations",  # Issue #574: heatmaps now in visualizations/
+        "motion": day_path / "motion",
     }
     files_created: Dict[str, List[str]] = {}
     for cat, p in categories.items():
@@ -349,7 +357,7 @@ def _update_metadata_verification(day_path: Path, metadata: Dict[str, Any]) -> D
         Updated metadata dictionary with corrected verification
     """
     files_created = _list_files_by_category(day_path)
-    verification = _verify_outputs(files_created)
+    verification = _verify_outputs(files_created, through=metadata.get("through"))
     
     # Update metadata with new file lists and verification
     metadata["files_created"] = files_created
@@ -360,17 +368,37 @@ def _update_metadata_verification(day_path: Path, metadata: Dict[str, Any]) -> D
     return metadata
 
 
-def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
-    """Simple verification similar to v1 semantics."""
-    critical = [
-        ("reports", "Density.md"),
-        ("reports", "Flow.csv"),
-        # Issue #600: Flow.md removed from critical files (deprecated, only Flow.csv used)
-        ("reports", "Locations.csv"),
-        ("bins", "bins.parquet"),
-        ("ui", "metrics/segment_metrics.json"),  # Issue #574: Now in metrics/ subdirectory
-        ("ui", "geospatial/segments.geojson"),  # Issue #574: Now in geospatial/ subdirectory
-    ]
+def _verify_outputs(
+    files_created: Dict[str, List[str]],
+    through: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Simple verification similar to v1 semantics.
+
+    Staged ``through`` runs (#860) use a reduced critical set so trajectory /
+    locations-only analyses are not marked FAIL for skipped density/flow artifacts.
+    """
+    stage = normalize_through(through)
+    if stage == THROUGH_TRAJECTORY:
+        critical = [
+            ("motion", "samples.parquet"),
+            ("motion", "metadata.json"),
+        ]
+    elif stage == THROUGH_LOCATIONS:
+        critical = [
+            ("motion", "samples.parquet"),
+            ("motion", "metadata.json"),
+            ("reports", "Locations.csv"),
+        ]
+    else:
+        critical = [
+            ("reports", "Density.md"),
+            ("reports", "Flow.csv"),
+            # Issue #600: Flow.md removed from critical files (deprecated, only Flow.csv used)
+            ("reports", "Locations.csv"),
+            ("bins", "bins.parquet"),
+            ("ui", "metrics/segment_metrics.json"),  # Issue #574: Now in metrics/ subdirectory
+            ("ui", "geospatial/segments.geojson"),  # Issue #574: Now in geospatial/ subdirectory
+        ]
     missing_critical = []
     for cat, fname in critical:
         if fname not in files_created.get(cat, []):
@@ -540,7 +568,8 @@ def create_metadata_json(
     day_path: Path,
     participants_by_event: Dict[str, int],
     request_payload: Optional[Dict[str, Any]] = None,
-    response_payload: Optional[Dict[str, Any]] = None
+    response_payload: Optional[Dict[str, Any]] = None,
+    through: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create metadata.json for a specific day with v1 parity + v2 day/event details.
@@ -555,6 +584,7 @@ def create_metadata_json(
         participants_by_event: Dictionary mapping event names to participant counts
         request_payload: Optional full request payload (Issue #553)
         response_payload: Optional full response payload (Issue #553)
+        through: Staged pipeline stop-point (#860)
     """
     from app.utils.metadata import (
         get_app_version, get_git_sha,
@@ -562,7 +592,7 @@ def create_metadata_json(
     )
     
     files_created = _list_files_by_category(day_path)
-    verification = _verify_outputs(files_created)
+    verification = _verify_outputs(files_created, through=through)
     event_entries = {}
     for ev in events:
         name = ev.name.lower()
@@ -584,6 +614,7 @@ def create_metadata_json(
         "files_created": files_created,
         "file_counts": _file_counts(files_created),
         "output_verification": verification,
+        "through": normalize_through(through),
     }
     
     # Issue #553: Add request and response payloads if provided
@@ -701,7 +732,8 @@ def create_full_analysis_pipeline(
     run_id: Optional[str] = None,
     request_payload: Optional[Dict[str, Any]] = None,
     response_payload: Optional[Dict[str, Any]] = None,
-    enable_audit: str = 'n'
+    enable_audit: str = 'n',
+    through: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create day-partitioned directory structure and run full analysis (Phase 4 + 5).
@@ -764,6 +796,16 @@ def create_full_analysis_pipeline(
             f"analysis.json not found at {analysis_json_path}. "
             "analysis.json is required to resolve data file paths; default filenames are not supported."
         )
+
+    through_raw = through
+    if through_raw in (None, ""):
+        through_raw = (request_payload or {}).get("through")
+    if through_raw in (None, "") and isinstance(analysis_config, dict):
+        through_raw = analysis_config.get("through")
+    through = normalize_through(through_raw)
+    run_plan = run_plan_engines(through)
+    run_locations = run_locations_report(through)
+    logger.info("[Pipeline] through=%s (plan_engines=%s locations=%s)", through, run_plan, run_locations)
     
     # Issue #527: Set up run-level file logging
     from app.utils.run_logging import RunLogHandler
@@ -903,58 +945,68 @@ def create_full_analysis_pipeline(
         )
         
         # Phase 3: Density Computation
-        logger.info("[Phase 3] Processing density analysis...")
-        density_results = analyze_density_segments_v2(
-            events=events,
-            timelines=timelines,
-            segments_df=segments_df,
-            all_runners_df=all_runners_df,
-            density_csv_path=segments_path_str,
-            perf_monitor=perf_monitor
-        )
-        # Count segments processed per day
-        total_segments_processed = sum(
-            len(day_result.get("segments", [])) 
-            for day_result in density_results.values()
-        )
-        density_days = len(density_results)
-        logger.info(f"[Phase 3] Density analysis complete: {density_days} days, {total_segments_processed} segments")
-        
-        # Phase 4: Flow Computation
-        logger.info("[Phase 4] Processing flow analysis...")
-        # Issue #553 Phase 7.1: Use file path from analysis.json if available
-        if analysis_config:
-            flow_file_path = str(analysis_context.flow_csv_path)
-        else:
-            raise ValueError("analysis_config is required to resolve flow_file for v2 pipeline.")
-        flow_results = analyze_temporal_flow_segments_v2(
-            events=events,
-            timelines=timelines,
-            segments_df=segments_df,
-            all_runners_df=all_runners_df,
-            flow_file=flow_file_path,
-            data_dir=data_dir,
-            enable_audit=enable_audit,
-            run_id=run_id,
-            run_path=run_path,
-            perf_monitor=perf_monitor
-        )
-        flow_days = len(flow_results)
-        logger.info(f"[Phase 4] Flow analysis complete: {flow_days} days")
+        density_results = {}
+        flow_results = {}
+        junction_flow_results = {}
+        if run_plan:
+            logger.info("[Phase 3] Processing density analysis...")
+            density_results = analyze_density_segments_v2(
+                events=events,
+                timelines=timelines,
+                segments_df=segments_df,
+                all_runners_df=all_runners_df,
+                density_csv_path=segments_path_str,
+                perf_monitor=perf_monitor
+            )
+            # Count segments processed per day
+            total_segments_processed = sum(
+                len(day_result.get("segments", [])) 
+                for day_result in density_results.values()
+            )
+            density_days = len(density_results)
+            logger.info(f"[Phase 3] Density analysis complete: {density_days} days, {total_segments_processed} segments")
+            
+            # Phase 4: Flow Computation
+            logger.info("[Phase 4] Processing flow analysis...")
+            # Issue #553 Phase 7.1: Use file path from analysis.json if available
+            if analysis_config:
+                flow_file_path = str(analysis_context.flow_csv_path)
+            else:
+                raise ValueError("analysis_config is required to resolve flow_file for v2 pipeline.")
+            flow_results = analyze_temporal_flow_segments_v2(
+                events=events,
+                timelines=timelines,
+                segments_df=segments_df,
+                all_runners_df=all_runners_df,
+                flow_file=flow_file_path,
+                data_dir=data_dir,
+                enable_audit=enable_audit,
+                run_id=run_id,
+                run_path=run_path,
+                perf_monitor=perf_monitor
+            )
+            flow_days = len(flow_results)
+            logger.info(f"[Phase 4] Flow analysis complete: {flow_days} days")
 
-        # Phase 4.3: Junction Flow (Issue #818) — core path
-        logger.info("[Phase 4.3] Processing junction flow analysis...")
-        junction_flow_results = analyze_junction_flow_v2(
-            events=events,
-            events_by_day=events_by_day,
-            all_runners_df=all_runners_df,
-            data_dir=data_dir,
-            perf_monitor=perf_monitor,
-        )
-        logger.info(
-            "[Phase 4.3] Junction Flow complete: %s days",
-            len(junction_flow_results),
-        )
+            # Phase 4.3: Junction Flow (Issue #818) — core path
+            logger.info("[Phase 4.3] Processing junction flow analysis...")
+            junction_flow_results = analyze_junction_flow_v2(
+                events=events,
+                events_by_day=events_by_day,
+                all_runners_df=all_runners_df,
+                data_dir=data_dir,
+                perf_monitor=perf_monitor,
+            )
+            logger.info(
+                "[Phase 4.3] Junction Flow complete: %s days",
+                len(junction_flow_results),
+            )
+        else:
+            logger.info("[through=%s] Skipping density, flow, and junction compute", through)
+            if analysis_config:
+                flow_file_path = str(analysis_context.flow_csv_path)
+            else:
+                flow_file_path = flow_file
         
         # Phase 6.1: Persist Density Results
         density_persistence_metrics = perf_monitor.start_phase(
@@ -1087,7 +1139,6 @@ def create_full_analysis_pipeline(
             feature_count = None
             if bins_dir:
                 try:
-                    import pandas as pd
                     bins_parquet = Path(bins_dir) / "bins.parquet"
                     if bins_parquet.exists():
                         bins_df = pd.read_parquet(bins_parquet)
@@ -1128,16 +1179,19 @@ def create_full_analysis_pipeline(
         # Bins are required for Density.md reports and downstream analysis
         # This is a non-negotiable requirement - analysis cannot proceed without bins
         if not bins_by_day:
-            error_msg = (
-                "CRITICAL: No bins were generated for any day. "
-                "Bin generation is required for density analysis and report generation. "
-                "Analysis cannot proceed without bins.parquet files. "
-                "This is a hard failure - the analysis pipeline will now stop."
-            )
-            logger.error("=" * 80)
-            logger.error(error_msg)
-            logger.error("=" * 80)
-            raise RuntimeError(error_msg)
+            if not run_plan:
+                logger.info("[through=%s] Skipping bin validation (no density/flow engines)", through)
+            else:
+                error_msg = (
+                    "CRITICAL: No bins were generated for any day. "
+                    "Bin generation is required for density analysis and report generation. "
+                    "Analysis cannot proceed without bins.parquet files. "
+                    "This is a hard failure - the analysis pipeline will now stop."
+                )
+                logger.error("=" * 80)
+                logger.error(error_msg)
+                logger.error("=" * 80)
+                raise RuntimeError(error_msg)
         
         # Verify bins.parquet files actually exist (not just directories created)
         missing_bins = []
@@ -1169,7 +1223,8 @@ def create_full_analysis_pipeline(
         # Load locations DataFrame if locations_file is provided
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         locations_df = None
-        if locations_file:
+        locations_path_str = None
+        if run_locations and locations_file:
             if analysis_config:
                 if analysis_context.locations_csv_path is None:
                     raise ValueError("analysis_config is missing locations file configuration.")
@@ -1188,7 +1243,6 @@ def create_full_analysis_pipeline(
         # Phase 6.3: Persist Locations Results
         # Issue #591: Compute resources_available per day
         if locations_df is not None:
-            import pandas as pd
             from app.core.v2.bins import filter_segments_by_events
             
             locations_persistence_metrics = perf_monitor.start_phase(
@@ -1289,38 +1343,41 @@ def create_full_analysis_pipeline(
             )
 
         # Phase 6.4: Persist Junction Flow (computation + UI metrics + reports)
-        junction_persist_metrics = perf_monitor.start_phase(
-            "phase_6_4_persist_junction_flow",
-            phase_number="Phase 6.4",
-            phase_description="Persist Junction Flow Results",
-        )
         junction_files = []
-        for day, _day_events in events_by_day.items():
-            day_code = day.value
-            day_path = run_path / day_code
-            day_result = junction_flow_results.get(day) or {
-                "ok": True,
-                "method": {},
-                "junctions": [],
-            }
-            written = persist_junction_flow_day(
-                day_path=day_path,
-                day_code=day_code,
-                day_result=day_result,
+        if run_plan:
+            junction_persist_metrics = perf_monitor.start_phase(
+                "phase_6_4_persist_junction_flow",
+                phase_number="Phase 6.4",
+                phase_description="Persist Junction Flow Results",
             )
-            junction_files.extend(written.values())
-            logger.info(
-                "[Phase 6.4] Persisted junction flow for %s: %s",
-                day_code,
-                ", ".join(written.values()),
+            for day, _day_events in events_by_day.items():
+                day_code = day.value
+                day_path = run_path / day_code
+                day_result = junction_flow_results.get(day) or {
+                    "ok": True,
+                    "method": {},
+                    "junctions": [],
+                }
+                written = persist_junction_flow_day(
+                    day_path=day_path,
+                    day_code=day_code,
+                    day_result=day_result,
+                )
+                junction_files.extend(written.values())
+                logger.info(
+                    "[Phase 6.4] Persisted junction flow for %s: %s",
+                    day_code,
+                    ", ".join(written.values()),
+                )
+            junction_persist_metrics.finish(memory_mb=get_memory_usage_mb())
+            perf_monitor.complete_phase(
+                junction_persist_metrics,
+                phase_number="Phase 6.4",
+                phase_description="Persist Junction Flow Results",
+                summary_stats={"artifacts": len(junction_files)},
             )
-        junction_persist_metrics.finish(memory_mb=get_memory_usage_mb())
-        perf_monitor.complete_phase(
-            junction_persist_metrics,
-            phase_number="Phase 6.4",
-            phase_description="Persist Junction Flow Results",
-            summary_stats={"artifacts": len(junction_files)},
-        )
+        else:
+            logger.info("[through=%s] Skipping Phase 6.4 junction persist", through)
         
         # Phase 7: UI Artifacts Generation
         artifacts_metrics = perf_monitor.start_phase(
@@ -1331,7 +1388,9 @@ def create_full_analysis_pipeline(
         from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
         artifacts_by_day = {}
         artifacts_count = 0
-        for day, day_events in events_by_day.items():
+        if not run_plan:
+            logger.info("[through=%s] Skipping Phase 7 UI artifacts", through)
+        for day, day_events in (events_by_day if run_plan else {}).items():
             logger.info(f"[Phase 7] Processing day: {day.value}")
             try:
                 # Issue #673: Pass analysis_context to avoid redundant file I/O in generate_segments_geojson
@@ -1406,7 +1465,7 @@ def create_full_analysis_pipeline(
         
         # Calculate derived metrics per day
         derived_metrics_by_day = {}
-        for day, day_events in events_by_day.items():
+        for day, day_events in (events_by_day if run_plan else {}).items():
             day_code = day.value
             day_path = run_path / day_code
             ui_path = day_path / "ui"
@@ -1629,7 +1688,8 @@ def create_full_analysis_pipeline(
                 day_path=day_path,
                 participants_by_event=participants_by_event,
                 request_payload=request_payload,
-                response_payload=response_payload
+                response_payload=response_payload,
+                through=through,
             )
             metadata["density"] = density_summary[day_code]
             metadata["flow"] = flow_summary_by_day[day_code]
@@ -1734,7 +1794,6 @@ def create_full_analysis_pipeline(
                 locations_json_path = computation_dir / "locations_results.json"
                 if locations_json_path.exists():
                     try:
-                        import pandas as pd
                         locations_data = json.loads(locations_json_path.read_text())
                         locations_df_from_json = pd.DataFrame(locations_data.get("locations", []))
                         logger.debug(f"Loaded locations_results.json for {day_code} from {locations_json_path}")
@@ -1768,19 +1827,24 @@ def create_full_analysis_pipeline(
         # Note: Reports have access to RES data in metadata.json (calculated in Phase 8)
         # TODO: Full refactor to load from JSON only (remove in-memory fallback in future)
         try:
-            reports_by_day = generate_reports_per_day(
-                run_id=run_id,
-                events=events,
-                timelines=timelines,
-                density_results=density_results,  # Issue #600: Still using in-memory for now (will be removed when Density fully refactored)
-                segments_df=segments_df,
-                all_runners_df=all_runners_df,
-                data_dir=data_dir,
-                segments_file_path=segments_file_path,
-                flow_file_path=flow_file_path,
-                locations_file_path=locations_file_path,
-                gpx_paths=gpx_paths
-            )
+            reports_by_day = {}
+            if through == THROUGH_TRAJECTORY:
+                logger.info("[through=trajectory] Skipping Phase 10 report generation")
+            else:
+                reports_by_day = generate_reports_per_day(
+                    run_id=run_id,
+                    events=events,
+                    timelines=timelines,
+                    density_results=density_results,  # Issue #600: Still using in-memory for now (will be removed when Density fully refactored)
+                    segments_df=segments_df,
+                    all_runners_df=all_runners_df,
+                    data_dir=data_dir,
+                    segments_file_path=segments_file_path,
+                    flow_file_path=flow_file_path,
+                    locations_file_path=locations_file_path,
+                    gpx_paths=gpx_paths,
+                    report_kinds=("locations",) if through == THROUGH_LOCATIONS else None,
+                )
             
             # Count reports generated
             report_counts = {"Density.md": 0, "Flow.csv": 0, "Locations.csv": 0}
@@ -1804,7 +1868,9 @@ def create_full_analysis_pipeline(
 
             # Generate bidirectional overlap reports (Issue #720)
             overlaps_by_day = {}
-            for day, day_events in events_by_day.items():
+            if not run_plan:
+                logger.info("[through=%s] Skipping overlap reports and finish-area PDFs", through)
+            for day, day_events in (events_by_day if run_plan else {}).items():
                 day_code = day.value
                 day_path = run_path / day_code
                 reports_path = day_path / "reports"
@@ -1871,9 +1937,10 @@ def create_full_analysis_pipeline(
             try:
                 from app.core.flow.segment_summary import write_segment_flow_summary
 
-                for day_code in events_by_day:
-                    code = day_code.value if hasattr(day_code, "value") else str(day_code)
-                    write_segment_flow_summary(run_path / code, code)
+                if run_plan:
+                    for day_code in events_by_day:
+                        code = day_code.value if hasattr(day_code, "value") else str(day_code)
+                        write_segment_flow_summary(run_path / code, code)
             except Exception as exc:
                 logger.warning("Could not refresh flow_segments_by_seg.json after overlaps: %s", exc)
 
@@ -1916,6 +1983,7 @@ def create_full_analysis_pipeline(
         )
         combined_metadata["density"] = density_summary
         combined_metadata["flow"] = flow_summary_by_day
+        combined_metadata["through"] = through
         
         # Issue #503: Add performance metrics to metadata
         perf_monitor.total_memory_mb = get_memory_usage_mb()
@@ -1983,7 +2051,8 @@ def create_full_analysis_pipeline(
         "density_results": density_results,
         "density_summary": density_summary,
         "flow_results": flow_results,
-        "reports_by_day": reports_by_day
+        "reports_by_day": reports_by_day,
+        "through": through,
     }
 
 
