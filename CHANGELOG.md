@@ -2,15 +2,55 @@
 
 ## [Unreleased]
 
-### Issue #825 — Overview analysis progress
-- Race-director **Preparing your results** card on Overview while a run is in flight
-- Coarse user stages mapped from pipeline phases (no Phase 3.2 / log console in the default UI)
-- `progress.json` + `GET /api/runs/{run_id}/progress` polled from Overview
+## [v2.1.0] - 2026-08-15
 
-### Issue #819 — Junctions authoring UX
-- Draggable junction pins; segment start/end markers (green within proximity)
-- Stream interaction map annotations, connector arcs, editable descriptions
-- Default nearby proximity raised to **20 m** (`JUNCTION_SEGMENT_PROXIMITY_M`)
+Last **v2.x** product release. Next major line is **v3.0** (#862 Density & Flow on the trajectory layer). Race-day Execute (clearance / clock, #863 / #832 / #830) is parked for v3 and is **not** in this tag.
+
+### Summary
+- **Motion clock** persisted for every analysis run; Results **Motion** occupancy, Stream Passage, and movement drill-down (#850 / #855 / #856)
+- **Locations timings** consume the trajectory layer, with staged analysis (#859)
+- **Flow** Results default to segment-first mix matrices (#845–#848)
+- **Results / Build** exclusive workspace chrome, one-day analysis, Overview in-flight progress
+- Build Locations / Legs UX (per-event timings, zone filters, move-between-legs)
+
+### Motion (#850, #855, #856)
+- Always-on motion series artifacts for analysis runs (Child A)
+- Place occupancy API + Results Motion page (Child B)
+- Stream Passage tables and visit summary (#855)
+- Movement drill-down with quintile matrices (#856)
+
+### Trajectory Locations (#859)
+- Locations first/peak/last (and related report surfaces) read the trajectory layer
+- Staged analysis so later phases reuse that layer instead of a second position rebuild for Locations
+
+### Flow (#845–#848)
+- Segment-first parent preview and mix matrices replace the old parent chart / pair-row default
+- Segment-first Flow is the default Results view (#848)
+
+### Results / Build chrome
+- **#842** Results/Build workspace selector; drop Active-run strip; Package on Results nav
+- **#841** One-day analysis: day from the run, no day dropdown
+- **#825** Overview **Preparing your results** progress (`progress.json` + poll); keep the poll responsive during heavy phases (#827)
+- Junctions Results Street/Satellite maps; co-presence copy clarified
+
+### Locations / Legs authoring
+- **#828** Per-event first/peak/last timings across Locations surfaces
+- **#834** Legs location table Zone column, filters, move location between legs
+- **#836** Location zone from Legs/Courses on Build race exports
+- **#838** Locations zone map filter; unique human `loc_id`
+
+### Junctions authoring (#819)
+- Draggable pins; segment start/end markers; stream interaction annotations, connector arcs, editable descriptions
+- Default nearby proximity **20 m** (`JUNCTION_SEGMENT_PROXIMITY_M`)
+
+### Fixes
+- Recipe re-apply no longer restores stale per-event segment km
+- Package merge no longer keeps stale traffic `proxy_loc_id` self-refs
+
+### Not in this release
+- **#832 / #830 / #863** Clearance model and race-day clock — parked for v3 (`feat/832-clearance-model`, `feat/830-execute-clock`); #866 reverted from `main` in #867
+- **#852** Cross-file `runner_id` uniqueness on package upload — still open
+- **#862** Density / Flow substrate on trajectory — v3.0
 
 ## [v2.0.12] - 2026-08-01
 

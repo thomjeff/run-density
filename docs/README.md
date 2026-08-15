@@ -1,7 +1,7 @@
 # Run-Density Documentation
 
-**Version:** v2.0.12  
-**Last Updated:** 2026-06-10  
+**Version:** v2.1.0  
+**Last Updated:** 2026-08-15  
 **Architecture:** Local-only, UUID-based runflow structure, API-driven configuration where all analysis parameters are provided via API. 
 
 This documentation is organized by audience and topic for easy navigation.
