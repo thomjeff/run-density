@@ -522,6 +522,18 @@ def analyze_temporal_flow_segments_v2(
         day_events_unique = list({event.name: event for event in day_events}.values())
         day_runners_df = filter_runners_by_day(all_runners_df, day, day_events_unique)
         
+        if run_path is not None:
+            from app.core.trajectory.layer import snapshot_to_runners_df, try_load_day_layer
+
+            layer = try_load_day_layer(Path(run_path) / day.value)
+            if layer is not None:
+                day_runners_df = snapshot_to_runners_df(layer, fallback=day_runners_df)
+                logger.info(
+                    "Day %s: Flow cache from trajectory snapshot (%s runners)",
+                    day.value,
+                    len(day_runners_df),
+                )
+        
         if day_runners_df.empty:
             logger.warning(f"No runners found for day {day.value}, skipping flow analysis")
             results_by_day[day] = {

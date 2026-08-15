@@ -263,7 +263,8 @@ def analyze_density_segments_v2(
     all_runners_df: pd.DataFrame,
     density_csv_path: str,
     config: Optional[DensityConfig] = None,
-    perf_monitor: Optional["PerformanceMonitor"] = None
+    perf_monitor: Optional["PerformanceMonitor"] = None,
+    run_path: Optional[Path] = None,
 ) -> Dict[Day, Dict[str, Any]]:
     """
     Analyze density for all segments using v2 Event objects and day-scoped data.
@@ -388,6 +389,18 @@ def analyze_density_segments_v2(
             start_times[event.name.lower()] = start_datetime
         
         logger.info(f"Day {day.value}: Analyzing {len(day_runners_df)} runners with start_times: {[(k, v.strftime('%H:%M')) for k, v in start_times.items()]}")
+
+        layer = None
+        if run_path is not None:
+            from app.core.trajectory.layer import try_load_day_layer
+
+            layer = try_load_day_layer(Path(run_path) / day.value)
+            if layer is not None:
+                logger.info(
+                    "Day %s: Density presence from trajectory samples (%s rows)",
+                    day.value,
+                    len(layer.samples),
+                )
         
         # Call v1 analyze_density_segments() function
         # This function expects:
@@ -399,7 +412,9 @@ def analyze_density_segments_v2(
                 pace_data=day_runners_df,
                 start_times=start_times,
                 config=config,
-                density_csv_path=density_csv_path
+                density_csv_path=density_csv_path,
+                samples_df=layer.samples if layer is not None else None,
+                snapshot_df=layer.snapshot if layer is not None else None,
             )
             
             # Add day and events metadata to results

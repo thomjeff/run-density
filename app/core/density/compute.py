@@ -318,10 +318,21 @@ class DensityAnalyzer:
     and is completely independent of temporal flow calculations.
     """
     
-    def __init__(self, config: DensityConfig = None, width_provider: WidthProvider = None):
+    def __init__(
+        self,
+        config: DensityConfig = None,
+        width_provider: WidthProvider = None,
+        samples_df: pd.DataFrame = None,
+        snapshot_df: pd.DataFrame = None,
+    ):
         """Initialize the density analyzer with configuration."""
         self.config = config or DensityConfig()
         self.width_provider = width_provider
+        self.presence = None
+        if samples_df is not None and not samples_df.empty:
+            from app.core.trajectory.presence import TrajectoryPresence
+
+            self.presence = TrajectoryPresence.from_samples(samples_df, snapshot_df)
         # Updated LOS thresholds based on active-window density analysis
         # These thresholds are calibrated to the actual density ranges observed
         # in the race data with active window filtering applied
@@ -389,10 +400,37 @@ class DensityAnalyzer:
             Number of unique concurrent runners in the segment
         """
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
-        
-        # Filter runners to the density scope
+
         if not segment.events:
             return 0
+
+        intervals = []
+        if density_cfg:
+            for event in segment.events:
+                interval = get_event_intervals(event, density_cfg)
+                if interval:
+                    intervals.append(interval)
+        if not intervals:
+            return 0
+        intervals.sort()
+        merged_intervals = []
+        for start, end in intervals:
+            if not merged_intervals or merged_intervals[-1][1] < start:
+                merged_intervals.append((start, end))
+            else:
+                merged_intervals[-1] = (
+                    merged_intervals[-1][0],
+                    max(merged_intervals[-1][1], end),
+                )
+
+        if self.presence is not None:
+            from app.core.trajectory.presence import datetime_midnight_sec
+
+            t0 = datetime_midnight_sec(time_bin_start)
+            t1 = t0 + float(self.config.bin_seconds)
+            return self.presence.count_unique(t0, t1, list(segment.events), merged_intervals)
+
+        # Filter runners to the density scope
         filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
         
         if filtered_pace_data.empty:
@@ -437,27 +475,6 @@ class DensityAnalyzer:
         # Calculate positions for started runners
         positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
         positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
-        
-        # Build union of intervals for all events in this segment
-        intervals = []
-        if density_cfg:
-            for event in segment.events:
-                interval = get_event_intervals(event, density_cfg)
-                if interval:
-                    intervals.append(interval)
-        
-        if not intervals:
-            return 0
-        
-        # Merge overlapping intervals
-        intervals.sort()
-        merged_intervals = []
-        for start, end in intervals:
-            if not merged_intervals or merged_intervals[-1][1] < start:
-                merged_intervals.append((start, end))
-            else:
-                # Merge with previous interval
-                merged_intervals[-1] = (merged_intervals[-1][0], max(merged_intervals[-1][1], end))
         
         # Check runner presence in any of the merged intervals
         in_any_interval = np.zeros(len(positions_start_km), dtype=bool)
@@ -650,6 +667,15 @@ class DensityAnalyzer:
         Calculate experienced concurrency for a target event (includes all co-present runners).
         """
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+
+        if self.presence is not None:
+            from app.core.trajectory.presence import datetime_midnight_sec
+
+            t0 = datetime_midnight_sec(time_bin_start)
+            t1 = t0 + float(self.config.bin_seconds)
+            return self.presence.count_unique(
+                t0, t1, list(segment.events), list(distance_bins)
+            )
         
         # Filter to all events in this segment
         filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
@@ -711,6 +737,15 @@ class DensityAnalyzer:
         Calculate self concurrency for a target event (only that event's runners).
         """
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+
+        if self.presence is not None:
+            from app.core.trajectory.presence import datetime_midnight_sec
+
+            t0 = datetime_midnight_sec(time_bin_start)
+            t1 = t0 + float(self.config.bin_seconds)
+            return self.presence.count_unique(
+                t0, t1, [target_event], list(distance_bins)
+            )
         
         # Filter to target event only
         event_pace_data = pace_data[pace_data["event"] == target_event]
@@ -876,6 +911,21 @@ class DensityAnalyzer:
         if not segment.events:
             logging.debug(f"Segment {segment.segment_id}: No events configured, returning 0 runners")
             return 0
+
+        if self.presence is not None:
+            from app.core.trajectory.presence import datetime_midnight_sec
+
+            intervals = []
+            if density_cfg:
+                for event in segment.events:
+                    interval = get_event_intervals(event, density_cfg)
+                    if interval:
+                        intervals.append(interval)
+            if not intervals:
+                return 0
+            t0 = datetime_midnight_sec(time_bin_start)
+            t1 = t0 + float(self.config.bin_seconds)
+            return self.presence.count_unique(t0, t1, list(segment.events), intervals)
         
         # #region agent log - CRITICAL: Debug event name matching regression (ALL segments)
         import json
@@ -1754,7 +1804,9 @@ class DensityAnalyzer:
 def analyze_density_segments(pace_data: pd.DataFrame,
                              start_times: Dict[str, datetime],
                              config: DensityConfig = None,
-                             density_csv_path: str = "data/segments_new.csv") -> Dict[str, Any]:
+                             density_csv_path: str = "data/segments_new.csv",
+                             samples_df: pd.DataFrame = None,
+                             snapshot_df: pd.DataFrame = None) -> Dict[str, Any]:
     """
     Analyze density for all segments using segments_new.csv configuration.
     
@@ -1768,7 +1820,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         Dictionary with density analysis results
     """
     config = config or DensityConfig()
-    analyzer = DensityAnalyzer(config, None)  # No width provider needed - using density.csv
+    analyzer = DensityAnalyzer(config, None, samples_df=samples_df, snapshot_df=snapshot_df)
     
     # Load density configuration
     density_cfg = load_density_cfg(density_csv_path)

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #862 — Density & Flow on the trajectory layer (v3.0 in progress)
+- Density concurrency and bin windows read Phase 2.5 `samples.parquet` (no per-engine position rebuild from `*_runners.csv`)
+- Flow `SegmentFlowCache` is filled from `runners_snapshot.parquet`; overtake / co-presence algorithms unchanged
+- Snapshot now includes `distance` so Flow’s reach-the-zone filter stays identical
+- Parity vs v2.1.0 golden `7Te3perYQVabto9n9caJqk` (FM2027 10K River Trail): **Flow.csv** and **Locations.csv** exact; bins density correlation ~0.98 (5s sample grid vs continuous km). Density *peak concurrency* in `density_results.json` drops vs v2.1.0 because the old engine treated `pace` as km/h (`/3600`) instead of min/km.
+
 ## [v2.1.0] - 2026-08-15
 
 Last **v2.x** product release. Next major line is **v3.0** (#862 Density & Flow on the trajectory layer). Race-day Execute (clearance / clock, #863 / #832 / #830) is parked for v3 and is **not** in this tag.

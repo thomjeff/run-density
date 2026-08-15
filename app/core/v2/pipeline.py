@@ -956,7 +956,8 @@ def create_full_analysis_pipeline(
                 segments_df=segments_df,
                 all_runners_df=all_runners_df,
                 density_csv_path=segments_path_str,
-                perf_monitor=perf_monitor
+                perf_monitor=perf_monitor,
+                run_path=run_path,
             )
             # Count segments processed per day
             total_segments_processed = sum(
