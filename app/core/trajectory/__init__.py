@@ -5,6 +5,12 @@ Locations first/last at a course point uses the same crossing math.
 """
 
 from app.core.trajectory.crossing import arrival_at_km, runner_start_sec
-from app.core.trajectory.layer import TrajectoryLayer, try_load_day_layer
+from app.core.trajectory.layer import TrajectoryLayer, try_load_day_layer, try_load_day_snapshot
 
-__all__ = ["arrival_at_km", "runner_start_sec", "TrajectoryLayer", "try_load_day_layer"]
+__all__ = [
+    "arrival_at_km",
+    "runner_start_sec",
+    "TrajectoryLayer",
+    "try_load_day_layer",
+    "try_load_day_snapshot",
+]

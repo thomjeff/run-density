@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Issue #869 — Density / bins on the snapshot clock
+- Density concurrency and bin windows evaluate closed-form `km(t)` on `runners_snapshot.parquet` (~N runners) instead of slicing the 5s `samples.parquet` grid per segment × window
+- Same min/km trajectory formula as #862 (do not restore the km/h `/3600` bug)
+- Flow loads the snapshot only; it no longer reads `samples.parquet`
+
 ### Issue #862 — Density & Flow on the trajectory layer (v3.0 in progress)
-- Density concurrency and bin windows read Phase 2.5 `samples.parquet` (no per-engine position rebuild from `*_runners.csv`)
+- Density concurrency and bin windows originally read Phase 2.5 `samples.parquet` (superseded for those engines by #869)
 - Flow `SegmentFlowCache` is filled from `runners_snapshot.parquet`; overtake / co-presence algorithms unchanged
 - Snapshot now includes `distance` so Flow’s reach-the-zone filter stays identical
 - Parity vs v2.1.0 golden `7Te3perYQVabto9n9caJqk` (FM2027 10K River Trail): **Flow.csv** and **Locations.csv** exact; bins density correlation ~0.98 (5s sample grid vs continuous km). Density *peak concurrency* in `density_results.json` drops vs v2.1.0 because the old engine treated `pace` as km/h (`/3600`) instead of min/km.

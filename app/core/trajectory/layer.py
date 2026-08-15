@@ -1,4 +1,4 @@
-"""Load persisted trajectory-layer artifacts for Density / Flow (#862)."""
+"""Load persisted trajectory-layer artifacts for Density / Flow (#862 / #869)."""
 
 from __future__ import annotations
 
@@ -31,6 +31,14 @@ def motion_dir(day_path: Path) -> Path:
     return Path(day_path) / MOTION_DIRNAME
 
 
+def try_load_day_snapshot(day_path: Path) -> Optional[pd.DataFrame]:
+    """Load ``runners_snapshot.parquet`` only (no 5s sample grid)."""
+    snapshot_path = motion_dir(day_path) / MOTION_RUNNERS_SNAPSHOT_FILENAME
+    if not snapshot_path.is_file():
+        return None
+    return pd.read_parquet(snapshot_path)
+
+
 def try_load_day_layer(day_path: Path) -> Optional[TrajectoryLayer]:
     """Return the layer if parquet artifacts exist; otherwise None."""
     root = motion_dir(day_path)
@@ -53,12 +61,15 @@ def try_load_day_layer(day_path: Path) -> Optional[TrajectoryLayer]:
 
 
 def snapshot_to_runners_df(
-    layer: TrajectoryLayer,
+    layer_or_snapshot: "TrajectoryLayer | pd.DataFrame",
     *,
     fallback: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """Pace-table shape used by Flow (`event`, `runner_id`, `pace`, `distance`, `start_offset`)."""
-    snap = layer.snapshot.copy()
+    if isinstance(layer_or_snapshot, pd.DataFrame):
+        snap = layer_or_snapshot.copy()
+    else:
+        snap = layer_or_snapshot.snapshot.copy()
     if "event" in snap.columns:
         snap["event"] = snap["event"].astype(str).str.lower()
     if "runner_id" in snap.columns:
