@@ -3171,17 +3171,17 @@ def build_runner_window_mapping(
     if run_path is not None and day_code:
         from pathlib import Path
 
-        from app.core.trajectory.layer import try_load_day_layer
+        from app.core.trajectory.layer import try_load_day_snapshot
         from app.core.trajectory.presence import TrajectoryPresence, fill_mapping_from_samples
 
-        layer = try_load_day_layer(Path(run_path) / str(day_code))
-        if layer is not None and not layer.samples.empty:
+        snapshot_df = try_load_day_snapshot(Path(run_path) / str(day_code))
+        if snapshot_df is not None and not snapshot_df.empty:
             logger.info(
-                "Building bin runner mapping from trajectory samples (%s rows) for day %s",
-                len(layer.samples),
+                "Building bin runner mapping from trajectory snapshot (%s runners) for day %s",
+                len(snapshot_df),
                 day_code,
             )
-            presence = TrajectoryPresence.from_samples(layer.samples, layer.snapshot)
+            presence = TrajectoryPresence.from_snapshot(snapshot_df, start_times)
             return fill_mapping_from_samples(
                 presence,
                 segments_dict=segments_dict,

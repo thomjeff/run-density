@@ -324,12 +324,17 @@ class DensityAnalyzer:
         width_provider: WidthProvider = None,
         samples_df: pd.DataFrame = None,
         snapshot_df: pd.DataFrame = None,
+        start_times: Dict[str, datetime] = None,
     ):
         """Initialize the density analyzer with configuration."""
         self.config = config or DensityConfig()
         self.width_provider = width_provider
         self.presence = None
-        if samples_df is not None and not samples_df.empty:
+        if snapshot_df is not None and not snapshot_df.empty and start_times:
+            from app.core.trajectory.presence import TrajectoryPresence
+
+            self.presence = TrajectoryPresence.from_snapshot(snapshot_df, start_times)
+        elif samples_df is not None and not samples_df.empty:
             from app.core.trajectory.presence import TrajectoryPresence
 
             self.presence = TrajectoryPresence.from_samples(samples_df, snapshot_df)
@@ -1820,7 +1825,13 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         Dictionary with density analysis results
     """
     config = config or DensityConfig()
-    analyzer = DensityAnalyzer(config, None, samples_df=samples_df, snapshot_df=snapshot_df)
+    analyzer = DensityAnalyzer(
+        config,
+        None,
+        samples_df=samples_df,
+        snapshot_df=snapshot_df,
+        start_times=start_times,
+    )
     
     # Load density configuration
     density_cfg = load_density_cfg(density_csv_path)

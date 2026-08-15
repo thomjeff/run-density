@@ -390,16 +390,16 @@ def analyze_density_segments_v2(
         
         logger.info(f"Day {day.value}: Analyzing {len(day_runners_df)} runners with start_times: {[(k, v.strftime('%H:%M')) for k, v in start_times.items()]}")
 
-        layer = None
+        snapshot_df = None
         if run_path is not None:
-            from app.core.trajectory.layer import try_load_day_layer
+            from app.core.trajectory.layer import try_load_day_snapshot
 
-            layer = try_load_day_layer(Path(run_path) / day.value)
-            if layer is not None:
+            snapshot_df = try_load_day_snapshot(Path(run_path) / day.value)
+            if snapshot_df is not None:
                 logger.info(
-                    "Day %s: Density presence from trajectory samples (%s rows)",
+                    "Day %s: Density presence from trajectory snapshot (%s runners)",
                     day.value,
-                    len(layer.samples),
+                    len(snapshot_df),
                 )
         
         # Call v1 analyze_density_segments() function
@@ -413,8 +413,7 @@ def analyze_density_segments_v2(
                 start_times=start_times,
                 config=config,
                 density_csv_path=density_csv_path,
-                samples_df=layer.samples if layer is not None else None,
-                snapshot_df=layer.snapshot if layer is not None else None,
+                snapshot_df=snapshot_df,
             )
             
             # Add day and events metadata to results
