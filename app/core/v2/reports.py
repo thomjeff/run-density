@@ -331,11 +331,9 @@ def generate_reports_per_day(
                         day_report_paths["locations"] = str(locations_path)
                         logger.info(f"Successfully generated locations report for day {day.value}")
 
-                        # Issue #702: Generate one-pager PDFs for locations flagged onepage='y'
+                        # Issue #702 / #871: HTML one-pagers for locations flagged onepage='y'
                         try:
                             from app.one_pager import generate_location_onepagers
-                            maps_dir = get_day_output_path(run_id, day, "maps")
-                            maps_dir.mkdir(parents=True, exist_ok=True)
                             loc_sheets_dir = reports_path / "loc_sheets"
                             loc_sheets_dir.mkdir(parents=True, exist_ok=True)
                             generated = generate_location_onepagers(
@@ -343,11 +341,10 @@ def generate_reports_per_day(
                                 day=day.value,
                                 locations_results_json_path=locations_results_json_path,
                                 locations_report_csv_path=locations_path,
-                                maps_dir=maps_dir,
                                 output_dir=loc_sheets_dir,
                             )
                             logger.info(
-                                f"Issue #702: Generated {generated} one-pagers for day {day.value}"
+                                f"Issue #702/#871: Generated {generated} HTML one-pagers for day {day.value}"
                             )
                         except Exception as e:
                             logger.warning(

@@ -129,9 +129,15 @@
 
 <!-- Locations Table -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Course Resource Timing</h3>
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">Course Resource Timing</h3>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="export-loc-sheets-btn">
+            Export location sheets
+        </button>
+    </div>
     <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
         Operational timing windows for fixed point locations on the course (traffic control points, water stops, turnarounds).
+        Export downloads the HTML sheets already produced by analysis (onepage='y') — no PDF rebuild.
     </p>
     
     <!-- Filter Controls (Issue #483) -->
@@ -1173,6 +1179,19 @@
         const day = ((window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '').toLowerCase().trim();
         const run_id = ((new URLSearchParams(window.location.search).get('run_id')) || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '').trim();
         return { day, run_id };
+    }
+
+    const exportSheetsBtn = document.getElementById('export-loc-sheets-btn');
+    if (exportSheetsBtn) {
+        exportSheetsBtn.addEventListener('click', function () {
+            const { day, run_id } = getRunDayForLocSheets();
+            if (!run_id || !day) {
+                window.alert('Select a run and day first.');
+                return;
+            }
+            const url = `/api/locations/sheets.zip?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+            window.location.href = url;
+        });
     }
 
     /**

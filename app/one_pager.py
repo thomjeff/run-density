@@ -1,56 +1,25 @@
 """
-One-pager generator for location summaries (Issue #702, #735).
+HTML location one-pagers (Issue #702 / #735 / #871).
 
-Creates a PDF and an HTML page per location flagged onepage='y' using:
-- locations_results.json (static fields: label/type/GPS/equipment/contact/notes)
-- Locations.csv report (timings aligned with UI)
-
-Issue #735: PDFs under loc_sheets/pdf/; HTML under loc_sheets/html/{loc_id}.html.
+Analysis writes volunteer HTML only under loc_sheets/html/{loc_id}.html.
+PDFs and in-run map-tile stitching are not part of the pipeline; Results
+Locations can zip the existing HTML when the user asks.
 """
 
 from __future__ import annotations
 
-import base64
 import html
-import io
 import json
 import logging
 import math
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-import requests
-from PIL import Image, ImageDraw, ImageFont
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfgen import canvas
 
-from app.utils.constants import (
-    LOCATION_MAP_RADIUS_M,
-    LOCATION_MAP_TILE_URL,
-    LOCATION_MAP_TILE_SUBDOMAINS,
-)
+from app.utils.constants import LOCATION_MAP_TILE_URL
 
 logger = logging.getLogger(__name__)
-
-# Map tile configuration (matches Leaflet Carto Light)
-_TILE_SUBDOMAINS = LOCATION_MAP_TILE_SUBDOMAINS
-_TILE_URL = LOCATION_MAP_TILE_URL
-_TILE_SIZE = 256
-
-# Output sizing
-_MAP_SIZE = (640, 360)  # px (width, height)
-_PAGE_SIZE = letter
-_MARGIN = 0.5 * inch
-_SECTION_GAP = 10
-
-# Map radius guideline (not strict)
-_DEFAULT_RADIUS_M = LOCATION_MAP_RADIUS_M
 
 
 def generate_location_onepagers(
@@ -58,16 +27,18 @@ def generate_location_onepagers(
     day: str,
     locations_results_json_path: Path,
     locations_report_csv_path: Path,
-    maps_dir: Path,
     output_dir: Path,
-    radius_m: float = _DEFAULT_RADIUS_M
+    maps_dir: Optional[Path] = None,
+    radius_m: float = 0.0,
 ) -> int:
     """
-    Generate one-pager PDFs for locations flagged onepage='y'.
+    Generate HTML one-pagers for locations flagged onepage='y'.
 
     Issue #810: paired reverse-leg locations (shared location_key) produce one
     sheet with Outbound + Return runner timings. HTML is written for each
     loc_id in the group so existing /locsheets/.../{loc_id} URLs keep working.
+
+    ``maps_dir`` / ``radius_m`` are unused (#871); kept so older callers do not break.
 
     Returns:
         Number of Location sheets generated (paired counts as one).
@@ -93,11 +64,8 @@ def generate_location_onepagers(
         )
         return 0
 
-    maps_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    pdf_dir = output_dir / "pdf"
     html_dir = output_dir / "html"
-    pdf_dir.mkdir(parents=True, exist_ok=True)
     html_dir.mkdir(parents=True, exist_ok=True)
 
     # Keys / ids that should emit a sheet (any pass with onepage=y)
@@ -186,31 +154,10 @@ def generate_location_onepagers(
         location = spec["location"]
         report_row = spec["report_row"]
         loc_id = spec["sheet_loc_id"]
-        map_path = _build_map_path(maps_dir, location)
-        try:
-            _create_map_snapshot(location, map_path, radius_m=radius_m)
-        except Exception as exc:
-            logger.warning(
-                f"Issue #702: Map snapshot failed for loc_id={loc_id}: {exc}. "
-                "Using placeholder image."
-            )
-            _write_map_placeholder(map_path)
-
-        pdf_path = _build_pdf_path(pdf_dir, location)
-        _render_onepager_pdf(
-            location,
-            report_row,
-            map_path,
-            pdf_path,
-            day=day,
-            passes=spec["passes"] if spec["paired"] else None,
-        )
-        # One HTML per human Location id (volunteer-facing)
         html_path = html_dir / f"{loc_id}.html"
         _render_onepager_html(
             location,
             report_row,
-            map_path,
             html_path,
             day=day,
             passes=spec["passes"] if spec["paired"] else None,
@@ -218,7 +165,12 @@ def generate_location_onepagers(
         )
         count += 1
 
-    logger.info(f"Issue #702/#735: Generated {count} one-pagers (PDF + HTML) for day {day}")
+    logger.info(
+        "Issue #702/#735/#871: Generated %s HTML one-pagers for day %s (run %s)",
+        count,
+        day,
+        run_id,
+    )
     return count
 
 
@@ -347,346 +299,15 @@ def _is_onepager_location(location: Dict[str, Any], day: str) -> bool:
     return onepage_flag == "y"
 
 
-def _build_map_path(maps_dir: Path, location: Dict[str, Any]) -> Path:
-    loc_id = location.get("loc_id", "unknown")
-    label = location.get("loc_label", "")
-    name = _slugify(f"{loc_id}-{label}") or f"{loc_id}"
-    return maps_dir / f"{name}.png"
-
-
-def _build_pdf_path(output_dir: Path, location: Dict[str, Any]) -> Path:
-    loc_id = location.get("loc_id", "unknown")
-    label = location.get("loc_label", "")
-    name = _slugify(f"{loc_id}-{label}") or f"{loc_id}"
-    return output_dir / f"{name}.pdf"
-
-
-def _create_map_snapshot(
-    location: Dict[str, Any],
-    output_path: Path,
-    radius_m: float
-) -> None:
-    lat = location.get("lat")
-    lon = location.get("lon")
-    if lat is None or lon is None or pd.isna(lat) or pd.isna(lon):
-        raise ValueError("Missing lat/lon for map snapshot")
-
-    zoom = _estimate_zoom(lat, radius_m, _MAP_SIZE[0])
-    img = _render_map_tiles(lat, lon, zoom, _MAP_SIZE)
-    _draw_map_pin(img)
-    img.save(output_path, format="PNG")
-
-
-def _estimate_zoom(lat: float, radius_m: float, width_px: int) -> int:
-    meters_per_pixel = max((radius_m * 2) / float(width_px), 1.0)
-    zoom = math.log2(
-        (156543.03392 * math.cos(math.radians(lat))) / meters_per_pixel
-    )
-    zoom_int = int(max(12, min(18, round(zoom))))
-    return zoom_int
-
-
-def _render_map_tiles(lat: float, lon: float, zoom: int, size: Tuple[int, int]) -> Image.Image:
-    width_px, height_px = size
-    center_x, center_y = _latlon_to_pixels(lat, lon, zoom)
-    top_left_x = center_x - width_px / 2
-    top_left_y = center_y - height_px / 2
-
-    x_start = int(math.floor(top_left_x / _TILE_SIZE))
-    y_start = int(math.floor(top_left_y / _TILE_SIZE))
-    x_end = int(math.floor((top_left_x + width_px) / _TILE_SIZE))
-    y_end = int(math.floor((top_left_y + height_px) / _TILE_SIZE))
-
-    tile_cols = x_end - x_start + 1
-    tile_rows = y_end - y_start + 1
-    canvas = Image.new("RGB", (tile_cols * _TILE_SIZE, tile_rows * _TILE_SIZE), "white")
-
-    tiles_fetched = 0
-    for x in range(x_start, x_end + 1):
-        for y in range(y_start, y_end + 1):
-            tile = _fetch_tile(zoom, x, y)
-            if tile is None:
-                continue
-            tiles_fetched += 1
-            px = (x - x_start) * _TILE_SIZE
-            py = (y - y_start) * _TILE_SIZE
-            canvas.paste(tile, (px, py))
-
-    crop_left = int(top_left_x - (x_start * _TILE_SIZE))
-    crop_upper = int(top_left_y - (y_start * _TILE_SIZE))
-    crop_box = (
-        crop_left,
-        crop_upper,
-        crop_left + width_px,
-        crop_upper + height_px,
-    )
-    if tiles_fetched == 0:
-        raise RuntimeError("No map tiles fetched")
-
-    return canvas.crop(crop_box)
-
-
-def _fetch_tile(zoom: int, x: int, y: int) -> Optional[Image.Image]:
-    max_tile = 2**zoom
-    x_wrapped = x % max_tile
-    if y < 0 or y >= max_tile:
-        return None
-
-    subdomain = _TILE_SUBDOMAINS[(x_wrapped + y) % len(_TILE_SUBDOMAINS)]
-    url = _TILE_URL.format(s=subdomain, z=zoom, x=x_wrapped, y=y)
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        return Image.open(io.BytesIO(response.content)).convert("RGB")
-    except Exception:
-        return None
-
-
-def _latlon_to_pixels(lat: float, lon: float, zoom: int) -> Tuple[float, float]:
-    siny = math.sin(math.radians(lat))
-    siny = min(max(siny, -0.9999), 0.9999)
-    x = _TILE_SIZE * (0.5 + lon / 360.0) * (2**zoom)
-    y = _TILE_SIZE * (
-        0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)
-    ) * (2**zoom)
-    return x, y
-
-
-def _write_map_placeholder(output_path: Path) -> None:
-    img = Image.new("RGB", _MAP_SIZE, color="#f2f2f2")
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default()
-    text = "Map unavailable"
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    x = (_MAP_SIZE[0] - text_width) / 2
-    y = (_MAP_SIZE[1] - text_height) / 2
-    draw.text((x, y), text, fill="#666666", font=font)
-    img.save(output_path, format="PNG")
-
-
-def _draw_map_pin(img: Image.Image) -> None:
-    draw = ImageDraw.Draw(img)
-    center_x = img.width // 2
-    center_y = img.height // 2
-    radius = 8
-    draw.ellipse(
-        (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
-        fill="#d7261e",
-        outline="white",
-        width=2,
-    )
-
-
-def _render_onepager_pdf(
-    location: Dict[str, Any],
-    report_row: Dict[str, Any],
-    map_path: Path,
-    output_path: Path,
-    day: str = "",
-    passes: Optional[List[Tuple[Dict[str, Any], Dict[str, Any]]]] = None,
-) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    c = canvas.Canvas(str(output_path), pagesize=_PAGE_SIZE)
-    page_w, page_h = _PAGE_SIZE
-
-    font_regular, font_bold, font_body = _register_fonts()
-    y = page_h - _MARGIN
-
-    loc_id = location.get("loc_id", "")
-    loc_label = location.get("loc_label", "")
-    if passes and len(passes) > 1:
-        ids = " / ".join(str(p[0].get("loc_id")) for p in passes)
-        title = f"LOCATION: {loc_label} ({ids})"
-    else:
-        title = f"LOCATION: {loc_id} - {loc_label}"
-    y = _draw_text_block(c, title, font_bold, 16, _MARGIN, y, page_w - 2 * _MARGIN)
-
-    loc_type = location.get("loc_type", "")
-    y = _draw_text_block(c, f"TYPE: {loc_type}", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-
-    loc_start = _format_time(report_row.get("loc_start"))
-    loc_end = _format_time(report_row.get("loc_end"))
-    duration = report_row.get("duration")
-    duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
-    y = _draw_text_block(c, "LOCATION TIMES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        "Time on location across all shifts.",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-    y = _draw_text_block(c, f"Day: {day}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        f"Times: {loc_start} - {loc_end} (Duration: {duration_text})",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-
-    resources = _extract_resources(location)
-    if resources:
-        y = _draw_text_block(c, "RESOURCES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-        for resource in resources:
-            y = _draw_text_block(c, f"- {resource}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    lat = location.get("lat", "")
-    lon = location.get("lon", "")
-    gps_line = f"{lat}, {lon}"
-    maps_url = _build_google_maps_url(lat, lon)
-    y = _draw_text_block(c, "MAP:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    map_width = (page_w - 2 * _MARGIN) * 0.85
-    map_height = map_width * (_MAP_SIZE[1] / _MAP_SIZE[0])
-    if map_path.exists():
-        y = _ensure_space(c, y, map_height)
-        c.drawImage(
-            ImageReader(str(map_path)),
-            _MARGIN,
-            y - map_height,
-            width=map_width,
-            height=map_height,
-            preserveAspectRatio=True,
-        )
-    y = y - map_height - _SECTION_GAP - 8
-    y = _draw_text_block(c, f"GPS: {gps_line}", font_body, 12, _MARGIN, y, page_w - 2 * _MARGIN)
-    y = _draw_view_on_google_maps_link(c, maps_url, font_body, 12, _MARGIN, y - 4, page_w - 2 * _MARGIN)
-
-    is_proxy = _is_proxy_location(location)
-    if not is_proxy:
-        y = _draw_text_block(c, "RUNNER TIMINGS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-        y = _draw_text_block(
-            c,
-            "The predicted timing for the first and last runner to arrive at and depart from this location. "
-            "The peak times are when to expect the highest number of runners.",
-            font_body,
-            12,
-            _MARGIN + 16,
-            y - 2,
-            page_w - 2 * _MARGIN,
-        )
-        if passes and len(passes) > 1:
-            for idx, (_loc, prow) in enumerate(passes):
-                role = "Outbound" if idx == 0 else "Return"
-                pid = _loc.get("loc_id")
-                y = _draw_text_block(
-                    c,
-                    f"{role} (ID {pid}):",
-                    font_bold,
-                    12,
-                    _MARGIN + 16,
-                    y - 4,
-                    page_w - 2 * _MARGIN,
-                )
-                for line in (
-                    f"First: {_format_time(prow.get('first_runner'))}",
-                    f"Peak Start: {_format_time(prow.get('peak_start'))}",
-                    f"Peak End: {_format_time(prow.get('peak_end'))}",
-                    f"Last: {_format_time(prow.get('last_runner'))}",
-                ):
-                    y = _draw_text_block(
-                        c, f"- {line}", font_body, 12, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
-                    )
-                by_lines = _by_event_timing_lines(prow)
-                if by_lines:
-                    y = _draw_text_block(
-                        c, "By event:", font_bold, 11, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
-                    )
-                    for line in by_lines:
-                        y = _draw_text_block(
-                            c, f"- {line}", font_body, 11, _MARGIN + 40, y - 2, page_w - 2 * _MARGIN
-                        )
-        else:
-            timings_lines = [
-                f"First: {_format_time(report_row.get('first_runner'))}",
-                f"Peak Start: {_format_time(report_row.get('peak_start'))}",
-                f"Peak End: {_format_time(report_row.get('peak_end'))}",
-                f"Last: {_format_time(report_row.get('last_runner'))}",
-            ]
-            for line in timings_lines:
-                y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-            by_lines = _by_event_timing_lines(report_row)
-            if by_lines:
-                y = _draw_text_block(
-                    c, "By event:", font_bold, 12, _MARGIN + 16, y - 4, page_w - 2 * _MARGIN
-                )
-                for line in by_lines:
-                    y = _draw_text_block(
-                        c, f"- {line}", font_body, 11, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
-                    )
-
-    y = _draw_text_block(c, "EVENTS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    if is_proxy:
-        proxy_note = "This location is near the course, but not directly on one or more events' course."
-        y = _draw_text_block(c, proxy_note, font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-    else:
-        y = _draw_text_block(
-            c,
-            "Runners from the following events will be at this location during the times above:",
-            font_body,
-            12,
-            _MARGIN + 16,
-            y - 2,
-            page_w - 2 * _MARGIN,
-        )
-        events = _extract_events(location)
-        if events:
-            for event_name in events:
-                y = _draw_text_block(c, f"- {event_name}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-        else:
-            y = _draw_text_block(c, "- NA", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    y = _draw_text_block(c, "NOTES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(c, _format_bullets(location.get("notes", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    y = _draw_text_block(c, "EQUIPMENT PROVIDED:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(c, _format_bullets(location.get("equipment", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    y = _draw_text_block(c, "CONTACT:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(c, _format_bullets(location.get("contact", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    y = _draw_text_block(c, "WEATHER:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        "- Dress for the weather conditions for the duration of your shift.",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-    y = _draw_text_block(c, "FOOTWEAR", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    _draw_text_block(
-        c,
-        "- Wear comfortable shoes as you will be standing for most of your shift.\n"
-        "- You are welcome to bring a lawn chair to wait outside of peak hours.",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-
-    c.showPage()
-    c.save()
-
-
 def _render_onepager_html(
     location: Dict[str, Any],
     report_row: Dict[str, Any],
-    map_path: Path,
     output_path: Path,
     day: str = "",
     passes: Optional[List[Tuple[Dict[str, Any], Dict[str, Any]]]] = None,
     sheet_loc_ids: Optional[List[Any]] = None,
 ) -> None:
-    """Render one-pager as self-contained HTML (Issue #735 / #810)."""
+    """Render one-pager as HTML (Issue #735 / #810 / #871). Map tiles load in the browser."""
     loc_id = location.get("loc_id", "")
     loc_label = location.get("loc_label", "")
     if passes and len(passes) > 1:
@@ -711,13 +332,14 @@ def _render_onepager_html(
     equipment_html = _format_bullets_html(location.get("equipment", "") or "NA")
     contact_html = _format_bullets_html(location.get("contact", "") or "NA")
 
-    map_data_uri = ""
-    if map_path.exists():
-        try:
-            raw = map_path.read_bytes()
-            map_data_uri = f"data:image/png;base64,{base64.b64encode(raw).decode('ascii')}"
-        except Exception:
-            pass
+    map_lat = map_lon = None
+    try:
+        map_lat = float(lat)
+        map_lon = float(lon)
+        if not (math.isfinite(map_lat) and math.isfinite(map_lon)):
+            map_lat = map_lon = None
+    except (TypeError, ValueError):
+        map_lat = map_lon = None
 
     if is_proxy:
         runner_timings_html = "<p>This location is near the course, but not directly on one or more events' course.</p>"
@@ -753,7 +375,21 @@ def _render_onepager_html(
 
     events_list = ", ".join(events) if events else "NA"
 
-    map_block = (f'<img src="{map_data_uri}" alt="Map" class="map" width="640" height="360">' if map_data_uri else "")
+    tile_url = json.dumps(LOCATION_MAP_TILE_URL)
+    if map_lat is not None and map_lon is not None:
+        map_block = (
+            '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">'
+            '<div id="loc-map" class="map" role="img" aria-label="Location map"></div>'
+            '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>'
+            "<script>(function(){"
+            f"var lat={json.dumps(map_lat)}, lon={json.dumps(map_lon)}, url={tile_url};"
+            "var map=L.map('loc-map').setView([lat,lon],16);"
+            "L.tileLayer(url,{attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);"
+            "L.marker([lat,lon]).addTo(map);"
+            "})();</script>"
+        )
+    else:
+        map_block = ""
 
     resources_html = "".join(f"<li>{html.escape(r)}</li>" for r in resources) if resources else "<li>NA</li>"
 
@@ -770,7 +406,7 @@ def _render_onepager_html(
         h3 {{ font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.25rem; }}
         p, ul {{ margin: 0.25rem 0; }}
         ul {{ padding-left: 1.5rem; }}
-        .map {{ max-width: 100%; height: auto; margin: 0.5rem 0; border: 1px solid #ddd; }}
+        .map {{ width: 100%; height: 360px; margin: 0.5rem 0; border: 1px solid #ddd; }}
         a {{ color: #0066cc; }}
     </style>
 </head>
@@ -871,184 +507,3 @@ def _format_time(value: Any) -> str:
     return text
 
 
-def _slugify(value: str) -> str:
-    value = value.strip()
-    value = value.replace("/", "-")
-    value = re.sub(r'[\\:*?"<>|]', "", value)
-    return value.strip()
-
-
-def _register_fonts() -> Tuple[str, str, str]:
-    font_regular = "Helvetica"
-    font_bold = "Helvetica-Bold"
-    font_body = font_regular
-    try:
-        font_paths = [
-            "DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        ]
-        bold_paths = [
-            "DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        ]
-        regular_path = next((p for p in font_paths if Path(p).exists()), None)
-        bold_path = next((p for p in bold_paths if Path(p).exists()), None)
-        if regular_path and bold_path:
-            pdfmetrics.registerFont(TTFont("DejaVuSans", regular_path))
-            pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", bold_path))
-            font_regular = "DejaVuSans"
-            font_bold = "DejaVuSans-Bold"
-            font_body = "DejaVuSans"
-    except Exception:
-        # Fall back to built-in Helvetica if custom fonts unavailable
-        pass
-    return font_regular, font_bold, font_body
-
-
-def _draw_label_value(
-    c: canvas.Canvas,
-    label: str,
-    value: str,
-    label_font: str,
-    value_font: str,
-    label_size: int,
-    value_size: int,
-    x: float,
-    y: float,
-    max_width: float
-) -> float:
-    c.setFont(label_font, label_size)
-    label_text = f"{label}: "
-    c.drawString(x, y, label_text)
-    label_width = pdfmetrics.stringWidth(label_text, label_font, label_size)
-    c.setFont(value_font, value_size)
-    value_lines = _wrap_line(value, value_font, value_size, max_width - label_width)
-    if not value_lines:
-        value_lines = ["NA"]
-    first_line = value_lines[0]
-    c.drawString(x + label_width, y, first_line)
-    y -= (value_size + 2)
-    for line in value_lines[1:]:
-        c.drawString(x, y, line)
-        y -= (value_size + 2)
-    return y
-
-
-def _draw_view_on_google_maps_link(
-    c: canvas.Canvas,
-    maps_url: str,
-    font_name: str,
-    font_size: int,
-    x: float,
-    y: float,
-    max_width: float,
-) -> float:
-    """Draw 'View on ' then 'Google Maps' as a clickable link on one line."""
-    prefix = "View on "
-    link_text = "Google Maps"
-    c.setFont(font_name, font_size)
-    c.drawString(x, y, prefix)
-    prefix_width = pdfmetrics.stringWidth(prefix, font_name, font_size)
-    link_x = x + prefix_width
-    link_width = pdfmetrics.stringWidth(link_text, font_name, font_size)
-    c.setFillColorRGB(0, 0, 1)
-    c.drawString(link_x, y, link_text)
-    c.setLineWidth(0.5)
-    c.line(link_x, y - 1, link_x + link_width, y - 1)
-    c.setFillColorRGB(0, 0, 0)
-    c.linkURL(maps_url, (link_x, y - 2, link_x + link_width, y + font_size))
-    return y - (font_size + 2)
-
-
-def _draw_gps_with_link(
-    c: canvas.Canvas,
-    gps_value: str,
-    maps_url: str,
-    label_font: str,
-    value_font: str,
-    font_size: int,
-    x: float,
-    y: float,
-    max_width: float
-) -> float:
-    y = _ensure_space(c, y, font_size + 2)
-    label_text = "GPS: "
-    c.setFont(label_font, font_size)
-    c.drawString(x, y, label_text)
-    label_width = pdfmetrics.stringWidth(label_text, label_font, font_size)
-
-    c.setFont(value_font, font_size)
-    gps_width = pdfmetrics.stringWidth(gps_value, value_font, font_size)
-    c.drawString(x + label_width, y, gps_value)
-
-    link_text = "Google Maps"
-    link_x = x + label_width + gps_width + 8
-    link_width = pdfmetrics.stringWidth(link_text, value_font, font_size)
-
-    if link_x + link_width > x + max_width:
-        # If it won't fit on the same line, place directly after GPS with minimal spacing
-        link_x = x + label_width + gps_width + 2
-
-    c.setFillColorRGB(0, 0, 1)
-    c.drawString(link_x, y, link_text)
-    c.setLineWidth(0.5)
-    c.line(link_x, y - 1, link_x + link_width, y - 1)
-    c.setFillColorRGB(0, 0, 0)
-    c.linkURL(maps_url, (link_x, y - 2, link_x + link_width, y + font_size))
-
-    return y - _SECTION_GAP
-
-
-def _ensure_space(c: canvas.Canvas, y: float, needed_height: float) -> float:
-    if y - needed_height < _MARGIN:
-        c.showPage()
-        return _PAGE_SIZE[1] - _MARGIN
-    return y
-
-
-def _format_bullets(text: str) -> str:
-    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
-    if not lines:
-        return "- NA"
-    return "\n".join(f"- {line}" for line in lines)
-
-
-def _draw_text_block(
-    c: canvas.Canvas,
-    text: str,
-    font_name: str,
-    font_size: int,
-    x: float,
-    y: float,
-    max_width: float
-) -> float:
-    c.setFont(font_name, font_size)
-    for line in text.splitlines() if "\n" in text else [text]:
-        for wrapped_line in _wrap_line(line, font_name, font_size, max_width):
-            y = _ensure_space(c, y, font_size + 2)
-            c.setFont(font_name, font_size)
-            c.drawString(x, y, wrapped_line)
-            y -= (font_size + 2)
-    return y
-
-
-def _wrap_line(
-    text: str,
-    font_name: str,
-    font_size: int,
-    max_width: float
-) -> List[str]:
-    words = text.split()
-    lines: List[str] = []
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines

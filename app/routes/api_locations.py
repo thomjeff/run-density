@@ -8,7 +8,7 @@ Epic: Issue #277
 """
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from typing import Dict, Any, Optional
 import logging
 import os
@@ -282,4 +282,42 @@ async def get_locations_csv(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+@router.get("/api/locations/sheets.zip")
+async def download_location_sheets_zip(
+    request: Request,
+    run_id: Optional[str] = Query(None, description="Run ID"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
+) -> StreamingResponse:
+    """Zip on-disk HTML loc sheets. Does not regenerate PDFs or HTML (#871)."""
+    import io
+
+    if env_bool("CLOUD_MODE") and not is_session_valid(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not run_id:
+        run_id = get_latest_run_id()
+    if not run_id:
+        raise HTTPException(status_code=404, detail="No run ID available.")
+    from app.utils.run_id import get_run_directory, resolve_selected_day
+    from app.utils.loc_sheets_list import zip_loc_sheet_html
+
+    try:
+        selected_day, _available = resolve_selected_day(run_id, day)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    run_dir = get_run_directory(run_id)
+    try:
+        payload = zip_loc_sheet_html(run_dir, selected_day)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="No location sheet HTML for this run and day. Run analysis with onepage='y' locations.",
+        )
+    filename = f"loc_sheets_{run_id}_{selected_day}.zip"
+    return StreamingResponse(
+        io.BytesIO(payload),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
