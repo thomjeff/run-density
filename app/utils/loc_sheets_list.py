@@ -118,3 +118,25 @@ def build_loc_sheet_entries(run_dir: Path, selected_day: str) -> List[Dict[str, 
 
     sheets.sort(key=lambda x: (x["loc_id"] is None, x["loc_id"]))
     return sheets
+
+
+def loc_sheets_html_dir(run_dir: Path, selected_day: str) -> Path:
+    return Path(run_dir) / selected_day / "reports" / "loc_sheets" / "html"
+
+
+def zip_loc_sheet_html(run_dir: Path, selected_day: str) -> bytes:
+    """Pack already-written loc sheet HTML. Does not regenerate sheets (#871)."""
+    import io
+    import zipfile
+
+    html_dir = loc_sheets_html_dir(run_dir, selected_day)
+    if not html_dir.is_dir():
+        raise FileNotFoundError(f"No location sheets for day {selected_day}")
+    files = sorted(p for p in html_dir.glob("*.html") if p.is_file())
+    if not files:
+        raise FileNotFoundError(f"No location sheets for day {selected_day}")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path in files:
+            zf.write(path, arcname=path.name)
+    return buf.getvalue()

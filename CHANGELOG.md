@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #871 — Location sheets: HTML in analysis, export on demand
+- Analysis writes volunteer HTML under `{day}/reports/loc_sheets/html/` only — no ReportLab PDFs and no in-run map-tile stitching
+- Results **Locations** (and Loc Sheets) **Export location sheets** zips the HTML already on disk
+- Maps in the HTML load in the browser (Leaflet / Carto Light)
+
 ### Issue #869 — Density / bins on the snapshot clock
 - Density concurrency and bin windows evaluate closed-form `km(t)` on `runners_snapshot.parquet` (~N runners) instead of slicing the 5s `samples.parquet` grid per segment × window
 - Same min/km trajectory formula as #862 (do not restore the km/h `/3600` bug)

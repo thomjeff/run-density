@@ -11,7 +11,15 @@
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Sheets for day: {{ day | upper }}</h3>
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">Sheets for day: {{ day | upper }}</h3>
+        {% if sheets %}
+        <a class="btn btn-outline-primary btn-sm" href="/api/locations/sheets.zip?run_id={{ run_id }}&day={{ day }}">Export HTML</a>
+        {% endif %}
+    </div>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        One-pager HTML for traffic control locations (onepage='y'). Export zips the files already on disk.
+    </p>
     {% if sheets %}
     <table class="table" style="width: 100%; border-collapse: collapse;">
         <thead>
