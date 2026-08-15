@@ -3162,6 +3162,37 @@ def build_runner_window_mapping(
     
     # Build segment ranges and precompute runner data
     segment_ranges = _build_segment_ranges_per_event(segments_config)
+
+    if event_names is None:
+        event_names = [e.lower() for e in start_times.keys()]
+
+    day_code = results.get("day")
+    run_path = getattr(analysis_context, "run_path", None) if analysis_context is not None else None
+    if run_path is not None and day_code:
+        from pathlib import Path
+
+        from app.core.trajectory.layer import try_load_day_layer
+        from app.core.trajectory.presence import TrajectoryPresence, fill_mapping_from_samples
+
+        layer = try_load_day_layer(Path(run_path) / str(day_code))
+        if layer is not None and not layer.samples.empty:
+            logger.info(
+                "Building bin runner mapping from trajectory samples (%s rows) for day %s",
+                len(layer.samples),
+                day_code,
+            )
+            presence = TrajectoryPresence.from_samples(layer.samples, layer.snapshot)
+            return fill_mapping_from_samples(
+                presence,
+                segments_dict=segments_dict,
+                time_windows=time_windows,
+                start_times=start_times,
+                event_names=event_names,
+                segment_ranges=segment_ranges,
+                segments_config=segments_config,
+                mapping=mapping,
+            )
+
     pace_data = _precompute_runner_data(pace_data)
     
     # Calculate window duration

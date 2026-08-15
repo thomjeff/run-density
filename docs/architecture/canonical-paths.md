@@ -41,7 +41,7 @@ python -m app.cli analyze --run-id <id> --through locations    # + Locations.csv
 python -m app.cli analyze --run-id <id> --through full         # default
 ```
 
-**Trajectory layer** is the persisted runner clock. **Motion** (Stream Passage UI) is a consumer of that layer, not the layer name. Locations first/last at a point uses `app.core.trajectory.crossing.arrival_at_km` (#861).
+**Trajectory layer** is the persisted runner clock. **Motion** (Stream Passage UI) is a consumer of that layer, not the layer name. Locations first/last at a point uses `app.core.trajectory.crossing.arrival_at_km` (#861). Density concurrency and bin windows read `samples.parquet` (#862); Flow `SegmentFlowCache` is built from `runners_snapshot.parquet` (same overtake / co-presence algorithms).
 ```
 
 **Run storage root:** `runflow/analysis/{run_id}/` (container: `/app/runflow/...`).  

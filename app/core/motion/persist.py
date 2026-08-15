@@ -84,7 +84,11 @@ def build_and_persist_motion_for_day(
     # Deterministic column order + row order already enforced in build.
     samples.to_parquet(samples_path, index=False, compression="zstd", compression_level=3)
 
-    snapshot_cols = [c for c in ("runner_id", "event", "pace", "start_offset") if c in runners_df.columns]
+    snapshot_cols = [
+        c
+        for c in ("runner_id", "event", "pace", "start_offset", "distance")
+        if c in runners_df.columns
+    ]
     snapshot = runners_df.loc[:, snapshot_cols].copy()
     snapshot_path = motion_dir / MOTION_RUNNERS_SNAPSHOT_FILENAME
     snapshot.to_parquet(snapshot_path, index=False, compression="zstd", compression_level=3)
