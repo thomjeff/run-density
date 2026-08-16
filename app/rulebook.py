@@ -84,7 +84,7 @@ def _extract_max(threshold_obj, default: float) -> float:
 def _load_yaml(path: Optional[str] = None) -> Dict[str, Any]:
     """Load rulebook YAML (cached)."""
     p = pathlib.Path(path or _DEFAULT_RULEBOOK_PATH)
-    logger.info(f"Loading rulebook from {p}")
+    logger.debug(f"Loading rulebook from {p}")
     with p.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -134,7 +134,7 @@ def _threshold_index(path: Optional[str] = None) -> Dict[str, SchemaThresholds]:
         F=float(_extract_max(global_los_cfg.get("F"), 999.0)),
     )
     
-    logger.info(f"Global LOS bands: A={default_bands.A}, B={default_bands.B}, C={default_bands.C}, D={default_bands.D}, E={default_bands.E}, F={default_bands.F}")
+    logger.debug(f"Global LOS bands: A={default_bands.A}, B={default_bands.B}, C={default_bands.C}, D={default_bands.D}, E={default_bands.E}, F={default_bands.F}")
 
     out: Dict[str, SchemaThresholds] = {}
     schemas = data.get("schemas", {})
@@ -151,11 +151,11 @@ def _threshold_index(path: Optional[str] = None) -> Dict[str, SchemaThresholds]:
                 E=float(_extract_max(los_cfg.get("E"), default_bands.E)),
                 F=float(_extract_max(los_cfg.get("F"), default_bands.F)),
             )
-            logger.info(f"Schema {key}: Using schema-specific LOS bands")
+            logger.debug(f"Schema {key}: Using schema-specific LOS bands")
         else:
             # Use global defaults
             bands = default_bands
-            logger.info(f"Schema {key}: Using global LOS bands")
+            logger.debug(f"Schema {key}: Using global LOS bands")
         
         # Load flow_ref if present
         fr = None
@@ -177,7 +177,7 @@ def _threshold_index(path: Optional[str] = None) -> Dict[str, SchemaThresholds]:
             label=cfg.get("label")
         )
     
-    logger.info(f"Loaded {len(out)} schema configurations from rulebook v{version(path)}")
+    logger.debug(f"Loaded {len(out)} schema configurations from rulebook v{version(path)}")
     return out
 
 def get_thresholds(schema_key: str, path: Optional[str] = None) -> SchemaThresholds:

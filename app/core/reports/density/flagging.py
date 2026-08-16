@@ -147,7 +147,7 @@ def _compute_utilization_percentile(result_df: pd.DataFrame) -> pd.DataFrame:
         
         # Now compute percentile
         result_df = add_utilization_percentile(result_df, cohort="window")
-        logger.info(f"Computed utilization percentiles: P95={result_df['util_percentile'].quantile(0.95):.1f}")
+        logger.debug(f"Computed utilization percentiles: P95={result_df['util_percentile'].quantile(0.95):.1f}")
     except Exception as util_error:
         logger.warning(f"Could not compute utilization percentile: {util_error}")
         result_df['util_percentile'] = None
@@ -194,19 +194,19 @@ def _log_flagging_statistics(result_df: pd.DataFrame) -> None:
     critical = len(result_df[result_df['flag_severity'] == 'critical'])
     watch = len(result_df[result_df['flag_severity'] == 'watch'])
     
-    logger.info(f"Rulebook flagging: {flagged}/{len(result_df)} flagged ({critical} critical, {watch} watch) = {flagged/len(result_df)*100:.1f}%")
+    logger.debug(f"Rulebook flagging: {flagged}/{len(result_df)} flagged ({critical} critical, {watch} watch) = {flagged/len(result_df)*100:.1f}%")
     
     # Log schema distribution (Issue #254 telemetry)
     if 'schema_key' in result_df.columns:
         schema_counts = result_df['schema_key'].value_counts().to_dict()
-        logger.info(f"Schema distribution: {schema_counts}")
+        logger.debug(f"Schema distribution: {schema_counts}")
         
         # Log flagging by schema
         for schema in schema_counts.keys():
             schema_bins = result_df[result_df['schema_key'] == schema]
             schema_flagged = len(schema_bins[schema_bins['flag_severity'] != 'none'])
             if schema_flagged > 0:
-                logger.info(f"  {schema}: {schema_flagged}/{len(schema_bins)} flagged ({schema_flagged/len(schema_bins)*100:.1f}%)")
+                logger.debug(f"  {schema}: {schema_flagged}/{len(schema_bins)} flagged ({schema_flagged/len(schema_bins)*100:.1f}%)")
 
 
 def apply_flagging(
@@ -227,7 +227,7 @@ def apply_flagging(
     """
     result_df = df.copy()
     
-    logger.info(f"apply_flagging (rulebook): {len(result_df)} rows")
+    logger.debug(f"apply_flagging (rulebook): {len(result_df)} rows")
     
     if 'segment_id' not in result_df.columns:
         raise ValueError("segment_id column required")

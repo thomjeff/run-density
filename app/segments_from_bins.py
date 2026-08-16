@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 def _load_bins(bins_parquet: str, bins_geojson_gz: str) -> pd.DataFrame:
     try:
         df = pd.read_parquet(bins_parquet)
-        log.info("SEG_BINS_LOAD parquet=%s rows=%d", os.path.abspath(bins_parquet), len(df))
+        log.debug("SEG_BINS_LOAD parquet=%s rows=%d", os.path.abspath(bins_parquet), len(df))
         return df
     except Exception as e:
         log.warning("SEG_BINS_LOAD parquet failed (%s), try geojson.gz", e)
@@ -27,7 +27,7 @@ def _load_bins(bins_parquet: str, bins_geojson_gz: str) -> pd.DataFrame:
             "density": p.get("density"),
         })
     df = pd.DataFrame(rows)
-    log.info("SEG_BINS_LOAD geojson=%s rows=%d", os.path.abspath(bins_geojson_gz), len(df))
+    log.debug("SEG_BINS_LOAD geojson=%s rows=%d", os.path.abspath(bins_geojson_gz), len(df))
     return df
 
 def _bins_to_segments(df_bins: pd.DataFrame) -> pd.DataFrame:
@@ -57,5 +57,5 @@ def write_segments_from_bins(out_dir: str, bins_parquet: str, bins_geojson_gz: s
     seg_df  = _bins_to_segments(df_bins)
     out_path = os.path.join(out_dir, "segment_windows_from_bins.parquet")
     seg_df.to_parquet(out_path, index=False)
-    log.info("POST_SAVE segment_windows_from_bins=%s rows=%d", os.path.abspath(out_path), len(seg_df))
+    log.debug("POST_SAVE segment_windows_from_bins=%s rows=%d", os.path.abspath(out_path), len(seg_df))
     return out_path

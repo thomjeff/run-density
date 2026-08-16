@@ -104,6 +104,10 @@ def _load_ui_artifact_safe(storage, path: str, warnings: list):
     """Load UI artifact with safe exception handling."""
     try:
         return storage.read_json(path)
+    except FileNotFoundError as e:
+        logger.debug("Artifact not ready yet: %s (%s)", path, e)
+        warnings.append(f"missing: {path.split('/')[-1]}")
+        return None
     except Exception as e:
         logger.warning(f"Failed to load {path}: {e}")
         warnings.append(f"missing: {path.split('/')[-1]}")

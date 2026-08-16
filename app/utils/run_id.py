@@ -182,7 +182,7 @@ def get_latest_run_id() -> str:
     if not run_id:
         raise ValueError("latest.json missing 'run_id' field")
     
-    logger.info(f"Loaded latest run_id: {run_id} from {latest_path}")
+    logger.debug(f"Loaded latest run_id: {run_id} from {latest_path}")
     return run_id
 
 

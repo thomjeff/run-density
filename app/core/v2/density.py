@@ -123,7 +123,7 @@ def combine_runners_for_events(
         logger.warning("No events provided, returning empty DataFrame")
         return pd.DataFrame()
     
-    logger.info(f"Loading runners for events {events} from day '{day}'")
+    logger.debug(f"Loading runners for events {events} from day '{day}'")
     
     combined_runners = []
     for event_name in events:
@@ -155,7 +155,7 @@ def combine_runners_for_events(
                 event_runners['day'] = day.lower()
             
             combined_runners.append(event_runners)
-            logger.info(f"✅ Loaded {len(event_runners)} runners from {runner_file}")
+            logger.debug(f"Loaded {len(event_runners)} runners from {runner_file}")
             
         except Exception as e:
             logger.error(f"Failed to load runners from {runner_file}: {e}")
@@ -175,7 +175,7 @@ def combine_runners_for_events(
         if len(result) < initial_count:
             logger.debug(f"Dropped {initial_count - len(result)} duplicate runners")
     
-    logger.info(f"✅ Combined runner dataset: {len(result)} rows")
+    logger.debug(f"Combined runner dataset: {len(result)} rows")
     
     return result
 
@@ -220,7 +220,7 @@ def load_all_runners_for_events(
     # Combine all runners
     combined_df = pd.concat(all_runners, ignore_index=True)
     
-    logger.info(f"Loaded {len(combined_df)} total runners from {len(events)} events")
+    logger.debug(f"Loaded {len(combined_df)} total runners from {len(events)} events")
     return combined_df
 
 
@@ -328,7 +328,7 @@ def analyze_density_segments_v2(
             )
         return results_by_day
     
-    logger.info(f"Filtered segments: {len(segments_df)} -> {len(filtered_segments_df)} for {len(events)} events")
+    logger.debug(f"Filtered segments: {len(segments_df)} -> {len(filtered_segments_df)} for {len(events)} events")
     if setup_metrics and perf_monitor:
         perf_monitor.complete_phase(
             setup_metrics,
@@ -388,7 +388,9 @@ def analyze_density_segments_v2(
             # Use lowercase event names consistently
             start_times[event.name.lower()] = start_datetime
         
-        logger.info(f"Day {day.value}: Analyzing {len(day_runners_df)} runners with start_times: {[(k, v.strftime('%H:%M')) for k, v in start_times.items()]}")
+        logger.debug(
+            f"Day {day.value}: Analyzing {len(day_runners_df)} runners with start_times: {[(k, v.strftime('%H:%M')) for k, v in start_times.items()]}"
+        )
 
         snapshot_df = None
         if run_path is not None:

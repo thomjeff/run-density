@@ -128,7 +128,7 @@ def load_flow_csv(
     
     try:
         flow_df = pd.read_csv(flow_path)
-        logger.info(f"Loaded {len(flow_df)} rows from {flow_path}")
+        logger.debug(f"Loaded {len(flow_df)} rows from {flow_path}")
         return flow_df
     except Exception as e:
         raise ValueError(f"Failed to load flow file from {flow_path}: {e}") from e
@@ -183,7 +183,7 @@ def extract_event_pairs_from_flow_csv(
                 # Preserve flow.csv ordering: (event_a, event_b)
                 pairs_list.append((event_a_obj, event_b_obj))
     
-    logger.info(f"Extracted {len(pairs_list)} unique event pairs from flow.csv")
+    logger.debug(f"Extracted {len(pairs_list)} unique event pairs from flow.csv")
     return pairs_list
 
 
@@ -433,7 +433,7 @@ def analyze_temporal_flow_segments_v2(
     
     try:
         flow_df = pd.read_csv(flow_path)
-        logger.info(f"Loaded {len(flow_df)} rows from {flow_path}")
+        logger.debug(f"Loaded {len(flow_df)} rows from {flow_path}")
     except Exception as e:
         error_msg = (
             f"Failed to load flow file from {flow_path}: {e}. "
@@ -552,7 +552,7 @@ def analyze_temporal_flow_segments_v2(
         for event in day_events_unique:
             start_times[event.name.lower()] = float(event.start_time)
         
-        logger.info(f"Day {day.value}: Analyzing {len(day_pairs)} pairs with {len(day_runners_df)} runners")
+        logger.debug(f"Day {day.value}: Analyzing {len(day_pairs)} pairs with {len(day_runners_df)} runners")
         
         if perf_monitor:
             build_metrics = perf_monitor.start_phase(
@@ -653,14 +653,14 @@ def analyze_temporal_flow_segments_v2(
             flow_results["events"] = [e.name for e in day_events_unique]
             
             # Generate audit files if enabled
-            logger.info(f"Day {day.value}: Checking audit generation - enable_audit={enable_audit}, run_path={run_path}")
+            logger.debug(f"Day {day.value}: Checking audit generation - enable_audit={enable_audit}, run_path={run_path}")
             if enable_audit.lower() == 'y' and run_path is not None:
                 segments_list = flow_results.get('segments', [])
-                logger.info(f"Day {day.value}: Generating flow audit files for {len(segments_list)} segments")
+                logger.debug(f"Day {day.value}: Generating flow audit files for {len(segments_list)} segments")
                 day_path = run_path / day.value
                 # Audit files go directly under {day}/audit/
                 output_dir = str(day_path)
-                logger.info(f"Day {day.value}: Output directory for audit: {output_dir}")
+                logger.debug(f"Day {day.value}: Output directory for audit: {output_dir}")
                 
                 # Issue #607: Accumulate audit DataFrames from all segments
                 audit_dataframes = []
@@ -707,7 +707,7 @@ def analyze_temporal_flow_segments_v2(
                                 audit_df, stats = audit_result
                                 if not audit_df.empty:
                                     audit_dataframes.append(audit_df)
-                                logger.info(f"  ✓ Generated audit for {seg_id} ({event_a_name} vs {event_b_name}): {len(audit_df)} rows")
+                                logger.debug(f"Generated audit for {seg_id} ({event_a_name} vs {event_b_name}): {len(audit_df)} rows")
                             else:
                                 logger.warning(f"  ⚠ Audit generation returned None for {seg_id} ({event_a_name} vs {event_b_name})")
                         else:
@@ -734,9 +734,9 @@ def analyze_temporal_flow_segments_v2(
                 else:
                     logger.warning(f"Day {day.value}: No audit data to write (all segments returned empty DataFrames)")
             
-                logger.info(f"Day {day.value}: Completed audit generation loop for {segment_count} segments")
+                logger.debug(f"Day {day.value}: Completed audit generation loop for {segment_count} segments")
             else:
-                logger.info(f"Day {day.value}: Audit generation skipped - enable_audit={enable_audit}, run_path={run_path}")
+                logger.debug(f"Day {day.value}: Audit generation skipped - enable_audit={enable_audit}, run_path={run_path}")
             
             # Issue #627: Export fz_runners.parquet before JSON serialization
             # (internal runner sets are filtered out during JSON serialization)
@@ -753,7 +753,7 @@ def analyze_temporal_flow_segments_v2(
                     if segments_list:
                         # Debug: Log segment count and which segments have zones
                         segments_with_zones = [s for s in segments_list if s.get('zones')]
-                        logger.info(f"Day {day.value}: Exporting fz_runners.parquet - {len(segments_list)} total segments, {len(segments_with_zones)} with zones")
+                        logger.debug(f"Day {day.value}: Exporting fz_runners.parquet - {len(segments_list)} total segments, {len(segments_with_zones)} with zones")
                         if len(segments_with_zones) < len(segments_list):
                             seg_ids_with_zones = [s.get('seg_id') for s in segments_with_zones]
                             seg_ids_without_zones = [s.get('seg_id') for s in segments_list if not s.get('zones')]
@@ -764,7 +764,7 @@ def analyze_temporal_flow_segments_v2(
                         day_prefix = day.value[:3]  # "saturday" -> "sat", "sunday" -> "sun"
                         runners_path = export_fz_runners_parquet(segments_list, str(reports_path), run_id, day=day_prefix)
                         if runners_path:
-                            logger.info(f"Day {day.value}: Exported fz_runners.parquet to {runners_path}")
+                            logger.debug(f"Day {day.value}: Exported fz_runners.parquet to {runners_path}")
                         else:
                             logger.debug(f"Day {day.value}: No runner-zone-role data to export")
                 except Exception as e:
@@ -811,7 +811,7 @@ def analyze_temporal_flow_segments_v2(
                 f.write("seg_id,time_seconds\n")
                 for seg_id, elapsed_seconds in all_segment_timings:
                     f.write(f"{seg_id},{elapsed_seconds:.3f}\n")
-            logger.info(f"Wrote performance log with {len(all_segment_timings)} segments to {performance_log_path}")
+            logger.debug(f"Wrote performance log with {len(all_segment_timings)} segments to {performance_log_path}")
         except Exception as e:
             logger.warning(f"Could not write sorted performance log {performance_log_path}: {e}")
     

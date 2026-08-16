@@ -27,7 +27,7 @@ def find_latest_canonical_segments_file() -> Optional[str]:
     """
     reports_dir = Path("reports")
     if not reports_dir.exists():
-        logger.info("No reports directory found")
+        logger.debug("No reports directory found")
         return None
     
     # Find all YYYY-MM-DD subdirectories

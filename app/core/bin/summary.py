@@ -135,7 +135,7 @@ def load_bins_data(input_path: str) -> pd.DataFrame:
     
     try:
         df = pd.read_parquet(input_path)
-        logger.info(f"Loaded {len(df)} bins from {input_path}")
+        logger.debug(f"Loaded {len(df)} bins from {input_path}")
         
         # Validate required columns
         required_columns = [
@@ -183,7 +183,7 @@ def generate_bin_summary(
     Returns:
         dict: Bin summary with operationally significant bins
     """
-    logger.info(f"Generating bin summary for {len(bins_df)} bins")
+    logger.debug(f"Generating bin summary for {len(bins_df)} bins")
     
     # Use existing flagging data from bins.parquet
     # This matches the density report exactly since it uses the same data source
@@ -191,14 +191,14 @@ def generate_bin_summary(
     if 'flag_severity' in bins_df.columns:
         # Filter to only flagged bins (severity != 'none')
         filtered_bins = bins_df[bins_df['flag_severity'] != 'none'].copy()
-        logger.info(f"Found {len(filtered_bins)} flagged bins (using existing flagging data)")
+        logger.debug(f"Found {len(filtered_bins)} flagged bins (using existing flagging data)")
     else:
         # Fallback: apply flagging logic if not already present
         logger.warning("No existing flagging data found, applying flagging logic...")
         flagged_df = apply_bin_flagging(bins_df, flagging_config)
         from app.bin_intelligence import get_flagged_bins
         filtered_bins = get_flagged_bins(flagged_df)
-        logger.info(f"Found {len(filtered_bins)} flagged bins (applied flagging logic)")
+        logger.debug(f"Found {len(filtered_bins)} flagged bins (applied flagging logic)")
     
     # Group by segment
     segments = {}
@@ -246,7 +246,7 @@ def generate_bin_summary(
         "segments": segments
     }
     
-    logger.info(f"Generated summary: {total_filtered_bins} operationally significant bins across {segments_with_bins} segments")
+    logger.debug(f"Generated summary: {total_filtered_bins} operationally significant bins across {segments_with_bins} segments")
     return summary
 
 
@@ -266,7 +266,7 @@ def save_bin_summary(summary: Dict[str, Any], output_path: str) -> None:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Saved bin summary to {output_path}")
+        logger.debug(f"Saved bin summary to {output_path}")
         
     except Exception as e:
         logger.error(f"Error saving bin summary: {e}")
@@ -410,7 +410,7 @@ def generate_bin_summary_artifact(output_dir: str) -> str:
         with open(bin_summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
         
-        logger.info(f"Generated bin_summary.json with {summary['summary']['flagged_bins']} flagged bins")
+        logger.debug(f"Generated bin_summary.json with {summary['summary']['flagged_bins']} flagged bins")
         return bin_summary_path
         
     except Exception as e:

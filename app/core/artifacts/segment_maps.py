@@ -90,7 +90,7 @@ def export_segment_map_pngs(
         _render_segment_snapshot(coords, color, output_path, seg_id)
         count += 1
 
-    logger.info(f"✅ Segment maps generated — Count: {count} PNG files — Location: {output_dir}")
+    logger.debug(f"Segment maps generated — Count: {count} PNG files — Location: {output_dir}")
     return count
 
 
