@@ -10,7 +10,8 @@ from __future__ import annotations
 import time
 import functools
 import logging
-from typing import Dict, List, Any, Optional, Callable
+from contextlib import contextmanager
+from typing import Dict, List, Any, Optional, Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -21,6 +22,87 @@ from app.utils.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Issue #870: INFO for named costs and anything ≳1s. Overview still uses phase_name keys.
+INFO_MIN_SECONDS = 1.0
+NAMED_COST_LABELS = {
+    "phase_2_5_motion": "Motion persist",
+    "phase_3_2_density_compute": "Density compute",
+    "phase_4_2_flow_compute": "Flow compute",
+    "phase_4_3_junction_flow": "Junction flow",
+    "phase_7_ui_artifacts": "UI artifacts",
+    "phase_10_reports": "Reports",
+}
+
+
+def phase_display_name(
+    phase_name: str,
+    phase_description: Optional[str] = None,
+) -> str:
+    if phase_name.startswith("phase_5_1_bin_generation"):
+        suffix = phase_name.replace("phase_5_1_bin_generation", "").lstrip("_")
+        return f"Bins {suffix}".strip() if suffix else "Bins"
+    if phase_name in NAMED_COST_LABELS:
+        return NAMED_COST_LABELS[phase_name]
+    return phase_description or phase_name.replace("_", " ")
+
+
+def is_named_cost(phase_name: str) -> bool:
+    return phase_name in NAMED_COST_LABELS or phase_name.startswith("phase_5_1_bin_generation")
+
+
+def _format_summary_stats(summary_stats: Optional[Dict[str, Any]]) -> str:
+    if not summary_stats:
+        return ""
+    parts = []
+    for key, value in summary_stats.items():
+        if isinstance(value, float):
+            parts.append(f"{key}={value:.2f}" if value < 100 else f"{key}={int(value)}")
+        elif isinstance(value, (int,)):
+            parts.append(f"{key}={value}")
+        elif isinstance(value, (list, tuple)):
+            parts.append(f"{key}={len(value)}")
+        else:
+            parts.append(f"{key}={value}")
+    return f" ({', '.join(parts)})" if parts else ""
+
+
+def log_elapsed(
+    label: str,
+    elapsed_seconds: float,
+    *,
+    log: Optional[logging.Logger] = None,
+    extra: str = "",
+    always_info: bool = False,
+) -> None:
+    """Log a named cost: INFO if ≳1s or ``always_info`` (report/UI splits)."""
+    dest = log or logger
+    msg = f"{label}: {elapsed_seconds:.1f}s{extra}"
+    if always_info or elapsed_seconds >= INFO_MIN_SECONDS:
+        dest.info(msg)
+    else:
+        dest.debug(msg)
+
+
+@contextmanager
+def log_span(
+    label: str,
+    *,
+    log: Optional[logging.Logger] = None,
+    extra: str = "",
+    always_info: bool = False,
+) -> Iterator[None]:
+    t0 = time.monotonic()
+    try:
+        yield
+    finally:
+        log_elapsed(
+            label,
+            time.monotonic() - t0,
+            log=log,
+            extra=extra,
+            always_info=always_info,
+        )
 
 
 @dataclass
@@ -86,12 +168,9 @@ class PerformanceMonitor:
             start_time=time.monotonic()
         )
         self.metrics.append(metrics)
-        
-        # Issue #581: Enhanced phase logging with phase numbers
-        if phase_number and phase_description:
-            logger.info(f"[{phase_number}] ⏱️  Starting: {phase_description}")
-        else:
-            logger.info(f"⏱️  Starting phase: {phase_name}")
+
+        label = phase_display_name(phase_name, phase_description)
+        logger.debug("Starting %s", label)
 
         # Issue #825: Overview progress
         try:
@@ -128,31 +207,16 @@ class PerformanceMonitor:
             summary_stats: Optional dict with summary statistics to include in log message
         """
         metrics.finish()
-        
-        # Issue #581: Enhanced phase completion logging
-        elapsed_str = f"({metrics.elapsed_seconds:.3f}s)" if metrics.elapsed_seconds else ""
-        
-        if phase_number and phase_description:
-            # Build summary string from statistics
-            summary_parts = []
-            if summary_stats:
-                for key, value in summary_stats.items():
-                    if isinstance(value, (int, float)):
-                        if isinstance(value, float):
-                            summary_parts.append(f"{key}={value:.2f}" if value < 100 else f"{key}={int(value)}")
-                        else:
-                            summary_parts.append(f"{key}={value}")
-                    elif isinstance(value, (list, tuple)):
-                        summary_parts.append(f"{key}={len(value)}")
-                    else:
-                        summary_parts.append(f"{key}={value}")
-            
-            summary_str = f" ({', '.join(summary_parts)})" if summary_parts else ""
-            logger.info(f"[{phase_number}] ✅ Complete: {phase_description}{summary_str} {elapsed_str}")
-            # Add visual separator after phase completion
-            logger.info("═" * 65)
-        else:
-            logger.info(f"✅ Phase complete: {metrics.phase_name} {elapsed_str}")
+
+        elapsed = metrics.elapsed_seconds or 0.0
+        label = phase_display_name(metrics.phase_name, phase_description)
+        extra = _format_summary_stats(summary_stats)
+        log_elapsed(
+            label,
+            elapsed,
+            extra=extra,
+            always_info=is_named_cost(metrics.phase_name),
+        )
 
         # Issue #825: Overview progress
         try:
@@ -287,36 +351,31 @@ class PerformanceMonitor:
                           Example: {"phase_1_pre_analysis": {"number": "Phase 1", "description": "Pre-Analysis & Validation"}}
         """
         summary = self.get_summary()
-        logger.info("═" * 65)
-        logger.info("📊 Performance Summary")
-        logger.info("═" * 65)
-        # Issue #638: total_elapsed_minutes is now mm:ss format, not decimal
-        total_elapsed_minutes_decimal = round(summary['total_elapsed_seconds'] / 60, 2)
-        logger.info(f"Total runtime: {summary['total_elapsed_minutes']} ({total_elapsed_minutes_decimal:.2f} minutes, {summary['total_elapsed_seconds']:.2f}s)")
-        
-        if summary['phases']:
-            logger.info("\nPhase Breakdown:")
-            logger.info("═" * 65)
-            for phase in summary['phases']:
-                phase_name = phase['phase']
-                
-                # Issue #581: Map phase names to Issue #574 phase numbers if mapping provided
-                if phase_mapping and phase_name in phase_mapping:
-                    phase_info = phase_mapping[phase_name]
-                    phase_label = f"[{phase_info['number']}] {phase_info['description']}"
-                else:
-                    phase_label = phase_name
-                
-                logger.info(
-                    f"  {phase_label:40s}: {phase['elapsed_seconds']:6.3f}s "
-                    f"({phase['percentage']:5.1f}%)"
+        logger.info(
+            "Timing: total %s (%.1fs)",
+            summary["total_elapsed_minutes"],
+            summary["total_elapsed_seconds"],
+        )
+
+        for phase in summary["phases"]:
+            if phase["elapsed_seconds"] < INFO_MIN_SECONDS:
+                continue
+            phase_name = phase["phase"]
+            if phase_mapping and phase_name in phase_mapping:
+                label = phase_display_name(
+                    phase_name, phase_mapping[phase_name].get("description")
                 )
-            logger.info("═" * 65)
-        
-        if summary['total_memory_mb']:
-            logger.info(f"\nPeak memory usage: {summary['total_memory_mb']:.2f} MB")
-        
-        logger.info("═" * 65)
+            else:
+                label = phase_display_name(phase_name)
+            logger.info(
+                "  %s: %.1fs (%.0f%%)",
+                label,
+                phase["elapsed_seconds"],
+                phase["percentage"],
+            )
+
+        if summary["total_memory_mb"]:
+            logger.debug("Peak memory: %.0f MB", summary["total_memory_mb"])
 
 
 def monitor_performance(phase_name: Optional[str] = None):

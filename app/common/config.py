@@ -44,10 +44,10 @@ def load_rulebook() -> Dict[str, Any]:
     path = CONFIG_DIR / "density_rulebook.yml"
     
     # Debug logging for Issue #354
-    logger.info(f"Loading rulebook from: {path.absolute()}")
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"Config directory exists: {CONFIG_DIR.exists()}")
-    logger.info(f"Rulebook file exists: {path.exists()}")
+    logger.debug(f"Loading rulebook from: {path.absolute()}")
+    logger.debug(f"Current working directory: {os.getcwd()}")
+    logger.debug(f"Config directory exists: {CONFIG_DIR.exists()}")
+    logger.debug(f"Rulebook file exists: {path.exists()}")
     
     if not path.exists():
         logger.error(f"density_rulebook.yml not found at {path.absolute()}")
@@ -60,7 +60,7 @@ def load_rulebook() -> Dict[str, Any]:
         rulebook = yaml.safe_load(f)
         # Version is nested under meta.version, not top-level
         version = rulebook.get('meta', {}).get('version', 'unspecified')
-        logger.info(f"Successfully loaded rulebook with version: {version}")
+        logger.debug(f"Successfully loaded rulebook with version: {version}")
         return rulebook
 
 

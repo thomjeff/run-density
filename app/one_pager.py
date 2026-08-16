@@ -165,7 +165,7 @@ def generate_location_onepagers(
         )
         count += 1
 
-    logger.info(
+    logger.debug(
         "Issue #702/#735/#871: Generated %s HTML one-pagers for day %s (run %s)",
         count,
         day,

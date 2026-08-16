@@ -134,7 +134,7 @@ BOOT_ENV = {
     "all_env_vars_with_BIN": {k: v for k, v in os.environ.items() if "BIN" in k},
     "all_env_vars_with_ENABLE": {k: v for k, v in os.environ.items() if "ENABLE" in k}
 }
-logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
+logging.getLogger(__name__).debug("BOOT_ENV %s", BOOT_ENV)
 
 # Include API routers
 # app.api.density router removed in Phase 3 - was disabled, endpoints unused

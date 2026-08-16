@@ -291,7 +291,7 @@ def load_analysis_json(run_path: Path) -> Dict[str, Any]:
         with open(analysis_json_path, 'r', encoding='utf-8') as f:
             analysis_json = json.load(f)
         
-        logger.info(f"Loaded analysis.json from {analysis_json_path}")
+        logger.debug(f"Loaded analysis.json from {analysis_json_path}")
         return analysis_json
     except json.JSONDecodeError as e:
         raise json.JSONDecodeError(

@@ -693,7 +693,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     try:
         from app.io.loader import load_segments
         segments_df = load_segments(segments_csv_path)
-        logger.info(f"Loaded {len(segments_df)} segments from {segments_csv_path} for flow report")
+        logger.debug(f"Loaded {len(segments_df)} segments from {segments_csv_path} for flow report")
     except Exception as e:
         error_msg = f"Failed to load segments from {segments_csv_path} for flow report: {e}"
         logger.error(error_msg)
@@ -1183,7 +1183,7 @@ def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                 # Log zones skipped due to zero counts (zone exists but has no interactions)
                 if has_zero_counts:
                     # Log at INFO level since this is expected behavior for empty zones
-                    logger.info(
+                    logger.debug(
                         f"[fz_runners] Zone {seg_id} index={zone_index} skipped - zero counts "
                         f"(no runner interactions: overtaking_a=0, overtaking_b=0, overtaken_a=0, "
                         f"overtaken_b=0, copresence_a=0, copresence_b=0)"
@@ -1267,7 +1267,7 @@ def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, r
             )
     
     # Debug: Log summary statistics
-    logger.info(
+    logger.debug(
         f"[fz_runners] Export summary: {segments_processed} segments processed, "
         f"{segments_with_runner_data} segments with runner data, "
         f"{segments_skipped_no_zones} segments skipped (no zones), "

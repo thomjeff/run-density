@@ -124,7 +124,7 @@ def generate_bins_v2(
         logger.info(f"Bin dataset generation disabled (ENABLE_BIN_DATASET=false) for day {day.value}")
         return None
     
-    logger.info(f"Generating bin artifacts for day {day.value}")
+    logger.debug(f"Generating bin artifacts for day {day.value}")
     
     try:
         # Get day-partitioned bins directory
@@ -136,7 +136,7 @@ def generate_bins_v2(
             raise ValueError(
                 "segments_csv_path must be provided to generate_bins_v2 from analysis.json."
             )
-        logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
+        logger.debug(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
         
         # Issue #616: build_runner_window_mapping uses per-event runner files; no temp data/runners.csv needed
         
@@ -229,7 +229,7 @@ def generate_bins_v2(
                 
                 filtered_density_results["segments"] = filtered_segments
                 
-                logger.info(
+                logger.debug(
                     f"Filtered density_results for day {day.value}: "
                     f"{len(original_segments)} -> {len(filtered_segments)} segments "
                     f"(day segments: {sorted(day_segment_ids)})"
@@ -348,7 +348,7 @@ def generate_bins_v2(
                             before_segments = set(bins_df[segment_col].astype(str).unique().tolist())
                             after_segments = set(bins_df_filtered[segment_col].astype(str).unique().tolist())
                             
-                            logger.info(
+                            logger.debug(
                                 f"Filtered bins for day {day.value}: {len(bins_df)} -> {len(bins_df_filtered)} "
                                 f"(day segments: {sorted(day_segment_ids)}, "
                                 f"before: {len(before_segments)} segments, after: {len(after_segments)} segments)"
@@ -420,7 +420,7 @@ def generate_bins_v2(
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
             
-            logger.info(f"✅ Bin generation completed successfully for day {day.value}: {bins_parquet_final}")
+            logger.debug(f"Bin generation completed for day {day.value}: {bins_parquet_final}")
             return bins_dir
             
         finally:

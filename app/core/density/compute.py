@@ -24,8 +24,6 @@ from datetime import datetime, timedelta
 # Import data models
 from app.core.density.models import DensityConfig, SegmentMeta, DensityResult, EventViewSummary, DensitySummary
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -378,7 +376,7 @@ class DensityAnalyzer:
         # Check for edge cases
         if segment.segment_length_m < 100:
             flags.append("edge_case")
-            logger.info(f"Segment {segment.segment_id} is edge case: {segment.segment_length_m}m")
+            logger.debug(f"Segment {segment.segment_id} is edge case: {segment.segment_length_m}m")
         
         return True, flags
     
@@ -932,56 +930,9 @@ class DensityAnalyzer:
             t1 = t0 + float(self.config.bin_seconds)
             return self.presence.count_unique(t0, t1, list(segment.events), intervals)
         
-        # #region agent log - CRITICAL: Debug event name matching regression (ALL segments)
-        import json
-        try:
-            match_mask = pace_data["event"].isin(segment.events) if not pace_data.empty else pd.Series([False])
-            with open('/app/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "regression-investigation",
-                    "hypothesisId": "EVENT_MISMATCH",
-                    "location": "compute.py:calculate_concurrent_runners",
-                    "message": "Event format check before filtering - CRITICAL",
-                    "data": {
-                        "segment_id": segment.segment_id,
-                        "segment_events": list(segment.events) if segment.events else [],
-                        "segment_events_repr": repr(segment.events),
-                        "pace_data_event_values": sorted(pace_data["event"].unique().tolist()) if not pace_data.empty else [],
-                        "pace_data_event_sample": pace_data["event"].head(5).tolist() if not pace_data.empty else [],
-                        "pace_data_total": len(pace_data),
-                        "will_match_count": int(match_mask.sum()) if not pace_data.empty else 0,
-                        "time_bin_start": str(time_bin_start)
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000)
-                }) + "\n")
-        except Exception as e:
-            pass  # Silently fail to avoid breaking the main logic
-        # #endregion
         
         filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
         
-        # #region agent log - CRITICAL: Debug event name matching regression (ALL segments)
-        try:
-            with open('/app/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "regression-investigation",
-                    "hypothesisId": "EVENT_MISMATCH",
-                    "location": "compute.py:calculate_concurrent_runners",
-                    "message": "Event format check after filtering - CRITICAL",
-                    "data": {
-                        "segment_id": segment.segment_id,
-                        "filtered_count": len(filtered_pace_data),
-                        "filtered_event_values": sorted(filtered_pace_data["event"].unique().tolist()) if not filtered_pace_data.empty else [],
-                        "IS_EMPTY": filtered_pace_data.empty,
-                        "time_bin_start": str(time_bin_start)
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000)
-                }) + "\n")
-        except Exception as e:
-            pass  # Silently fail to avoid breaking the main logic
-        # #endregion
         
         # Log physical dimensions and runner counts for debugging
         logging.debug(f"Segment {segment.segment_id}: Physical length={segment.length_m:.1f}m, width={segment.width_m:.1f}m, area={segment.length_m * segment.width_m:.1f}m²")
@@ -1013,27 +964,6 @@ class DensityAnalyzer:
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
         
-        # #region agent log
-        if is_a1_segment:
-            with open('/app/.cursor/debug.log', 'a') as f:
-                unique_events_in_filtered = sorted(filtered_pace_data["event"].unique().tolist())
-                event_counts = {evt: len(filtered_pace_data[filtered_pace_data["event"] == evt]) for evt in unique_events_in_filtered}
-                f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "bug1-investigation",
-                    "hypothesisId": "H3,H5",
-                    "location": "compute.py:calculate_concurrent_runners",
-                    "message": "Start times and event breakdown before time filtering",
-                    "data": {
-                        "segment_id": segment.segment_id,
-                        "time_bin_start": str(time_bin_start),
-                        "start_times_dict": {k: str(v) for k, v in start_times.items()},
-                        "filtered_event_counts": event_counts,
-                        "unique_events": unique_events_in_filtered
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000)
-                }) + "\n")
-        # #endregion
         
         # Convert to seconds since epoch for vectorized operations
         # Issue #503: Optimize - actual_starts_sec already computed above, no need to recompute
@@ -1048,27 +978,6 @@ class DensityAnalyzer:
         # Filter runners who have started
         started_mask = time_elapsed_start >= 0
         
-        # #region agent log
-        if is_a1_segment:
-            with open('/app/.cursor/debug.log', 'a') as f:
-                started_count = int(np.sum(started_mask))
-                started_events = sorted(filtered_pace_data.loc[filtered_pace_data.index[started_mask], "event"].unique().tolist()) if started_count > 0 else []
-                f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "bug1-investigation",
-                    "hypothesisId": "H3,H5",
-                    "location": "compute.py:calculate_concurrent_runners",
-                    "message": "Runners after started filter",
-                    "data": {
-                        "segment_id": segment.segment_id,
-                        "time_bin_start": str(time_bin_start),
-                        "started_count": started_count,
-                        "started_events": started_events,
-                        "total_filtered": len(filtered_pace_data)
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000)
-                }) + "\n")
-        # #endregion
         
         if not np.any(started_mask):
             return 0
@@ -1081,47 +990,11 @@ class DensityAnalyzer:
         if density_cfg:
             total_concurrent = 0
             
-            # #region agent log
-            if segment.segment_id == 'A1':
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({
-                        "sessionId": "debug-session",
-                        "runId": "bug1-investigation",
-                        "hypothesisId": "H3,H4",
-                        "location": "compute.py:calculate_concurrent_runners",
-                        "message": "Event-specific interval lookup",
-                        "data": {
-                            "segment_id": segment.segment_id,
-                            "time_bin_start": str(time_bin_start),
-                            "segment_events": list(segment.events),
-                            "density_cfg_events": list(density_cfg.get("events", [])) if density_cfg else []
-                        },
-                        "timestamp": int(datetime.now().timestamp() * 1000)
-                    }) + "\n")
-            # #endregion
             
             # Check each event's specific cumulative distance range
             for event in segment.events:
                 interval = get_event_intervals(event, density_cfg)
                 
-                # #region agent log
-                if segment.segment_id == 'A1':
-                    with open('/app/.cursor/debug.log', 'a') as f:
-                        f.write(json.dumps({
-                            "sessionId": "debug-session",
-                            "runId": "bug1-investigation",
-                            "hypothesisId": "H3,H4",
-                            "location": "compute.py:calculate_concurrent_runners",
-                            "message": "Event interval lookup result",
-                            "data": {
-                                "segment_id": segment.segment_id,
-                                "time_bin_start": str(time_bin_start),
-                                "event": event,
-                                "interval": interval if interval else None
-                            },
-                            "timestamp": int(datetime.now().timestamp() * 1000)
-                        }) + "\n")
-                # #endregion
                 
                 if not interval:
                     continue  # Skip events without km ranges
@@ -1131,26 +1004,6 @@ class DensityAnalyzer:
                 # Filter to this event's runners
                 event_mask = event_ids[started_mask] == event
                 
-                # #region agent log
-                if segment.segment_id == 'A1':
-                    with open('/app/.cursor/debug.log', 'a') as f:
-                        f.write(json.dumps({
-                            "sessionId": "debug-session",
-                            "runId": "bug1-investigation",
-                            "hypothesisId": "H3,H4",
-                            "location": "compute.py:calculate_concurrent_runners",
-                            "message": "Event runners after event mask",
-                            "data": {
-                                "segment_id": segment.segment_id,
-                                "time_bin_start": str(time_bin_start),
-                                "event": event,
-                                "event_mask_count": int(np.sum(event_mask)),
-                                "from_km": from_km,
-                                "to_km": to_km
-                            },
-                            "timestamp": int(datetime.now().timestamp() * 1000)
-                        }) + "\n")
-                # #endregion
                 
                 if not np.any(event_mask):
                     continue
@@ -1163,25 +1016,6 @@ class DensityAnalyzer:
                 event_concurrent = int(np.sum(in_segment_mask))
                 total_concurrent += event_concurrent
                 
-                # #region agent log
-                if segment.segment_id == 'A1':
-                    with open('/app/.cursor/debug.log', 'a') as f:
-                        f.write(json.dumps({
-                            "sessionId": "debug-session",
-                            "runId": "bug1-investigation",
-                            "hypothesisId": "H3,H4",
-                            "location": "compute.py:calculate_concurrent_runners",
-                            "message": "Final concurrent count for event",
-                            "data": {
-                                "segment_id": segment.segment_id,
-                                "time_bin_start": str(time_bin_start),
-                                "event": event,
-                                "event_concurrent": event_concurrent,
-                                "total_concurrent": total_concurrent
-                            },
-                            "timestamp": int(datetime.now().timestamp() * 1000)
-                        }) + "\n")
-                # #endregion
             
             return total_concurrent
         else:
@@ -1875,7 +1709,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 except Exception:
                     mem_mb = 0.0
             if mem_mb:
-                logger.info(f"Segment {seg_id}: memory_mb={mem_mb:.2f}")
+                logger.debug(f"Segment {seg_id}: memory_mb={mem_mb:.2f}")
         except Exception:
             pass
 
@@ -1894,7 +1728,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             event_ranges.sort(key=lambda x: x[2], reverse=True)
             min_km, max_km = event_ranges[0][0], event_ranges[0][1]
             chosen_event = event_ranges[0][3]
-            logger.info(f"Segment {seg_id}: Using {chosen_event} range {min_km:.2f}-{max_km:.2f} km (length: {max_km-min_km:.2f} km)")
+            logger.debug(f"Segment {seg_id}: Using {chosen_event} range {min_km:.2f}-{max_km:.2f} km (length: {max_km-min_km:.2f} km)")
         else:
             min_km = 0.0
             max_km = 0.0
@@ -1949,7 +1783,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 # Add v2 data to summary_dict for backward compatibility
                 summary_dict["schema_name"] = v2_context["schema_name"]
                 summary_dict["fired_actions"] = v2_context["fired_actions"]
-                logger.info(f"Segment {seg_id}: schema_name={v2_context['schema_name']}")
+                logger.debug(f"Segment {seg_id}: schema_name={v2_context['schema_name']}")
                 
             except Exception as e:
                 import traceback

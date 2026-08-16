@@ -100,7 +100,7 @@ def load_density_rulebook() -> Dict[str, Any]:
     # Issue #655: Use SSOT loader which fails fast if rulebook missing
     rulebook = load_rulebook()
     logger = logging.getLogger(__name__)
-    logger.info("📊 Loaded density rulebook using SSOT loader (app.common.config.load_rulebook)")
+    logger.debug("📊 Loaded density rulebook using SSOT loader (app.common.config.load_rulebook)")
     return rulebook
 
 
@@ -190,7 +190,7 @@ def load_segment_metrics_from_json(segment_metrics_path: Path) -> Dict[str, Dict
                     seg_id = item['segment_id']
                     segment_metrics[seg_id] = {k: v for k, v in item.items() if k != 'segment_id'}
         
-        logger.info(f"✅ Loaded {len(segment_metrics)} segment metrics from {segment_metrics_path}")
+        logger.debug(f"✅ Loaded {len(segment_metrics)} segment metrics from {segment_metrics_path}")
         if not segment_metrics:
             raise ValueError(f"Issue #600: segment_metrics.json is empty or invalid at {segment_metrics_path}")
         return segment_metrics
@@ -230,14 +230,14 @@ def load_flags_from_json(flags_path: Path) -> List[Dict[str, Any]]:
         
         # flags.json is typically a list of flag entries
         if isinstance(data, list):
-            logger.info(f"✅ Loaded {len(data)} flags from {flags_path}")
+            logger.debug(f"✅ Loaded {len(data)} flags from {flags_path}")
             return data
         elif isinstance(data, dict) and 'flagged_segments' in data:
             # Alternative format: {"flagged_segments": [...]}
             flags = data['flagged_segments']
             if not isinstance(flags, list):
                 raise ValueError(f"Issue #600: flags.json has invalid format at {flags_path} (flagged_segments is not a list)")
-            logger.info(f"✅ Loaded {len(flags)} flags from {flags_path}")
+            logger.debug(f"✅ Loaded {len(flags)} flags from {flags_path}")
             return flags
         else:
             raise ValueError(f"Issue #600: flags.json has unexpected format at {flags_path} (expected list or dict with 'flagged_segments' key)")
@@ -408,7 +408,7 @@ def convert_json_to_segment_summary(
             else:
                 df.at[idx, 'peak_rate_per_m_per_min'] = 0.0
     
-    logger.info(f"✅ Converted JSON to segment_summary DataFrame: {len(df)} segments")
+    logger.debug(f"✅ Converted JSON to segment_summary DataFrame: {len(df)} segments")
     return df
 
 
@@ -451,7 +451,7 @@ def generate_density_report(
     
     start_time = time.time()
     
-    logger.info("🚀 Generating new density report (Issue #246)...")
+    logger.debug("🚀 Generating new density report (Issue #246)...")
     
     # Load all data sources
     sources = load_parquet_sources(reports_dir, bins_dir=bins_dir)
@@ -460,7 +460,7 @@ def generate_density_report(
     segment_windows_df = sources['segment_windows']
     
     # Issue #600: Load metrics from JSON artifacts (SSOT - mandatory)
-    logger.info(f"📊 Issue #600: Loading metrics from JSON SSOT: {segment_metrics_path}")
+    logger.debug(f"📊 Issue #600: Loading metrics from JSON SSOT: {segment_metrics_path}")
     
     # Load segment_metrics.json (mandatory - will raise FileNotFoundError if missing)
     segment_metrics = load_segment_metrics_from_json(segment_metrics_path)
@@ -469,7 +469,7 @@ def generate_density_report(
     flags_path = segment_metrics_path.parent / "flags.json"
     flags = load_flags_from_json(flags_path)
     
-    logger.info("✅ Issue #600: Loaded metrics from JSON artifacts (SSOT)")
+    logger.debug("✅ Issue #600: Loaded metrics from JSON artifacts (SSOT)")
     
     # Convert JSON to segment_summary DataFrame
     segment_summary = convert_json_to_segment_summary(
@@ -478,7 +478,7 @@ def generate_density_report(
     
     # Get flagged bins (still needed for template)
     # Issue #600: Extract from bins_df using flag_severity (bins.parquet already has flags from pipeline)
-    logger.info("📊 Getting flagged bins...")
+    logger.debug("📊 Getting flagged bins...")
     if 'flag_severity' in bins_df.columns:
         flagged_bins = bins_df[bins_df['flag_severity'] != 'none'].copy()
     else:
@@ -486,11 +486,11 @@ def generate_density_report(
         flagged_bins = pd.DataFrame()
         logger.warning("⚠️ flag_severity column not found in bins_df, using empty flagged_bins")
     
-    logger.info(f"✅ Found {len(flagged_bins)} flagged bins")
+    logger.debug(f"✅ Found {len(flagged_bins)} flagged bins")
     
     # Issue #283: Use SSOT for flagging statistics to ensure report/artifact parity
     # Issue #600: Calculate stats from segment_summary DataFrame (from JSON SSOT)
-    logger.info("📈 Computing flagging statistics...")
+    logger.debug("📈 Computing flagging statistics...")
     
     # Calculate stats from segment_summary DataFrame
     total_bins = segment_summary['total_bins'].sum()
@@ -521,7 +521,7 @@ def generate_density_report(
         'peak_rate': float(peak_rate_ps),
         'peak_rate_per_m_per_min': float(peak_rate)
     }
-    logger.info(f"✅ Statistics computed: {stats.get('flagged_bins', 0)}/{stats.get('total_bins', 0)} flagged")
+    logger.debug(f"✅ Statistics computed: {stats.get('flagged_bins', 0)}/{stats.get('total_bins', 0)} flagged")
     
     # Create report context — Issue #798 Phase 5: bin/window from bins artifacts only
     from app.core.bin.provenance import resolve_bin_report_params
@@ -547,7 +547,7 @@ def generate_density_report(
     }
     
     # Generate report using new template engine
-    logger.info("📝 Generating report content...")
+    logger.debug("📝 Generating report content...")
     template_engine = DensityReportTemplateEngine()
     report_content = template_engine.generate_report(
         context=context,
@@ -564,7 +564,7 @@ def generate_density_report(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
             f.write(report_content)
-        logger.info(f"✅ Report saved to: {output_path}")
+        logger.debug(f"✅ Report saved to: {output_path}")
     
     # Prepare results
     results = {

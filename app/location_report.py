@@ -350,7 +350,7 @@ def load_flagged_segments(run_id: Optional[str] = None, day: Optional[str] = Non
                     'type': flag_entry.get('type', 'density')
                 }
         
-        logger.info(f"Loaded {len(flagged_segments)} flagged segments from {flags_path}")
+        logger.debug(f"Loaded {len(flagged_segments)} flagged segments from {flags_path}")
         
     except Exception as e:
         logger.warning(f"Could not load flagged segments from flags.json: {e}")
@@ -762,7 +762,7 @@ def calculate_arrival_times_for_location(
                         clamp_km = LOCATION_SEGMENT_CLAMP_M / METERS_PER_KM
                         if (from_km - clamp_km) <= absolute_distance_km <= (to_km + clamp_km):
                             seg_distance_km = max(from_km, min(absolute_distance_km, to_km))
-                            logger.info(
+                            logger.debug(
                                 f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {seg_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_relative_km:.3f}km)"
                             )
                         else:
@@ -774,7 +774,7 @@ def calculate_arrival_times_for_location(
                 if seg_distance_km is None:
                     if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
                         seg_distance_km = max(from_km, min(distance_km, to_km))
-                        logger.info(
+                        logger.debug(
                             f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (clamped to {seg_distance_km:.3f}km)"
                         )
                     else:
@@ -816,7 +816,7 @@ def calculate_arrival_times_for_location(
                 
                 processed_segments.append(seg_id)
             
-            logger.info(
+            logger.debug(
                 f"Location {location.get('loc_id')} ({event}): Processed {len(processed_segments)} segments: {processed_segments}, "
                 f"calculated arrival times for {len(event_runners)} runners across {len(processed_segments)} segments"
             )
@@ -910,7 +910,7 @@ def generate_location_report(
             "not from hardcoded constants. (Issue #512)"
         )
     
-    logger.info("Starting location report generation...")
+    logger.debug("Starting location report generation...")
     
     try:
         if locations_df is None:
@@ -947,7 +947,7 @@ def generate_location_report(
     flagged_segments = {}
     if run_id:
         flagged_segments = load_flagged_segments(run_id=run_id, day=day)
-        logger.info(f"Issue #598: Loaded {len(flagged_segments)} flagged segments for flag propagation (day={day})")
+        logger.debug(f"Issue #598: Loaded {len(flagged_segments)} flagged segments for flag propagation (day={day})")
     
     # Process each location
     report_rows = []
@@ -962,7 +962,7 @@ def generate_location_report(
         loc_label = location.get("loc_label", "")
         loc_type = location.get("loc_type", "").lower()
         
-        logger.info(f"Processing pass {pass_id} (loc_id={human_loc_id}): {loc_label}")
+        logger.debug(f"Processing pass {pass_id} (loc_id={human_loc_id}): {loc_label}")
         
         # Initialize report row
         # 2027: pass_id = timed instance; loc_id = human Location; pass_key = opaque unifier
@@ -1032,7 +1032,7 @@ def generate_location_report(
         if pd.notna(timing_source) and isinstance(timing_source, str) and timing_source.startswith("proxy:"):
             try:
                 proxy_id = int(timing_source.split(":")[1])
-                logger.info(
+                logger.debug(
                     f"Location {loc_id} ({loc_label}): timing_source={timing_source}, "
                     f"will copy timing from location {proxy_id}"
                 )
@@ -1051,7 +1051,7 @@ def generate_location_report(
                     report_row["timing_source"] = timing_source
                     report_row["notes"] = f"{location.get('notes', '')} (Proxy to location {proxy_id})".strip()
                     
-                    logger.info(
+                    logger.debug(
                         f"Location {loc_id} ({loc_label}): Copied timing from proxy location {proxy_id}: "
                         f"loc_end={report_row['loc_end']}, duration={report_row['duration']}"
                     )
@@ -1236,7 +1236,7 @@ def generate_location_report(
                     else:
                         report_row["notes"] = proxy_note
                     
-                    logger.info(
+                    logger.debug(
                         f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
                         f"Copied timing from proxy location {proxy_id} in second pass: "
                         f"loc_end={report_row['loc_end']}, duration={report_row['duration']}"
@@ -1343,7 +1343,7 @@ def generate_location_report(
             # Set timing_source
             report_row["timing_source"] = f"proxy:{proxy_id}"
             
-            logger.info(
+            logger.debug(
                 f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
                 f"Set loc_end={proxy_loc_end} and duration={report_row['duration']} from proxy location {proxy_id}"
             )

@@ -42,7 +42,7 @@ def _validate_import_patterns():
         from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
         from app.report_utils import get_report_paths
         # Phase 3 cleanup: Removed DensityTemplateEngine, create_template_context imports (v1-only, functions removed)
-        logger.info("✅ All critical imports resolved successfully at module level")
+        logger.debug("✅ All critical imports resolved successfully at module level")
         return True
     except ImportError as e:
         logger.error(f"❌ Critical import failed: {e}")
@@ -727,7 +727,7 @@ def _save_bin_artifacts_and_metadata(
     tot = md.get("total_features")
     
     if logger:
-        logger.info("Pre-save bins: total=%s occupied=%s nonzero=%s", tot, occ, nz)
+        logger.debug("Pre-save bins: total=%s occupied=%s nonzero=%s", tot, occ, nz)
         if tot in (None, 0) or occ in (None, 0) or nz in (None, 0):
             logger.error("Pre-save check indicates empty occupancy; saving anyway for debugging.")
     
@@ -752,7 +752,7 @@ def _save_bin_artifacts_and_metadata(
     # Generate bin_summary.json artifact (Issue #329)
     try:
         bin_summary_path = generate_bin_summary_artifact(daily_folder_path)
-        logger.info(f"Generated bin_summary.json: {bin_summary_path}")
+        logger.debug(f"Generated bin_summary.json: {bin_summary_path}")
     except Exception as e:
         logger.warning(f"Failed to generate bin_summary.json: {e}")
     
@@ -2161,7 +2161,7 @@ def _apply_flagging_to_bin_features(
         
         flag_time = int((time.monotonic() - flag_start) * 1000)
         flagged_count = sum(1 for r in flag_results if r.severity != "none")
-        logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
+        logger.debug(f"Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
         
     except Exception as flag_error:
         logger.error(f"⚠️ Flagging failed; LOS classification is required: {flag_error}")
@@ -2310,7 +2310,7 @@ def _add_geometries_to_bin_features(
                 # No centerline available, leave geometry as None
         
         geom_time = int((time.monotonic() - geom_start) * 1000)
-        logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
+        logger.debug(f"Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
         
     except Exception as geom_error:
         logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
@@ -2578,7 +2578,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
                         "speed_mps": np.array([], dtype=np.float64)
                     }
         
-        logger.info(f"Re-mapped runners to {len(coarsened_time_windows)} coarsened windows (factor={coarsening_factor})")
+        logger.debug(f"Re-mapped runners to {len(coarsened_time_windows)} coarsened windows (factor={coarsening_factor})")
         
         # Regenerate with coarsened parameters and re-mapped runners
         bin_build = build_bin_features(
@@ -2601,7 +2601,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
             "hotspot_segments": list(HOTSPOT_SEGMENTS)
         })
         
-        logger.info(f"Coarsening complete: {len(bin_build.features)} features in {time.monotonic() - start_time:.1f}s")
+        logger.debug(f"Coarsening complete: {len(bin_build.features)} features in {time.monotonic() - start_time:.1f}s")
     
     return bin_build
 
@@ -2697,8 +2697,6 @@ def _calculate_runner_positions_for_segment_window(
         Tuple of (pos_m array, speed_mps array) for runners in segment during window
     """
     import numpy as np
-    import json
-    import time
     
     runner_start_times = event_runners_copy['runner_start_time'].values
     pace_sec_per_km = event_runners_copy['pace_sec_per_km'].values
@@ -2710,33 +2708,6 @@ def _calculate_runner_positions_for_segment_window(
     # Vectorized check: runner in segment during time window (±30s tolerance)
     in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
     
-    # #region agent log - Debug A1 10k missing at 07:20
-    try:
-        with open('/app/.cursor/debug.log', 'a') as f:
-            log_entry = {
-                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
-                "message": "Time window filtering",
-                "data": {
-                    "t_mid_sec": t_mid_sec,
-                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                    "from_km": from_km,
-                    "to_km": to_km,
-                    "total_runners": len(event_runners_copy),
-                    "in_window_count": int(in_window_mask.sum()),
-                    "min_start_time": float(runner_start_times.min()) if len(runner_start_times) > 0 else None,
-                    "max_start_time": float(runner_start_times.max()) if len(runner_start_times) > 0 else None,
-                    "min_time_at_seg_start": float(time_at_seg_start.min()) if len(time_at_seg_start) > 0 else None,
-                    "max_time_at_seg_end": float(time_at_seg_end.max()) if len(time_at_seg_end) > 0 else None
-                },
-                "timestamp": int(time.time() * 1000),
-                "sessionId": "debug-session",
-                "runId": "a1-10k-investigation",
-                "hypothesisId": "A1_10k_missing"
-            }
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     # Filter to runners in window
     valid_runners = event_runners_copy[in_window_mask]
@@ -2747,30 +2718,6 @@ def _calculate_runner_positions_for_segment_window(
     time_since_start = t_mid_sec - valid_runners['runner_start_time'].values
     started_mask = time_since_start >= 0
     
-    # #region agent log - Debug A1 10k missing at 07:20
-    try:
-        with open('/app/.cursor/debug.log', 'a') as f:
-            log_entry = {
-                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
-                "message": "Started mask filtering",
-                "data": {
-                    "t_mid_sec": t_mid_sec,
-                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                    "valid_runners_count": len(valid_runners),
-                    "started_count": int(started_mask.sum()),
-                    "not_started_count": int((~started_mask).sum()),
-                    "min_runner_start": float(valid_runners['runner_start_time'].min()) if len(valid_runners) > 0 else None,
-                    "max_runner_start": float(valid_runners['runner_start_time'].max()) if len(valid_runners) > 0 else None
-                },
-                "timestamp": int(time.time() * 1000),
-                "sessionId": "debug-session",
-                "runId": "a1-10k-investigation",
-                "hypothesisId": "A1_10k_missing"
-            }
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     if not started_mask.any():
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
@@ -2784,31 +2731,6 @@ def _calculate_runner_positions_for_segment_window(
     # Check if within segment range (vectorized)
     in_segment_mask = (runner_abs_km >= from_km) & (runner_abs_km <= to_km)
     
-    # #region agent log - Debug A1 10k missing at 07:20
-    try:
-        with open('/app/.cursor/debug.log', 'a') as f:
-            log_entry = {
-                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
-                "message": "Segment range filtering",
-                "data": {
-                    "t_mid_sec": t_mid_sec,
-                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                    "from_km": from_km,
-                    "to_km": to_km,
-                    "started_count": int(started_mask.sum()),
-                    "in_segment_count": int(in_segment_mask.sum()),
-                    "min_runner_abs_km": float(runner_abs_km.min()) if len(runner_abs_km) > 0 else None,
-                    "max_runner_abs_km": float(runner_abs_km.max()) if len(runner_abs_km) > 0 else None
-                },
-                "timestamp": int(time.time() * 1000),
-                "sessionId": "debug-session",
-                "runId": "a1-10k-investigation",
-                "hypothesisId": "A1_10k_missing"
-            }
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     if not in_segment_mask.any():
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
@@ -2855,35 +2777,6 @@ def _process_event_windows_and_segments(
         
         t_mid_sec = _calculate_window_midpoint_seconds(t_start, t_end)
         
-        # #region agent log - Debug A1 10k missing at 07:20
-        try:
-            with open('/app/.cursor/debug.log', 'a') as f:
-                log_entry = {
-                    "location": "density_report.py:_process_event_windows_and_segments",
-                    "message": "Window timing check",
-                    "data": {
-                        "seg_id": "ALL",  # Will be filtered to A1 in analysis
-                        "event": event,
-                        "t_start": str(t_start),
-                        "t_end": str(t_end),
-                        "t_mid_sec": t_mid_sec,
-                        "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                        "event_start_sec": event_start_sec,
-                        "event_start_time": f"{int(event_start_sec // 3600):02d}:{int((event_start_sec % 3600) // 60):02d}:{int(event_start_sec % 60):02d}",
-                        "WINDOW_SECONDS": WINDOW_SECONDS,
-                        "skip_threshold": event_start_sec - WINDOW_SECONDS,
-                        "will_skip": t_mid_sec < (event_start_sec - WINDOW_SECONDS),
-                        "w_idx": w_idx
-                    },
-                    "timestamp": int(time.time() * 1000),
-                    "sessionId": "debug-session",
-                    "runId": "a1-10k-investigation",
-                    "hypothesisId": "A1_10k_missing"
-                }
-                f.write(json.dumps(log_entry) + "\n")
-        except Exception:
-            pass
-        # #endregion
         
         # Skip windows before this event starts
         if t_mid_sec < (event_start_sec - WINDOW_SECONDS):
@@ -2896,30 +2789,6 @@ def _process_event_windows_and_segments(
         
         # For each segment this event uses
         for seg_id in segments_dict.keys():
-            # #region agent log - Debug A1 10k missing at 07:20
-            try:
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    log_entry = {
-                        "location": "density_report.py:_process_event_windows_and_segments",
-                        "message": "Segment filtering checks",
-                        "data": {
-                            "seg_id": seg_id,
-                            "event": event,
-                            "t_mid_sec": t_mid_sec,
-                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                            "in_segment_ranges": seg_id in segment_ranges,
-                            "event_column": event_column,
-                            "w_idx": w_idx
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "a1-10k-investigation",
-                        "hypothesisId": "A1_10k_missing"
-                    }
-                    f.write(json.dumps(log_entry) + "\n")
-            except Exception:
-                pass
-            # #endregion
             
             if seg_id not in segment_ranges:
                 _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
@@ -2933,62 +2802,12 @@ def _process_event_windows_and_segments(
             
             seg_event_flag = seg_row.iloc[0].get(event_column, 'n')
             
-            # #region agent log - Debug A1 10k missing at 07:20
-            try:
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    log_entry = {
-                        "location": "density_report.py:_process_event_windows_and_segments",
-                        "message": "Event flag check",
-                        "data": {
-                            "seg_id": seg_id,
-                            "event": event,
-                            "event_column": event_column,
-                            "seg_event_flag": str(seg_event_flag),
-                            "will_skip": seg_event_flag != 'y',
-                            "t_mid_sec": t_mid_sec,
-                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                            "w_idx": w_idx
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "a1-10k-investigation",
-                        "hypothesisId": "A1_10k_missing"
-                    }
-                    f.write(json.dumps(log_entry) + "\n")
-            except Exception:
-                pass
-            # #endregion
             
             if seg_event_flag != 'y':
                 continue  # Segment not configured for this event
             
             km_range = segment_ranges[seg_id].get(event)
             
-            # #region agent log - Debug A1 10k missing at 07:20
-            try:
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    log_entry = {
-                        "location": "density_report.py:_process_event_windows_and_segments",
-                        "message": "Km range lookup",
-                        "data": {
-                            "seg_id": seg_id,
-                            "event": event,
-                            "km_range": str(km_range) if km_range is not None else None,
-                            "km_range_is_none": km_range is None,
-                            "segment_ranges_keys": list(segment_ranges[seg_id].keys()) if seg_id in segment_ranges else [],
-                            "t_mid_sec": t_mid_sec,
-                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                            "w_idx": w_idx
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "a1-10k-investigation",
-                        "hypothesisId": "A1_10k_missing"
-                    }
-                    f.write(json.dumps(log_entry) + "\n")
-            except Exception:
-                pass
-            # #endregion
             
             if km_range is None:
                 continue
@@ -2998,64 +2817,11 @@ def _process_event_windows_and_segments(
                 continue
             
             # Calculate runner positions for this segment/window
-            # #region agent log - Debug A1 10k missing at 07:20
-            import json
-            try:
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    log_entry = {
-                        "location": "density_report.py:_process_event_windows_and_segments",
-                        "message": "Processing segment/window for event",
-                        "data": {
-                            "seg_id": seg_id,
-                            "event": event,
-                            "t_mid_sec": t_mid_sec,
-                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                            "from_km": from_km,
-                            "to_km": to_km,
-                            "event_start_sec": event_start_sec,
-                            "event_start_time": f"{int(event_start_sec // 3600):02d}:{int((event_start_sec % 3600) // 60):02d}:{int(event_start_sec % 60):02d}",
-                            "total_runners": len(event_runners_copy),
-                            "w_idx": w_idx
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "a1-10k-investigation",
-                        "hypothesisId": "A1_10k_missing"
-                    }
-                    f.write(json.dumps(log_entry) + "\n")
-            except Exception:
-                pass
-            # #endregion
             
             pos_m, speeds = _calculate_runner_positions_for_segment_window(
                 event_runners_copy, t_mid_sec, from_km, to_km
             )
             
-            # #region agent log - Debug A1 10k missing at 07:20
-            try:
-                with open('/app/.cursor/debug.log', 'a') as f:
-                    log_entry = {
-                        "location": "density_report.py:_process_event_windows_and_segments",
-                        "message": "After calculating runner positions",
-                        "data": {
-                            "seg_id": seg_id,
-                            "event": event,
-                            "t_mid_sec": t_mid_sec,
-                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
-                            "pos_m_count": len(pos_m),
-                            "speeds_count": len(speeds),
-                            "from_km": from_km,
-                            "to_km": to_km
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "a1-10k-investigation",
-                        "hypothesisId": "A1_10k_missing"
-                    }
-                    f.write(json.dumps(log_entry) + "\n")
-            except Exception:
-                pass
-            # #endregion
             
             if len(pos_m) > 0:
                 # Initialize segment/window in mapping if needed
@@ -3176,7 +2942,7 @@ def build_runner_window_mapping(
 
         snapshot_df = try_load_day_snapshot(Path(run_path) / str(day_code))
         if snapshot_df is not None and not snapshot_df.empty:
-            logger.info(
+            logger.debug(
                 "Building bin runner mapping from trajectory snapshot (%s runners) for day %s",
                 len(snapshot_df),
                 day_code,
@@ -3591,7 +3357,7 @@ def generate_density_report_markdown(
     output_path_obj = Path(output_path) if output_path else None
     bins_path = Path(bins_dir) if bins_dir else None
     
-    logger.info(f"generate_density_report_markdown: Calling generate_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
+    logger.debug(f"generate_density_report_markdown: Calling generate_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
     
     # Issue #600: Convert segment_metrics_path string to Path if provided
     segment_metrics_path_obj = None
@@ -3612,7 +3378,7 @@ def generate_density_report_markdown(
         bins_dir=bins_path  # Issue #519/542: Pass bins_dir to avoid duplicate files
     )
     
-    logger.info(f"generate_density_report_markdown: generate_density_report returned, success={results.get('success', False)}")
+    logger.debug(f"generate_density_report_markdown: generate_density_report returned, success={results.get('success', False)}")
     
     # Return in the format expected by the existing API
     return {

@@ -14,6 +14,7 @@ import logging
 import pandas as pd
 
 from app.core.v2.models import Day, Event
+from app.core.v2.performance import log_span
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ def generate_ui_artifacts_per_day(
         Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     try:
-        logger.info(f"Generating UI artifacts for day {day.value} (day-scoped)")
+        logger.debug(f"Generating UI artifacts for day {day.value} (day-scoped)")
         
         # Get UI artifacts path for this day
         ui_path = get_ui_artifacts_path(run_id, day)
@@ -139,7 +140,7 @@ def generate_ui_artifacts_per_day(
         day_segments_df = filter_segments_by_events(segments_df, day_events)
         day_segment_ids = set(day_segments_df['seg_id'].astype(str).unique())
         
-        logger.info(
+        logger.debug(
             f"Day {day.value}: Filtering artifacts to {len(day_segment_ids)} segments: "
             f"{sorted(list(day_segment_ids))[:10]}{'...' if len(day_segment_ids) > 10 else ''}"
         )
@@ -186,7 +187,7 @@ def generate_ui_artifacts_per_day(
                 overtaking_segments = len(overtaking_segments_set)
                 co_presence_segments = len(copresence_segments_set)
                 
-                logger.info(
+                logger.debug(
                     f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
                     f"{co_presence_segments} co-presence (from {len(segments_list)} segments)"
                 )
@@ -217,7 +218,7 @@ def generate_ui_artifacts_per_day(
             )
             
             if artifacts_dir:
-                logger.info(f"✅ UI artifacts generated for day {day.value}: {artifacts_dir}")
+                logger.debug(f"✅ UI artifacts generated for day {day.value}: {artifacts_dir}")
                 return artifacts_dir
             else:
                 logger.warning(f"UI artifact generation returned None for day {day.value}")
@@ -298,8 +299,8 @@ def _export_ui_artifacts_v2(
     geospatial_dir.mkdir(exist_ok=True)
     visualizations_dir.mkdir(exist_ok=True)
     
-    logger.info(f"Generating UI artifacts in {ui_path} (day-scoped to {len(day_segment_ids)} segments)")
-    logger.info(f"Issue #574: Using organized structure: metadata/, metrics/, geospatial/, visualizations/")
+    logger.debug(f"Generating UI artifacts in {ui_path} (day-scoped to {len(day_segment_ids)} segments)")
+    logger.debug(f"Issue #574: Using organized structure: metadata/, metrics/, geospatial/, visualizations/")
     
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
@@ -337,7 +338,7 @@ def _export_ui_artifacts_v2(
                 aggregated_bins_for_flags = aggregated_bins_for_flags[
                     aggregated_bins_for_flags[flags_segment_col].astype(str).isin(day_segment_ids)
                 ].copy()
-                logger.info(
+                logger.debug(
                     f"   ✅ Filtered bins: {bins_before} -> {len(aggregated_bins)} rows "
                     f"for day {day.value} ({len(day_segment_ids)} segments)"
                 )
@@ -347,7 +348,7 @@ def _export_ui_artifacts_v2(
             temp_bins_dir = temp_reports / "bins"
             temp_bins_dir.mkdir(parents=True, exist_ok=True)
             aggregated_bins.to_parquet(temp_bins_dir / "bins.parquet", index=False)
-            logger.info(f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports")
+            logger.debug(f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports")
 
             # Prepare a dedicated reports directory for heatmaps so we can
             # bypass flag-only filtering in v1 load_bin_data when necessary.
@@ -358,12 +359,12 @@ def _export_ui_artifacts_v2(
             heatmap_bins = aggregated_bins.copy()
             if "flag_severity" in heatmap_bins.columns and heatmap_bins["flag_severity"].eq("none").all():
                 heatmap_bins = heatmap_bins.drop(columns=["flag_severity"])
-                logger.info(
+                logger.debug(
                     "   ℹ️ Heatmap bins contain only 'none' flag_severity; dropping column to keep all bins"
                 )
 
             heatmap_bins.to_parquet(heatmap_bins_dir / "bins.parquet", index=False)
-            logger.info(f"   ✅ Saved {len(heatmap_bins)} bins for heatmap generation")
+            logger.debug(f"   ✅ Saved {len(heatmap_bins)} bins for heatmap generation")
         else:
             logger.warning("   ⚠️  No bins data available from any day")
     except Exception as e:
@@ -371,15 +372,15 @@ def _export_ui_artifacts_v2(
     
     try:
         # 1. Generate meta.json (Issue #574: in metadata/ subdirectory)
-        logger.info("1️⃣  Generating meta.json...")
+        logger.debug("1️⃣  Generating meta.json...")
         meta = generate_meta_json(run_id, environment)
         # Add day information for v2
         meta["day"] = day.value
         (metadata_dir / "meta.json").write_text(json.dumps(meta, indent=2))
-        logger.info(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value} (in metadata/)")
+        logger.debug(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value} (in metadata/)")
         
         # 2. Generate segment_metrics.json (day-scoped)
-        logger.info("2️⃣  Generating segment_metrics.json...")
+        logger.debug("2️⃣  Generating segment_metrics.json...")
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 segment_metrics = generate_segment_metrics_json(temp_reports)
@@ -408,11 +409,11 @@ def _export_ui_artifacts_v2(
                                 metrics['schema'] = correct_schema
                                 enriched_count += 1
                     if enriched_count > 0:
-                        logger.info(
+                        logger.debug(
                             f"   ✅ Enriched {enriched_count} segments with correct schema from segments_df"
                         )
                 
-                logger.info(
+                logger.debug(
                     f"   ✅ segment_metrics.json: {len(segment_metrics)} segments "
                     f"(day-scoped to {day.value})"
                 )
@@ -428,7 +429,7 @@ def _export_ui_artifacts_v2(
         peak_rate_overall = max((seg.get("peak_rate", 0.0) for seg in segment_metrics.values()), default=0.0)
         
         # 3. Generate flags.json
-        logger.info("3️⃣  Generating flags.json...")
+        logger.debug("3️⃣  Generating flags.json...")
         try:
             # Issue #528: Use bins with 'rate' column (not 'rate_p_s') for flagging
             if aggregated_bins_for_flags is not None and not aggregated_bins_for_flags.empty and temp_reports:
@@ -444,7 +445,7 @@ def _export_ui_artifacts_v2(
                     temp_bins_path = Path(temp_reports) / "bins" / "bins.parquet"
                     temp_bins_path.parent.mkdir(parents=True, exist_ok=True)
                     aggregated_bins_for_flags.to_parquet(temp_bins_path, index=False)
-                    logger.info(f"   📊 Saved {len(aggregated_bins_for_flags)} bins with 'rate' column for flagging")
+                    logger.debug(f"   📊 Saved {len(aggregated_bins_for_flags)} bins with 'rate' column for flagging")
                     flags = generate_flags_json(temp_reports, segment_metrics)
             elif aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 # Fallback: try with aggregated_bins if aggregated_bins_for_flags not available
@@ -474,13 +475,13 @@ def _export_ui_artifacts_v2(
         
         # Issue #574: Write to metrics/ subdirectory
         (metrics_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics_with_summary, indent=2))
-        logger.info(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary (in metrics/)")
+        logger.debug(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary (in metrics/)")
         
         (metrics_dir / "flags.json").write_text(json.dumps(flags, indent=2))
-        logger.info(f"   ✅ flags.json: {len(flags)} flagged segments (in metrics/)")
+        logger.debug(f"   ✅ flags.json: {len(flags)} flagged segments (in metrics/)")
         
         # 4. Generate flow.json
-        logger.info("4️⃣  Generating flow.json...")
+        logger.debug("4️⃣  Generating flow.json...")
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 flow = generate_flow_json(temp_reports)
@@ -502,12 +503,12 @@ def _export_ui_artifacts_v2(
         
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "flow.json").write_text(json.dumps(flow, indent=2))
-        logger.info(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)")
+        logger.debug(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)")
         
         # 5. Generate segments.geojson (day-scoped)
         # Issue #655: segments.geojson generation does NOT require bins - it only needs segments.csv and GPX files
         # generate_segments_geojson loads segments.csv from analysis.json and GPX courses for the day's events
-        logger.info("5️⃣  Generating segments.geojson...")
+        logger.debug("5️⃣  Generating segments.geojson...")
         segments_geojson = None
         try:
             # Create temp_reports directory for generate_segments_geojson if it doesn't exist
@@ -516,7 +517,7 @@ def _export_ui_artifacts_v2(
             if not temp_reports:
                 temp_reports = ui_path.parent / "reports_temp"
                 temp_reports.mkdir(parents=True, exist_ok=True)
-                logger.info(f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}")
+                logger.debug(f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}")
             
             # Generate segments.geojson - this works independently of bins
             # Issue #673: Pass analysis_context to avoid redundant file I/O (analysis.json, segments.csv loading)
@@ -540,7 +541,7 @@ def _export_ui_artifacts_v2(
                     for feature in segments_geojson["features"]
                     if _feature_segment_id(feature) in day_segment_ids
                 ]
-                logger.info(
+                logger.debug(
                     f"   ✅ Filtered segments.geojson: {original_count} -> "
                     f"{len(segments_geojson['features'])} features for day {day.value}"
                 )
@@ -585,7 +586,7 @@ def _export_ui_artifacts_v2(
                                 props = feature.get("properties", {})
                                 props["events"] = events
                                 feature["properties"] = props
-                    logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
+                    logger.debug(f"   ✅ Added events property to segments.geojson features from segments_df")
             else:
                 # segments_geojson exists but has no "features" key - this is an error
                 error_msg = (
@@ -616,22 +617,23 @@ def _export_ui_artifacts_v2(
         
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
-        logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
+        logger.debug(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
 
         # 5.1. Generate segment map snapshots
-        logger.info("5️⃣.1️⃣  Generating segment map snapshots...")
+        logger.debug("5️⃣.1️⃣  Generating segment map snapshots...")
         segment_maps_dir = visualizations_dir / "segment_maps"
-        segment_map_count = export_segment_map_pngs(
+        with log_span("Segment maps", log=logger, always_info=True):
+            segment_map_count = export_segment_map_pngs(
             segments_geojson=segments_geojson,
             segment_metrics=segment_metrics,
             output_dir=segment_maps_dir
         )
-        logger.info(
+        logger.debug(
             f"   ✅ Segment maps: {segment_map_count} PNGs (in visualizations/segment_maps/)"
         )
         
         # 5.5. Generate flow_segments.json (Issue #628)
-        logger.info("5️⃣.5️⃣  Generating flow_segments.json...")
+        logger.debug("5️⃣.5️⃣  Generating flow_segments.json...")
         try:
             day_flow_result = flow_results.get(day, {})
             if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
@@ -644,7 +646,7 @@ def _export_ui_artifacts_v2(
         
         # Issue #628: Write to metrics/ subdirectory
         (metrics_dir / "flow_segments.json").write_text(json.dumps(flow_segments, indent=2))
-        logger.info(f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)")
+        logger.debug(f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)")
 
         # Issue #845/#847: additive segment-parent summary. Never fail the pipeline.
         try:
@@ -653,12 +655,12 @@ def _export_ui_artifacts_v2(
 
             day_dir = get_run_directory(run_id) / day.value
             summary_path = write_segment_flow_summary(day_dir, day.value)
-            logger.info("   ✅ %s written", summary_path.name if summary_path else "flow_segments_by_seg.json")
+            logger.debug("   ✅ %s written", summary_path.name if summary_path else "flow_segments_by_seg.json")
         except Exception as e:
             logger.warning("   ⚠️  Could not generate flow_segments_by_seg.json: %s", e)
         
         # 5.6. Generate zone_captions.json (Issue #628)
-        logger.info("5️⃣.6️⃣  Generating zone_captions.json...")
+        logger.debug("5️⃣.6️⃣  Generating zone_captions.json...")
         try:
             day_flow_result = flow_results.get(day, {})
             if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
@@ -671,26 +673,27 @@ def _export_ui_artifacts_v2(
         
         # Issue #628: Write to visualizations/ subdirectory
         (visualizations_dir / "zone_captions.json").write_text(json.dumps(zone_captions, indent=2))
-        logger.info(f"   ✅ zone_captions.json: {len(zone_captions)} zone captions (in visualizations/)")
+        logger.debug(f"   ✅ zone_captions.json: {len(zone_captions)} zone captions (in visualizations/)")
         
         # 6. Generate schema_density.json (Issue #574: in metadata/ subdirectory)
-        logger.info("6️⃣  Generating schema_density.json...")
+        logger.debug("6️⃣  Generating schema_density.json...")
         schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
         (metadata_dir / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
-        logger.info(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')} (in metadata/)")
+        logger.debug(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')} (in metadata/)")
         
         # 7. Generate health.json (Issue #574: in metadata/ subdirectory)
-        logger.info("7️⃣  Generating health.json...")
+        logger.debug("7️⃣  Generating health.json...")
         # Note: generate_health_json expects ui_path, but we'll pass it and then move the file
         health = generate_health_json(ui_path, run_id, environment)
         (metadata_dir / "health.json").write_text(json.dumps(health, indent=2))
-        logger.info(f"   ✅ health.json generated (in metadata/)")
+        logger.debug(f"   ✅ health.json generated (in metadata/)")
         
         # 8. Generate heatmaps and captions
-        logger.info("8️⃣  Generating heatmaps and captions...")
+        logger.debug("Generating heatmaps and captions...")
         try:
             if heatmap_reports and heatmap_reports.exists():
-                export_heatmaps_and_captions(run_id, heatmap_reports, None)
+                with log_span("Heatmaps", log=logger, always_info=True):
+                    export_heatmaps_and_captions(run_id, heatmap_reports, None)
                 
                 # Move heatmaps and captions to day-scoped UI directory
                 # Check multiple possible source locations
@@ -746,7 +749,7 @@ def _export_ui_artifacts_v2(
                     except Exception as cleanup_err:
                         logger.debug(f"   ⚠️  Could not remove source heatmaps dir: {cleanup_err}")
 
-                    logger.info(
+                    logger.debug(
                         f"   ✅ Heatmaps filtered and moved: {heatmaps_moved} PNGs "
                         f"for day {day.value} ({len(day_segment_ids)} segments) (in visualizations/)"
                     )
@@ -759,7 +762,7 @@ def _export_ui_artifacts_v2(
                     if captions_dest.exists():
                         captions_dest.unlink()
                     shutil.move(str(captions_source), str(captions_dest))
-                    logger.info(f"   ✅ Captions moved to {captions_dest} (in visualizations/)")
+                    logger.debug(f"   ✅ Captions moved to {captions_dest} (in visualizations/)")
                 else:
                     logger.warning(f"   ⚠️  Captions not found at expected locations")
                 
@@ -774,7 +777,7 @@ def _export_ui_artifacts_v2(
                         contents = list(run_level_ui.iterdir())
                         if len(contents) == 0:
                             run_level_ui.rmdir()
-                            logger.info(f"   ✅ Removed empty run-level /ui folder: {run_level_ui}")
+                            logger.debug(f"   ✅ Removed empty run-level /ui folder: {run_level_ui}")
                         else:
                             logger.debug(f"   Run-level /ui folder not empty, keeping: {contents}")
                     except Exception as e:
@@ -793,7 +796,7 @@ def _export_ui_artifacts_v2(
             import shutil
             shutil.rmtree(heatmap_reports)
         
-        logger.info(f"✅ All UI artifacts generated for day {day.value}")
+        logger.debug(f"✅ All UI artifacts generated for day {day.value}")
         return ui_path
         
     except Exception as e:
@@ -840,7 +843,7 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     
     # Concatenate all bins
     aggregated = pd.concat(all_bins, ignore_index=True)
-    logger.info(f"Aggregated {len(aggregated)} bins from {len(all_bins)} day(s)")
+    logger.debug(f"Aggregated {len(aggregated)} bins from {len(all_bins)} day(s)")
     
     return aggregated
 
@@ -890,7 +893,7 @@ def _generate_flow_segments_json(
         # Issue #628: Debug logging for D1 (full / full) to investigate missing segment
         is_d1_full_full = (str(seg_id) == "D1" and str(event_a) == "full" and str(event_b) == "full")
         if is_d1_full_full:
-            logger.info(
+            logger.debug(
                 f"Day {day.value}: Found D1 (full / full) in flow_results - "
                 f"seg_id={seg_id}, event_a={event_a}, event_b={event_b}, "
                 f"has_zones_key={'zones' in segment}, zones_type={type(segment.get('zones'))}, "
@@ -1005,7 +1008,7 @@ def _generate_flow_segments_json(
             "flow_id": segment.get("flow_id") or composite_key,
         }
     
-    logger.info(f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries")
+    logger.debug(f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries")
     return flow_segments
 
 
@@ -1263,7 +1266,7 @@ def _generate_zone_captions_json(
             
             zone_captions.append(caption)
     
-    logger.info(f"Generated zone_captions.json: {len(zone_captions)} zone captions")
+    logger.debug(f"Generated zone_captions.json: {len(zone_captions)} zone captions")
     return zone_captions
 
 

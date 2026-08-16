@@ -488,7 +488,7 @@ def _create_converted_segment(segment: pd.Series, event_a: str, event_b: str) ->
         path: Algorithm path used ("ORIGINAL", "BINNED_TIME", "BINNED_DISTANCE")
         counters: Dictionary with performance counters
     """
-    logging.info(json.dumps({
+    logger.debug(json.dumps({
         "component": "flow",
         "seg_id": seg_id,
         "event_a": event_a,
@@ -1673,23 +1673,13 @@ def calculate_convergence_zone_overlaps_with_binning(
     
     # Debug logging for M1 (sampled to avoid hot-loop overhead)
     if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
-        print(f"🔍 BINNING DECISION DEBUG:")
-        print(f"  Segment key: {segment_key}")
-        if norm_inputs is not None:
-            print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
-            print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
-        else:
-            print(f"  Raw conflict length: {conflict_length_m:.3f} m")
-            print(f"  Raw overlap duration: {overlap_duration_minutes:.3f} min")
-        print(f"  Chosen path: {chosen_path}")
-        print(f"  Legacy time bins: {use_time_bins}")
-        print(f"  Legacy distance bins: {use_distance_bins}")
-        print(f"  Will use: {chosen_path} calculation")
+        logger.debug("BINNING DECISION DEBUG: key=%s path=%s time_bins=%s distance_bins=%s",
+                     segment_key, chosen_path, use_time_bins, use_distance_bins)
     
     # Calculate results using chosen path
     if use_time_bins or use_distance_bins:
         # Log binning decision for transparency
-        logging.info(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
+        logger.debug(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
                     f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
         
         results = calculate_convergence_zone_overlaps_binned(
@@ -1719,9 +1709,9 @@ def calculate_convergence_zone_overlaps_with_binning(
                 segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
                 (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
             )
-            print(f"🔍 {telemetry_log}")
+            logger.debug("%s", telemetry_log)
         else:
-            print(f"🔍 LEGACY BINNING: {chosen_path} -> {overtakes_a}/{overtakes_b}")
+            logger.debug("LEGACY BINNING: %s -> %s/%s", chosen_path, overtakes_a, overtakes_b)
     
     return results
 
@@ -2399,11 +2389,11 @@ def validate_per_runner_entry_exit_f1(
     pct_b = (overtakes_b / total_b * 100) if total_b > 0 else 0.0
     
     # Log validation results
-    logging.info(f"F1 {event_a} vs {event_b} PER-RUNNER VALIDATION:")
-    logging.info(f"  Total {event_a}: {total_a}, Overtaking: {overtakes_a} ({pct_a:.1f}%)")
-    logging.info(f"  Total {event_b}: {total_b}, Overtaking: {overtakes_b} ({pct_b:.1f}%)")
-    logging.info(f"  Co-presence {event_a}: {copresence_a}, {event_b}: {copresence_b}")
-    logging.info(f"  Overlap pairs: {len(overlap_pairs)}")
+    logging.debug(f"F1 {event_a} vs {event_b} PER-RUNNER VALIDATION:")
+    logging.debug(f"  Total {event_a}: {total_a}, Overtaking: {overtakes_a} ({pct_a:.1f}%)")
+    logging.debug(f"  Total {event_b}: {total_b}, Overtaking: {overtakes_b} ({pct_b:.1f}%)")
+    logging.debug(f"  Co-presence {event_a}: {copresence_a}, {event_b}: {copresence_b}")
+    logging.debug(f"  Overlap pairs: {len(overlap_pairs)}")
     
     return {
         "total_a": total_a,
@@ -2671,7 +2661,7 @@ def calculate_convergence_zone_overlaps_with_binning(
     # Issue #612 Task 2: Always use binned calculation (binning is always-on)
     # The function still decides between time bins and distance bins, but always uses binning
     # Log binning decision for transparency
-    logging.info(f"BINNING APPLIED (always-on): time_bins={use_time_bins}, distance_bins={use_distance_bins} "
+    logger.debug(f"BINNING APPLIED (always-on): time_bins={use_time_bins}, distance_bins={use_distance_bins} "
                 f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
     
     results = calculate_convergence_zone_overlaps_binned(
@@ -2691,9 +2681,9 @@ def calculate_convergence_zone_overlaps_with_binning(
                 segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
                 (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
             )
-            print(f"🔍 {telemetry_log}")
+            logger.debug("%s", telemetry_log)
         else:
-            print(f"🔍 LEGACY BINNING: {chosen_path} -> {overtakes_a}/{overtakes_b}")
+            logger.debug("LEGACY BINNING: %s -> %s/%s", chosen_path, overtakes_a, overtakes_b)
     
     return results
 
@@ -3384,8 +3374,10 @@ def _process_segment_with_convergence(
     use_distance_bins = dynamic_conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
     
     if use_time_bins or use_distance_bins:
-        print(f"🔧 BINNING APPLIED to {seg_id}: time_bins={use_time_bins}, distance_bins={use_distance_bins}")
-        print(f"   Overlap: {overlap_duration_minutes:.1f}min, Conflict: {dynamic_conflict_length_m:.0f}m")
+        logger.debug(
+            "BINNING APPLIED to %s: time_bins=%s, distance_bins=%s overlap=%.1fmin conflict=%.0fm",
+            seg_id, use_time_bins, use_distance_bins, overlap_duration_minutes, dynamic_conflict_length_m,
+        )
     
     # Flag suspicious overtaking rates
     pct_a = overtakes_a / len(df_a) if len(df_a) > 0 else 0
@@ -3393,9 +3385,15 @@ def _process_segment_with_convergence(
     
     if pct_a > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD or pct_b > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD:
         if not (use_time_bins or use_distance_bins):
-            print(f"⚠️  SUSPICIOUS OVERTAKING RATES in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - NO BINNING APPLIED!")
+            logger.warning(
+                "Suspicious overtaking rates in %s: %.1f%%, %.1f%% with no binning",
+                seg_id, pct_a * 100, pct_b * 100,
+            )
         else:
-            print(f"✅ High overtaking rates in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - BINNING APPLIED")
+            logger.debug(
+                "High overtaking rates in %s: %.1f%%, %.1f%% (binning applied)",
+                seg_id, pct_a * 100, pct_b * 100,
+            )
     
     # Calculate conflict zone boundaries
     conflict_start, conflict_end = _calculate_conflict_zone_boundaries(
@@ -3615,7 +3613,7 @@ def analyze_temporal_flow_segments(
     segment_results: List[Tuple[int, Optional[Dict[str, Any]], Optional[float], bool]] = []
     
     if use_parallel:
-        logger.info(
+        logger.debug(
             f"Using ThreadPoolExecutor with {max_workers} workers "
             f"for {len(all_segments)} flow segments"
         )

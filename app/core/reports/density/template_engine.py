@@ -74,14 +74,14 @@ class DensityReportTemplateEngine:
         
         try:
             # 1. Title & Metadata
-            logger.info("Template: Generating title & metadata...")
+            logger.debug("Template: Generating title & metadata...")
             content.append(self._generate_title_metadata(context))
             content.append("")
             content.append("---")
             content.append("")
             
             # 2. Executive Summary
-            logger.info("Template: Generating executive summary...")
+            logger.debug("Template: Generating executive summary...")
             # Pass context to _generate_executive_summary for RES data (Issue #573)
             stats_with_context = {**stats, '_context': context}
             content.append(self._generate_executive_summary(stats_with_context, segment_summary_df))
@@ -90,28 +90,28 @@ class DensityReportTemplateEngine:
             content.append("")
             
             # 3. Methodology & Inputs
-            logger.info("Template: Generating methodology & inputs...")
+            logger.debug("Template: Generating methodology & inputs...")
             content.append(self._generate_methodology_inputs(context))
             content.append("")
             content.append("---")
             content.append("")
             
             # 4. Start Times & Cohorts
-            logger.info("Template: Generating start times & cohorts...")
+            logger.debug("Template: Generating start times & cohorts...")
             content.append(self._generate_start_times_cohorts(context))
             content.append("")
             content.append("---")
             content.append("")
             
             # 5. Course Overview
-            logger.info("Template: Generating course overview...")
+            logger.debug("Template: Generating course overview...")
             content.append(self._generate_course_overview(segments_df, segment_windows_df, bins_df))
             content.append("")
             content.append("---")
             content.append("")
             
             # 6. Flagged Segments
-            logger.info("Template: Generating flagged segments...")
+            logger.debug("Template: Generating flagged segments...")
             content.append(self._generate_flagged_segments_complete(segment_summary_df, segments_df))
             content.append("")
             content.append("---")
@@ -124,38 +124,38 @@ class DensityReportTemplateEngine:
             # content.append("")
             
             # 8. Operational Heatmap (placeholder)
-            logger.info("Template: Generating operational heatmap placeholder...")
+            logger.debug("Template: Generating operational heatmap placeholder...")
             content.append(self._generate_operational_heatmap_placeholder())
             content.append("")
             content.append("---")
             content.append("")
             
             # 9. Bin-Level Detail
-            logger.info("Template: Generating bin-level detail...")
+            logger.debug("Template: Generating bin-level detail...")
             content.append(self._generate_bin_level_detail(flagged_bins_df))
             content.append("")
             content.append("---")
             content.append("")
             
             # 10. Segment Details
-            logger.info("Template: Generating segment details...")
+            logger.debug("Template: Generating segment details...")
             content.append(self._generate_segment_details(segments_df, segment_windows_df, segment_summary_df))
             content.append("")
             content.append("---")
             content.append("")
             
             # 10. Mitigations
-            logger.info("Template: Generating mitigations...")
+            logger.debug("Template: Generating mitigations...")
             content.append(self._generate_mitigations(segment_summary_df))
             content.append("")
             content.append("---")
             content.append("")
             
             # 11. Appendix
-            logger.info("Template: Generating appendix...")
+            logger.debug("Template: Generating appendix...")
             content.append(self._generate_appendix())
             
-            logger.info("Template: Report generation complete, joining content...")
+            logger.debug("Template: Report generation complete, joining content...")
             return "\n".join(content)
         except Exception as e:
             logger.error(f"Template: Error generating report: {e}", exc_info=True)

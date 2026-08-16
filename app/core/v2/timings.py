@@ -358,7 +358,7 @@ def compute_predicted_timings(
             "day_duration": day_duration_str
         }
         
-        logger.info(
+        logger.debug(
             f"Issue #638: Computed predicted_timings: "
             f"day_start={day_start_str}, day_first={day_first_finisher_str}, "
             f"day_last={day_last_finisher_str}, day_duration={day_duration_str}"

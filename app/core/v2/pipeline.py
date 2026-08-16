@@ -551,7 +551,7 @@ def calculate_predicted_timings(
             "day_duration": day_duration_str
         }
         
-        logger.info(f"Issue #594: Calculated predicted_timings for {day_path.name}: day_start={day_start_str}, day_end={day_end_str}")
+        logger.debug(f"Issue #594: Calculated predicted_timings for {day_path.name}: day_start={day_start_str}, day_end={day_end_str}")
         return predicted_timings
         
     except Exception as e:
@@ -784,7 +784,7 @@ def create_full_analysis_pipeline(
         from app.config.loader import load_analysis_context
         analysis_context = load_analysis_context(run_path)
         analysis_config = analysis_context.analysis_config
-        logger.info(f"Loaded analysis.json from {analysis_context.analysis_json_path}")
+        logger.debug(f"Loaded analysis.json from {analysis_context.analysis_json_path}")
         
         # Override parameters with values from analysis.json (single source of truth)
         data_dir = str(analysis_context.data_dir)
@@ -810,6 +810,7 @@ def create_full_analysis_pipeline(
     # Issue #527: Set up run-level file logging
     from app.utils.run_logging import RunLogHandler
     run_log_handler = None
+    run_exc: Optional[BaseException] = None
     
     # Issue #503: Initialize performance monitoring
     perf_monitor = PerformanceMonitor(run_id=run_id)
@@ -841,7 +842,7 @@ def create_full_analysis_pipeline(
         ])
         # Timeline Generation (part of Phase 1)
         timelines = generate_day_timelines(events)
-        logger.info(f"[Phase 1] Generated {len(timelines)} day timelines")
+        logger.debug(f"[Phase 1] Generated {len(timelines)} day timelines")
         
         perf_monitor.complete_phase(
             phase_1_metrics,
@@ -925,7 +926,7 @@ def create_full_analysis_pipeline(
                     course_json_path=course_json_path if course_json_path.is_file() else None,
                 )
                 motion_summaries.append(summary)
-                logger.info(
+                logger.debug(
                     "[Phase 2.5] Motion %s: %s rows",
                     day_code,
                     summary.get("row_count"),
@@ -949,7 +950,7 @@ def create_full_analysis_pipeline(
         flow_results = {}
         junction_flow_results = {}
         if run_plan:
-            logger.info("[Phase 3] Processing density analysis...")
+            logger.debug("[Phase 3] Processing density analysis...")
             density_results = analyze_density_segments_v2(
                 events=events,
                 timelines=timelines,
@@ -965,10 +966,10 @@ def create_full_analysis_pipeline(
                 for day_result in density_results.values()
             )
             density_days = len(density_results)
-            logger.info(f"[Phase 3] Density analysis complete: {density_days} days, {total_segments_processed} segments")
+            logger.debug(f"[Phase 3] Density analysis complete: {density_days} days, {total_segments_processed} segments")
             
             # Phase 4: Flow Computation
-            logger.info("[Phase 4] Processing flow analysis...")
+            logger.debug("[Phase 4] Processing flow analysis...")
             # Issue #553 Phase 7.1: Use file path from analysis.json if available
             if analysis_config:
                 flow_file_path = str(analysis_context.flow_csv_path)
@@ -987,10 +988,10 @@ def create_full_analysis_pipeline(
                 perf_monitor=perf_monitor
             )
             flow_days = len(flow_results)
-            logger.info(f"[Phase 4] Flow analysis complete: {flow_days} days")
+            logger.debug(f"[Phase 4] Flow analysis complete: {flow_days} days")
 
             # Phase 4.3: Junction Flow (Issue #818) — core path
-            logger.info("[Phase 4.3] Processing junction flow analysis...")
+            logger.debug("[Phase 4.3] Processing junction flow analysis...")
             junction_flow_results = analyze_junction_flow_v2(
                 events=events,
                 events_by_day=events_by_day,
@@ -998,7 +999,7 @@ def create_full_analysis_pipeline(
                 data_dir=data_dir,
                 perf_monitor=perf_monitor,
             )
-            logger.info(
+            logger.debug(
                 "[Phase 4.3] Junction Flow complete: %s days",
                 len(junction_flow_results),
             )
@@ -1018,7 +1019,7 @@ def create_full_analysis_pipeline(
         density_files = []
         for day, day_events in events_by_day.items():
             day_code = day.value
-            logger.info(f"[Phase 6.1] Processing day: {day_code}")
+            logger.debug(f"[Phase 6.1] Processing day: {day_code}")
             day_path = run_path / day_code
             computation_dir = day_path / "computation"
             computation_dir.mkdir(parents=True, exist_ok=True)
@@ -1034,7 +1035,7 @@ def create_full_analysis_pipeline(
                 }
                 with open(density_json_path, 'w', encoding='utf-8') as f:
                     json.dump(density_for_json, f, indent=2, default=str)
-                logger.info(f"  → Persisted density_results.json: {density_json_path}")
+                logger.debug(f"Persisted density_results.json: {density_json_path}")
                 density_files.append(f"density_results.json ({day_code})")
         
         density_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
@@ -1054,7 +1055,7 @@ def create_full_analysis_pipeline(
         flow_files = []
         for day, day_events in events_by_day.items():
             day_code = day.value
-            logger.info(f"[Phase 6.2] Processing day: {day_code}")
+            logger.debug(f"[Phase 6.2] Processing day: {day_code}")
             day_path = run_path / day_code
             computation_dir = day_path / "computation"
             computation_dir.mkdir(parents=True, exist_ok=True)
@@ -1072,7 +1073,7 @@ def create_full_analysis_pipeline(
                 }
                 with open(flow_json_path, 'w', encoding='utf-8') as f:
                     json.dump(flow_for_json, f, indent=2)
-                logger.info(f"  → Persisted flow_results.json: {flow_json_path}")
+                logger.debug(f"Persisted flow_results.json: {flow_json_path}")
                 flow_files.append(f"flow_results.json ({day_code})")
         
         flow_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
@@ -1086,7 +1087,7 @@ def create_full_analysis_pipeline(
         # Phase 5.1: Bin Generation (per day)
         bins_by_day = {}
         for day, day_events in events_by_day.items():
-            logger.info(f"[Phase 5.1] Processing bin generation for day: {day.value}")
+            logger.debug(f"[Phase 5.1] Processing bin generation for day: {day.value}")
             bin_metrics = perf_monitor.start_phase(
                 f"phase_5_1_bin_generation_{day.value}",
                 phase_number="Phase 5.1",
@@ -1113,7 +1114,7 @@ def create_full_analysis_pipeline(
             # Filter segments to this day's events (Issue #515: Fix bin scoping)
             from app.core.v2.bins import filter_segments_by_events
             day_segments_df = filter_segments_by_events(segments_df, day_events)
-            logger.info(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
+            logger.debug(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
             
             # Prepare start_times for bin generation (minutes as float)
             # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
@@ -1161,11 +1162,11 @@ def create_full_analysis_pipeline(
                     logger.warning(f"⚠️  {warning}")
                 if guardrails["suggestions"]:
                     for suggestion in guardrails["suggestions"]:
-                        logger.info(f"💡 {suggestion}")
+                        logger.debug("%s", suggestion)
             
             if bins_dir:
                 bins_by_day[day.value] = str(bins_dir)
-                logger.info(f"Generated bins for day {day.value}: {bins_dir}")
+                logger.debug(f"Generated bins for day {day.value}: {bins_dir}")
             else:
                 logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
@@ -1211,7 +1212,7 @@ def create_full_analysis_pipeline(
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         
-        logger.info(f"✅ Bin generation validated: {len(bins_by_day)} day(s) with bins.parquet files")
+        logger.debug(f"Bin generation validated: {len(bins_by_day)} day(s) with bins.parquet files")
         
         bin_validation_metrics.finish(memory_mb=get_memory_usage_mb())
         perf_monitor.complete_phase(
@@ -1253,10 +1254,10 @@ def create_full_analysis_pipeline(
             )
             
             locations_count = len(locations_df)
-            logger.info(f"[Phase 6.3] Processing locations persistence...")
+            logger.debug(f"[Phase 6.3] Processing locations persistence...")
             for day, day_events in events_by_day.items():
                 day_code = day.value
-                logger.info(f"[Phase 6.3] Processing day: {day_code}")
+                logger.debug(f"[Phase 6.3] Processing day: {day_code}")
                 day_path = run_path / day_code
                 computation_dir = day_path / "computation"
                 computation_dir.mkdir(parents=True, exist_ok=True)
@@ -1320,7 +1321,7 @@ def create_full_analysis_pipeline(
                 # Sort for consistent output
                 resources_available = sorted(resources_available)
                 
-                logger.info(f"  → Day {day_code}: Found {len(resources_available)} resources with count > 0: {resources_available}")
+                logger.debug(f"Day {day_code}: Found {len(resources_available)} resources with count > 0: {resources_available}")
                 
                 # Persist all locations (locations are not day-partitioned in the data)
                 # But resources_available IS day-specific
@@ -1333,7 +1334,7 @@ def create_full_analysis_pipeline(
                 }
                 with open(locations_json_path, 'w', encoding='utf-8') as f:
                     json.dump(locations_for_json, f, indent=2, default=str)
-                logger.info(f"  → Persisted locations_results.json: {locations_json_path}")
+                logger.debug(f"Persisted locations_results.json: {locations_json_path}")
             
             locations_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
             perf_monitor.complete_phase(
@@ -1365,7 +1366,7 @@ def create_full_analysis_pipeline(
                     day_result=day_result,
                 )
                 junction_files.extend(written.values())
-                logger.info(
+                logger.debug(
                     "[Phase 6.4] Persisted junction flow for %s: %s",
                     day_code,
                     ", ".join(written.values()),
@@ -1392,7 +1393,7 @@ def create_full_analysis_pipeline(
         if not run_plan:
             logger.info("[through=%s] Skipping Phase 7 UI artifacts", through)
         for day, day_events in (events_by_day if run_plan else {}).items():
-            logger.info(f"[Phase 7] Processing day: {day.value}")
+            logger.debug(f"[Phase 7] Processing day: {day.value}")
             try:
                 # Issue #673: Pass analysis_context to avoid redundant file I/O in generate_segments_geojson
                 artifacts_path = generate_ui_artifacts_per_day(
@@ -1419,9 +1420,9 @@ def create_full_analysis_pipeline(
                         viz_count = len(list((ui_dir / "visualizations").glob("*.png"))) if (ui_dir / "visualizations").exists() else 0
                         day_artifacts = metadata_count + metrics_count + geospatial_count + viz_count
                         artifacts_count += day_artifacts
-                        logger.info(f"  → Generated {day_artifacts} artifacts in 4 subdirectories: {artifacts_path}")
+                        logger.debug(f"Generated {day_artifacts} artifacts in 4 subdirectories: {artifacts_path}")
                     else:
-                        logger.info(f"  → Generated UI artifacts: {artifacts_path}")
+                        logger.debug(f"Generated UI artifacts: {artifacts_path}")
                 else:
                     logger.warning(f"  → UI artifact generation returned None for day {day.value}")
             except Exception as e:
@@ -1533,8 +1534,8 @@ def create_full_analysis_pipeline(
                             "events": day_group_events,
                             "res": round(res_score, 2)
                         }
-                        logger.info(
-                            f"Issue #574: Calculated RES for group '{group_id}' on {day_code}: "
+                        logger.debug(
+                            f"Calculated RES for group '{group_id}' on {day_code}: "
                             f"{res_score:.2f} (events: {day_group_events})"
                         )
                     except Exception as e:
@@ -1551,8 +1552,8 @@ def create_full_analysis_pipeline(
                 "event_groups": event_groups_res if event_groups_res else None
             }
             
-            logger.info(
-                f"Issue #574: Calculated derived metrics for {day_code}: "
+            logger.debug(
+                f"Calculated derived metrics for {day_code}: "
                 f"operational_status={operational_status}, los={los_letter}, "
                 f"peak_density={peak_density:.3f}, res_groups={len(event_groups_res) if event_groups_res else 0}"
             )
@@ -1605,7 +1606,7 @@ def create_full_analysis_pipeline(
                     json.dump(map_data, f, indent=2, default=str)
                 
                 maps_by_day[day.value] = str(maps_dir)
-                logger.info(f"Generated map_data.json for day {day.value}: {map_data_path}")
+                logger.debug(f"Generated map_data.json for day {day.value}: {map_data_path}")
             except Exception as e:
                 logger.warning(f"[Phase 9] Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
         
@@ -1704,8 +1705,8 @@ def create_full_analysis_pipeline(
                     metadata["event_groups"] = event_groups
                 # Safely get res_groups count (handle None case)
                 res_groups_count = len(event_groups) if event_groups and isinstance(event_groups, dict) else 0
-                logger.info(
-                    f"Issue #574: Added derived metrics to metadata for {day_code}: "
+                logger.debug(
+                    f"Added derived metrics to metadata for {day_code}: "
                     f"operational_status={derived_metrics.get('operational_status')}, "
                     f"res_groups={res_groups_count}"
                 )
@@ -1724,7 +1725,7 @@ def create_full_analysis_pipeline(
             )
             if predicted_timings:
                 metadata["predicted_timings"] = predicted_timings
-                logger.info(f"Issue #638: Added predicted_timings to metadata for {day_code}")
+                logger.debug(f"Added predicted_timings to metadata for {day_code}")
             else:
                 logger.warning(f"Issue #638: Could not calculate predicted_timings for {day_code}")
             
@@ -1849,12 +1850,12 @@ def create_full_analysis_pipeline(
             
             # Count reports generated
             report_counts = {"Density.md": 0, "Flow.csv": 0, "Locations.csv": 0}
-            for day_code, day_reports in reports_by_day.items():
-                if day_reports.get("density_report"):
+            for _day_key, day_reports in reports_by_day.items():
+                if day_reports.get("density"):
                     report_counts["Density.md"] += 1
-                if day_reports.get("flow_report"):
+                if day_reports.get("flow_csv") or day_reports.get("flow"):
                     report_counts["Flow.csv"] += 1
-                if day_reports.get("locations_report"):
+                if day_reports.get("locations"):
                     report_counts["Locations.csv"] += 1
             
             total_reports = sum(report_counts.values())
@@ -1947,7 +1948,7 @@ def create_full_analysis_pipeline(
 
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
-            logger.info("[Phase 10] Updating metadata verification after report generation")
+            logger.debug("[Phase 10] Updating metadata verification after report generation")
             for day_code, day_metadata in day_metadata_map.items():
                 day_path = run_path / day_code
                 updated_metadata = _update_metadata_verification(day_path, day_metadata)
@@ -1957,7 +1958,7 @@ def create_full_analysis_pipeline(
                 metadata_path = day_path / "metadata.json"
                 with open(metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(updated_metadata, f, indent=2, ensure_ascii=False)
-                logger.info(f"[Phase 10] Updated metadata.json for {day_code}: status={updated_metadata['status']}")
+                logger.debug(f"[Phase 10] Updated metadata.json for {day_code}: status={updated_metadata['status']}")
         except Exception as e:
             logger.error(f"[Phase 10] ❌ ERROR: Report generation failed: {e}", exc_info=True)
             logger.error(f"  → Phase: Report Generation")
@@ -1994,7 +1995,7 @@ def create_full_analysis_pipeline(
         run_metadata_path = run_path / "metadata.json"
         with open(run_metadata_path, 'w', encoding='utf-8') as f:
             json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
-        logger.info(f"[Phase 11] Created metadata.json: {run_metadata_path}")
+        logger.debug(f"[Phase 11] Created metadata.json: {run_metadata_path}")
         
         # Issue #527: Add log file path to metadata (part of Phase 11)
         if run_log_handler:
@@ -2010,7 +2011,7 @@ def create_full_analysis_pipeline(
         
         # Update pointer files (latest.json, index.json)
         update_pointer_files(run_id, combined_metadata)
-        logger.info(f"[Phase 11] Updated pointer files (latest.json, index.json)")
+        logger.debug(f"[Phase 11] Updated pointer files (latest.json, index.json)")
         
         metadata_metrics.finish(memory_mb=get_memory_usage_mb())
         perf_monitor.complete_phase(
@@ -2037,11 +2038,17 @@ def create_full_analysis_pipeline(
                 f"Consider optimization opportunities."
             )
         
+    except Exception as e:
+        run_exc = e
+        raise
     finally:
         # Issue #527: Clean up run logging
         if run_log_handler:
             try:
-                run_log_handler.__exit__(None, None, None)
+                if run_exc is None:
+                    run_log_handler.__exit__(None, None, None)
+                else:
+                    run_log_handler.__exit__(type(run_exc), run_exc, run_exc.__traceback__)
             except Exception as e:
                 logger.warning(f"Error closing run log handler: {e}")
     

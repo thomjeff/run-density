@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #870 — Analysis log hygiene
+- Run file log (`analysis/{run_id}/logs/app.log`) attaches to the `app` logger, not root, and drops dashboard / uvicorn poll lines
+- INFO is named costs and work ≳1s (Motion, Density, Flow, Bins, UI maps/heatmaps, report splits) plus one-line counts; per-pin / per-segment / BINNING / fz_runners zone-skips / Density.md template steps are DEBUG
+- Timing summary lists ≥1s work by name (no Phase 1–11 banners); leftover `/app/.cursor/debug.log` traces removed
+- Reports timing line counts Density.md / Flow.csv / Locations.csv from the paths actually written
+
 ### Issue #871 — Location sheets: HTML in analysis, export on demand
 - Analysis writes volunteer HTML under `{day}/reports/loc_sheets/html/` only — no ReportLab PDFs and no in-run map-tile stitching
 - Results **Locations** (and Loc Sheets) **Export location sheets** zips the HTML already on disk

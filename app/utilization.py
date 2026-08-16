@@ -39,7 +39,7 @@ def ensure_rpm(df: pd.DataFrame) -> pd.DataFrame:
         )
         df = df.copy()
         df["rate_per_m_per_min"] = rpm
-        logger.info(f"Computed rate_per_m_per_min for {len(df)} bins")
+        logger.debug(f"Computed rate_per_m_per_min for {len(df)} bins")
     
     return df
 
@@ -128,7 +128,7 @@ def add_utilization_percentile(
     else:
         raise ValueError(f"Unsupported cohort: {cohort}. Must be 'global', 'window', 'window_schema', or 'window_segment'")
 
-    logger.info(f"Computing utilization percentiles using cohort='{cohort}'")
+    logger.debug(f"Computing utilization percentiles using cohort='{cohort}'")
     
     # Compute percentile rank within each cohort
     if cohort == "global":
@@ -146,7 +146,7 @@ def add_utilization_percentile(
     valid_pctile = df[out_col].notna()
     if valid_pctile.sum() > 0:
         p95_count = len(df[df[out_col] >= 95.0])
-        logger.info(f"Utilization percentiles computed: {valid_pctile.sum()} bins, {p95_count} in top 5%")
+        logger.debug(f"Utilization percentiles computed: {valid_pctile.sum()} bins, {p95_count} in top 5%")
     
     return df
 
