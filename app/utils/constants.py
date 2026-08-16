@@ -55,6 +55,10 @@ PACE_MODERATE_DIFFERENCE_THRESHOLD = 2.0  # minutes per km
 TIME_FORMAT_HOURS = "%02d:%02d:%02d"
 TIME_FORMAT_MINUTES = "%02d:%02d"
 
+# Issue #868: run-history / UI timestamps (IANA zone; Atlantic Daylight is GMT-3).
+DISPLAY_TIMEZONE = "America/Halifax"
+DISPLAY_DATETIME_FMT = "%m-%d %H:%M"
+
 # Sample sizes for reporting
 MAX_SAMPLE_SIZE = 10
 

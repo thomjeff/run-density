@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #868 — Overview poll and small UX/ops
+- Overview progress poll is ~15s (elapsed clock still ticks locally every 1s); retries use the same interval
+- Footer year 2026; drop the stuck “Last updated: Loading…” line on run history
+- Run-history timestamps use `DISPLAY_TIMEZONE` (`America/Halifax`) instead of raw UTC
+
 ### Issue #870 — Analysis log hygiene
 - Run file log (`analysis/{run_id}/logs/app.log`) attaches to the `app` logger, not root, and drops dashboard / uvicorn poll lines
 - INFO is named costs and work ≳1s (Motion, Density, Flow, Bins, UI maps/heatmaps, report splits) plus one-line counts; per-pin / per-segment / BINNING / fz_runners zone-skips / Density.md template steps are DEBUG

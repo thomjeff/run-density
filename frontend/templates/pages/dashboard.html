@@ -105,13 +105,6 @@
 </div>
 </div>
 
-
-
-<!-- Last Updated -->
-<div style="text-align: center; margin-top: 2rem; color: #7f8c8d; font-size: 0.875rem;">
-    Last updated: <span id="last-updated">Loading...</span>
-</div>
-
 {% endblock %}
 
 {% block extra_styles %}
@@ -906,7 +899,6 @@
         document.querySelectorAll('.kpi-value').forEach(el => {
             el.textContent = '—';
         });
-        document.getElementById('last-updated').textContent = 'Loading...';
     }
     
     function showErrorState() {
@@ -914,14 +906,10 @@
         document.querySelectorAll('.kpi-value').forEach(el => {
             el.textContent = 'Error';
         });
-        document.getElementById('last-updated').textContent = 'Error loading data';
     }
     
     function updateDashboard(data) {
         console.log('updateDashboard called with data:', data);
-        
-        // Update timestamp
-        document.getElementById('last-updated').textContent = formatTimestamp(data.timestamp);
         
         // Update data missing banner
         updateDataMissingBanner(data);
@@ -1057,15 +1045,6 @@
         const copresenceEl = document.querySelector('#kpi-copresence');
         if (copresenceEl) {
             copresenceEl.textContent = data.segments_copresence;
-        }
-    }
-    
-    function formatTimestamp(timestamp) {
-        try {
-            const date = new Date(timestamp);
-            return date.toLocaleString();
-        } catch (e) {
-            return timestamp;
         }
     }
 </script>

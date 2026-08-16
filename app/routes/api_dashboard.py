@@ -24,6 +24,7 @@ from app.utils.auth import require_auth
 from app.utils.run_id import get_latest_run_id, resolve_selected_day
 from app.storage import create_runflow_storage
 from app.utils.metadata import get_run_index
+from app.utils.display_time import format_local_display_datetime
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -429,16 +430,9 @@ async def get_runs_list():
                 except Exception as e:
                     logger.warning(f"Could not load metadata.json for {run_id}: {e}")
             
-            # Format created_at for display (MM-DD HH:MM)
+            # Format created_at for display (MM-DD HH:MM in DISPLAY_TIMEZONE)
             created_at = run.get("created_at", "")
-            formatted_date = ""
-            if created_at:
-                try:
-                    from datetime import datetime
-                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                    formatted_date = dt.strftime("%m-%d %H:%M")
-                except Exception:
-                    formatted_date = created_at[:16] if len(created_at) > 16 else created_at
+            formatted_date = format_local_display_datetime(created_at)
             
             run_entry = {
                 "run_id": run_id,

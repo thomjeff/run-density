@@ -163,7 +163,9 @@
         var seenRunning = false;
 
         function delayMs() {
-            return Date.now() - started > 120000 ? 4000 : 2000;
+            // Issue #868: full analysis is 7–9 min; 15s is enough for Overview.
+            // Elapsed clock still ticks locally every 1s (no HTTP).
+            return 15000;
         }
 
         function tick() {
@@ -204,7 +206,7 @@
                     // Keep elapsed alive; retry while run may still be starting or busy.
                     // Aborted/timeout fetches land here so the card keeps ticking.
                     if (Date.now() - started < 600000) {
-                        timer = setTimeout(tick, Math.min(delayMs(), 2500));
+                        timer = setTimeout(tick, delayMs());
                     }
                 });
         }
