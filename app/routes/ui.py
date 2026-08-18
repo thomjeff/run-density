@@ -346,6 +346,25 @@ async def motion(request: Request):
     )
 
 
+@router.get("/execute", response_class=HTMLResponse)
+async def execute(request: Request):
+    """
+    Execute workspace placeholder (Issue #878).
+
+    Race-day ops chrome only — no Locations view yet, so Build Locations
+    and Plan Locations remain the only location UIs.
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/execute.html",
+        context={"request": request, "meta": meta},
+    )
+
+
 @router.get("/locations", response_class=HTMLResponse)
 async def locations(request: Request):
     """
@@ -561,17 +580,15 @@ async def analysis_page(request: Request):
 @router.get("/create-files", response_class=HTMLResponse)
 async def create_files_page(request: Request):
     """
-    Legacy URL — redirect to Race Configuration Runners tab.
-
-    Issue #756: Create Files moved under /config?tab=runners
+    Legacy URL — redirect to Build → Runners (Issue #878) or a package Runners tab.
     """
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
     config_id = request.query_params.get("config_id")
-    target = "/config?tab=runners"
+    target = "/config?view=runners"
     if config_id:
-        target = f"/config?tab=runners&config_id={config_id.strip()}"
+        target = f"/config?config_id={config_id.strip()}&tab=runners"
     return RedirectResponse(url=target, status_code=302)
 
 

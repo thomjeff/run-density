@@ -92,7 +92,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/run_overview.js?v=825c"></script>
+<script src="/static/js/run_overview.js?v=878"></script>
 <script src="/static/js/run_overview_progress.js?v=868"></script>
 <script>
 (function () {
@@ -162,8 +162,37 @@
                 else if (!day && days.length) day = days[0];
                 if (day) localStorage.setItem('selected_day', day);
                 if (window.updateNavLinks) window.updateNavLinks(day, runId);
+                attachPackageMeta(runId, data);
                 return data;
             });
+    }
+
+    function configIdFromDataDir(dataDir) {
+        if (window.rfConfigIdFromDataDir) return window.rfConfigIdFromDataDir(dataDir);
+        if (!dataDir) return '';
+        var normalized = String(dataDir).replace(/\\/g, '/').replace(/\/+$/, '');
+        var marker = '/config/';
+        var idx = normalized.lastIndexOf(marker);
+        if (idx < 0) return '';
+        return (normalized.slice(idx + marker.length).split('/')[0] || '');
+    }
+
+    function attachPackageMeta(runId, summary) {
+        fetchJson('/api/analysis/' + encodeURIComponent(runId) + '/config')
+            .then(function (cfg) {
+                var configId = configIdFromDataDir(cfg && cfg.data_dir);
+                if (!configId) return null;
+                return fetchJson('/api/config/packages/' + encodeURIComponent(configId))
+                    .then(function (pkg) {
+                        var label = (pkg && pkg.manifest && pkg.manifest.label) || configId;
+                        var href = '/config?config_id=' + encodeURIComponent(configId);
+                        summary.package_id = configId;
+                        summary.package_name = label;
+                        summary.package_href = href;
+                        window.RunOverview.renderAnalysisInputsView(summary);
+                    });
+            })
+            .catch(function () { /* no package link when config is missing */ });
     }
 
     function boot(runId) {

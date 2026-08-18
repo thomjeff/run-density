@@ -21,8 +21,9 @@ def base_source() -> str:
 def test_workspace_dropdown_markup(base_source: str):
     assert 'id="rf-workspace-dropdown"' in base_source
     assert 'id="rf-workspace-label"' in base_source
-    assert 'data-workspace="results"' in base_source
+    assert 'data-workspace="plan"' in base_source
     assert 'data-workspace="build"' in base_source
+    assert 'data-workspace="execute"' in base_source
     assert "initWorkspaceControl" in base_source
     assert "switchWorkspace" in base_source
 
@@ -30,6 +31,7 @@ def test_workspace_dropdown_markup(base_source: str):
 def test_build_hub_links_in_top_nav(base_source: str):
     assert 'data-rf-build-view="legs"' in base_source
     assert 'data-rf-build-view="courses"' in base_source
+    assert 'data-rf-build-view="runners"' in base_source
     assert 'data-rf-build-view="packages"' in base_source
     assert 'class="nav-item rf-build-chrome"' in base_source
     # Old single Build link removed from local chrome
@@ -57,14 +59,12 @@ def test_results_chrome_class_on_run_controls(base_source: str):
 def test_no_active_run_strip_in_results_chrome(base_source: str):
     assert 'id="rf-tabler-context-strip"' not in base_source
     assert "Active run" not in base_source
-    assert 'id="rf-tabler-package-nav"' in base_source
-    assert 'link.textContent = "Package"' in base_source
     assert "Open source package</a>" not in base_source
 
 
-def test_package_nav_gated_separately_from_run_views(base_source: str):
-    assert "rf-tabler-package-nav" in base_source
-    assert "leave for syncTablerPackageLink" in base_source
+def test_package_nav_moved_to_overview(base_source: str):
+    # Issue #878: Package is not a Plan top-nav item
+    assert 'id="rf-tabler-package-nav"' not in base_source
     assert "formatRunsTriggerLabel" in base_source
 
 

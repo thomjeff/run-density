@@ -1334,5 +1334,6 @@
     window.SavedCoursesPanel = {
         refresh: refreshHubCourses,
         refreshAssign: refreshAssignForm,
+        refreshReadiness: refreshPackageReadiness,
     };
 })();

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Execute{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Execute</h2>
+    <p class="rf-tabler-runs-lead" style="display:block; margin:0.35rem 0 0; color:#667382; font-size:0.9rem; max-width:42rem;">
+        Race-day operations will live here. This workspace is a placeholder so Build and Plan keep their current meaning.
+    </p>
+</div>
+
+<div class="card" style="margin-bottom: 1.25rem;">
+    <h3 style="margin-bottom: 0.75rem;">Race day (coming later)</h3>
+    <p style="margin-bottom: 0.75rem; color: #667382; max-width: 44rem;">
+        Execute will project the <strong>same Location entity</strong> used in Build — not a second kind of location —
+        with run/event context, assigned resources, and opening/closing state.
+        Until that ops view exists, use <strong>Plan → Locations</strong> for analysis timings on a selected Run.
+    </p>
+    <p style="margin-bottom: 0; color: #667382; max-width: 44rem;">
+        Reserved operational states (not built in this release):
+        Planned → Ready → Open → Last runner approaching → Clear → Reopened.
+    </p>
+</div>
+{% endblock %}

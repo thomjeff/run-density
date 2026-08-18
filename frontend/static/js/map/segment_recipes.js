@@ -5623,11 +5623,13 @@
         }
         syncCoursePreviewUi();
         var hasLegs = libraryState && libraryState.legs && libraryState.legs.length;
+        // Event recipes belong on Build → Courses (saved-course modal).
+        // Never auto-open this legacy modal on Package Courses.
         if (
             !hasCourse &&
             hasLegs &&
             !recipesModalDismissed &&
-            options.autoOpen !== false
+            options.autoOpen === true
         ) {
             showRecipesModal();
         }
@@ -5691,7 +5693,6 @@
 
     function onCourseTabShown() {
         if (legDrawActive) stopLegDrawMode();
-        recipesModalDismissed = false;
         var chain = Promise.resolve();
         if (window.configPackageCourse && window.configPackageCourse.reloadCourse) {
             chain = window.configPackageCourse.reloadCourse();
@@ -5699,7 +5700,7 @@
         return chain
             .then(function () { return loadLibrary(); })
             .then(function () {
-                syncCoursePanelUi({ autoOpen: true });
+                syncCoursePanelUi({ autoOpen: false });
                 syncCoursePreviewUi();
                 attachCoursePreviewBoundsFilter();
             });

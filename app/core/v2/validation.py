@@ -9,7 +9,7 @@ Phase 1: Models & Validation Layer (Issue #495)
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Any
 import pandas as pd
 
 from app.core.v2.models import Day, Event
@@ -283,6 +283,45 @@ def validate_segment_spans(
             )
 
 
+def assert_unique_runner_ids(
+    event_frames: Sequence[Tuple[str, pd.DataFrame]],
+    *,
+    file_names: Optional[Mapping[str, str]] = None,
+) -> None:
+    """
+    Fail if runner_id repeats within a file or across events.
+
+    Issue #852 / #879: shared uniqueness rule for analysis and dataset create.
+    """
+    all_runner_ids: Dict[Any, str] = {}
+    names = file_names or {}
+    for event_name, runners_df in event_frames:
+        filename = names.get(event_name, f"{event_name}_runners.csv")
+        if "runner_id" not in runners_df.columns:
+            raise ValidationError(
+                f"runners_file '{filename}' for event '{event_name}' missing required columns: ['runner_id']",
+                code=422,
+            )
+        duplicates_in_file = runners_df[
+            runners_df.duplicated(subset=["runner_id"], keep=False)
+        ]
+        if not duplicates_in_file.empty:
+            dup_ids = duplicates_in_file["runner_id"].unique().tolist()
+            raise ValidationError(
+                f"Duplicate runner_id values in '{filename}' for event '{event_name}': {dup_ids}",
+                code=422,
+            )
+        for runner_id in runners_df["runner_id"]:
+            if runner_id in all_runner_ids:
+                conflicting_event = all_runner_ids[runner_id]
+                raise ValidationError(
+                    f"Duplicate runner_id '{runner_id}' found in both event '{conflicting_event}' and event '{event_name}'. "
+                    f"Runner IDs must be unique across all events.",
+                    code=422,
+                )
+            all_runner_ids[runner_id] = event_name
+
+
 def validate_runner_uniqueness(
     events: List[Dict[str, Any]],
     data_dir: str
@@ -298,8 +337,9 @@ def validate_runner_uniqueness(
         ValidationError (422): If duplicate runner IDs found
     """
     data_path = Path(data_dir)
-    all_runner_ids = {}
-    
+    event_frames: List[Tuple[str, pd.DataFrame]] = []
+    file_names: Dict[str, str] = {}
+
     for event in events:
         event_name = event.get("name", "unknown")
         runners_file = event.get("runners_file")
@@ -325,26 +365,11 @@ def validate_runner_uniqueness(
                 f"runners_file '{runners_file}' for event '{event_name}' missing required columns: {missing_cols}",
                 code=422
             )
-        
-        # Check for duplicate runner_ids within this file
-        duplicates_in_file = runners_df[runners_df.duplicated(subset=["runner_id"], keep=False)]
-        if not duplicates_in_file.empty:
-            dup_ids = duplicates_in_file["runner_id"].unique().tolist()
-            raise ValidationError(
-                f"Duplicate runner_id values in '{runners_file}' for event '{event_name}': {dup_ids}",
-                code=422
-            )
-        
-        # Check for cross-event duplicates
-        for runner_id in runners_df["runner_id"]:
-            if runner_id in all_runner_ids:
-                conflicting_event = all_runner_ids[runner_id]
-                raise ValidationError(
-                    f"Duplicate runner_id '{runner_id}' found in both event '{conflicting_event}' and event '{event_name}'. "
-                    f"Runner IDs must be unique across all events.",
-                    code=422
-                )
-            all_runner_ids[runner_id] = event_name
+
+        event_frames.append((event_name, runners_df))
+        file_names[event_name] = str(runners_file)
+
+    assert_unique_runner_ids(event_frames, file_names=file_names)
 
 
 def validate_description(description: Optional[str]) -> None:

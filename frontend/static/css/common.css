@@ -425,6 +425,17 @@
     font-weight: 500;
 }
 
+.package-runner-dataset-metrics table td,
+.package-runner-dataset-metrics table th {
+    text-align: center;
+}
+
+.package-runner-dataset-metrics table td:first-child,
+.package-runner-dataset-metrics table th:first-child {
+    text-align: left;
+    font-weight: 600;
+}
+
 .legacy-event-recipes-details {
     display: inline-block;
 }

@@ -8,7 +8,7 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
-    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=845c">
+    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=878">
     
     {% block extra_styles %}{% endblock %}
     
@@ -41,14 +41,15 @@
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations">Locations</a>
                         </li>
                         {% else %}
-                        {# Issue #842: mutually exclusive Results | Build workspace control #}
+                        {# Issue #878: mutually exclusive Build | Plan | Execute workspace control #}
                         <li class="nav-item dropdown" id="rf-workspace-dropdown">
                             <a class="nav-link dropdown-toggle rf-workspace-toggle" href="#" id="rf-workspace-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Switch workspace">
-                                <span id="rf-workspace-label">Results</span>
+                                <span id="rf-workspace-label">Plan</span>
                             </a>
                             <div class="dropdown-menu" id="rf-workspace-menu" aria-labelledby="rf-workspace-toggle">
-                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="results">Results</a>
                                 <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="build">Build</a>
+                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="plan">Plan</a>
+                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="execute">Execute</a>
                             </div>
                         </li>
                         <li class="nav-item dropdown rf-results-chrome" id="rf-runs-dropdown">
@@ -88,10 +89,7 @@
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
-                        {# Issue #842: Package jumps to source config; replaces Active-run strip link #}
-                        <li class="nav-item rf-results-chrome rf-tabler-package-nav" id="rf-tabler-package-nav" hidden>
-                            <a class="nav-link" id="rf-tabler-open-package" href="/config" data-rf-package-link="1">Package</a>
-                        </li>
+                        {# Issue #878: Package lives on Overview Analysis Inputs, not Plan top nav #}
                         <li class="nav-item rf-build-chrome" hidden>
                             <a class="nav-link" href="/config?view=legs" data-rf-build-view="legs">Legs</a>
                         </li>
@@ -99,7 +97,13 @@
                             <a class="nav-link" href="/config?view=courses" data-rf-build-view="courses">Courses</a>
                         </li>
                         <li class="nav-item rf-build-chrome" hidden>
+                            <a class="nav-link" href="/config?view=runners" data-rf-build-view="runners">Runners</a>
+                        </li>
+                        <li class="nav-item rf-build-chrome" hidden>
                             <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
+                        </li>
+                        <li class="nav-item rf-execute-chrome" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="1">Race day</a>
                         </li>
                         {% endif %}
                     </ul>
@@ -190,7 +194,7 @@
         }
 
         const CONFIG_ROUTE_PREFIXES = ["/config", "/race-configuration"];
-        const RESULTS_ROUTE_PATHS = [
+        const PLAN_ROUTE_PATHS = [
             "/dashboard",
             "/overview",
             "/segments",
@@ -201,28 +205,42 @@
             "/locations",
             "/reports",
         ];
+        const EXECUTE_ROUTE_PATHS = ["/execute"];
 
         function isConfigRoutePath(pathname) {
             return CONFIG_ROUTE_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"));
         }
 
+        function isPlanRoutePath(pathname) {
+            return PLAN_ROUTE_PATHS.some(p => pathname === p || pathname.startsWith(p + "/"));
+        }
+
+        function isExecuteRoutePath(pathname) {
+            return EXECUTE_ROUTE_PATHS.some(p => pathname === p || pathname.startsWith(p + "/"));
+        }
+
         function isResultsRoutePath(pathname) {
-            return RESULTS_ROUTE_PATHS.some(p => pathname === p || pathname.startsWith(p + "/"));
+            // Alias: Plan routes were labeled Results before Issue #878
+            return isPlanRoutePath(pathname);
         }
 
         function isAnalysisRoutePath(pathname) {
             if (isConfigRoutePath(pathname)) return false;
+            if (isExecuteRoutePath(pathname)) return false;
             if (pathname === "/course-mapping" || pathname === "/health-check" || pathname === "/logout" || pathname === "/analysis") {
                 return false;
             }
-            return isResultsRoutePath(pathname);
+            return isPlanRoutePath(pathname);
         }
 
         const WS_KEY = "rf_workspace";
-        const WS_LAST_RESULTS = "rf_last_results_path";
+        const WS_LAST_PLAN = "rf_last_plan_path";
+        const WS_LAST_RESULTS = "rf_last_results_path"; // pre-#878 alias
         const WS_LAST_BUILD = "rf_last_build_path";
-        const DEFAULT_RESULTS_PATH = "/overview";
+        const WS_LAST_EXECUTE = "rf_last_execute_path";
+        const DEFAULT_PLAN_PATH = "/overview";
         const DEFAULT_BUILD_PATH = "/config?view=legs";
+        const DEFAULT_EXECUTE_PATH = "/execute";
 
         function currentPathWithQuery() {
             return window.location.pathname + (window.location.search || "");
@@ -230,51 +248,78 @@
 
         function workspaceFromPath(pathname) {
             if (isConfigRoutePath(pathname)) return "build";
-            if (isResultsRoutePath(pathname)) return "results";
+            if (isExecuteRoutePath(pathname)) return "execute";
+            if (isPlanRoutePath(pathname)) return "plan";
             return null;
         }
 
+        function normalizeWorkspace(raw) {
+            const v = String(raw || "").trim().toLowerCase();
+            if (v === "build") return "build";
+            if (v === "execute") return "execute";
+            if (v === "plan" || v === "results") return "plan";
+            return "plan";
+        }
+
+        function workspaceLabel(ws) {
+            if (ws === "build") return "Build";
+            if (ws === "execute") return "Execute";
+            return "Plan";
+        }
+
         function getStoredWorkspace() {
-            const raw = (localStorage.getItem(WS_KEY) || "").trim().toLowerCase();
-            return raw === "build" ? "build" : "results";
+            return normalizeWorkspace(localStorage.getItem(WS_KEY));
         }
 
         function setStoredWorkspace(ws) {
-            localStorage.setItem(WS_KEY, ws === "build" ? "build" : "results");
+            localStorage.setItem(WS_KEY, normalizeWorkspace(ws));
         }
 
         function rememberWorkspaceRoute(ws, pathOverride) {
             const path = pathOverride || currentPathWithQuery();
             if (!path || path === "/" || path === "/login" || path === "/logout") return;
-            if (ws === "build") {
+            const target = normalizeWorkspace(ws);
+            if (target === "build") {
                 localStorage.setItem(WS_LAST_BUILD, path);
-            } else if (ws === "results") {
-                // Prefer analysis pages over bare dashboard for restore
+            } else if (target === "execute") {
+                localStorage.setItem(WS_LAST_EXECUTE, path);
+            } else if (target === "plan") {
+                localStorage.setItem(WS_LAST_PLAN, path);
                 localStorage.setItem(WS_LAST_RESULTS, path);
             }
         }
 
-        function lastResultsPath() {
-            const stored = (localStorage.getItem(WS_LAST_RESULTS) || "").trim();
+        function lastPlanPath() {
+            const stored = (localStorage.getItem(WS_LAST_PLAN) || localStorage.getItem(WS_LAST_RESULTS) || "").trim();
             if (stored) return stored;
             const runId = (localStorage.getItem("selected_run_id") || "").trim();
-            return runId ? ("/overview?run_id=" + encodeURIComponent(runId)) : DEFAULT_RESULTS_PATH;
+            return runId ? ("/overview?run_id=" + encodeURIComponent(runId)) : DEFAULT_PLAN_PATH;
+        }
+
+        function lastResultsPath() {
+            return lastPlanPath();
         }
 
         function lastBuildPath() {
             return (localStorage.getItem(WS_LAST_BUILD) || "").trim() || DEFAULT_BUILD_PATH;
         }
 
+        function lastExecutePath() {
+            return (localStorage.getItem(WS_LAST_EXECUTE) || "").trim() || DEFAULT_EXECUTE_PATH;
+        }
+
         function applyWorkspaceChrome(ws) {
-            const isBuild = ws === "build";
+            const target = normalizeWorkspace(ws);
+            const isBuild = target === "build";
+            const isExecute = target === "execute";
+            const isPlan = target === "plan";
             document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
-                // Run-view links still gate on hasRun via syncTablerRunNav; hide whole Results chrome in Build
-                if (isBuild) {
+                if (!isPlan) {
                     el.hidden = true;
                 } else if (el.classList.contains("rf-tabler-run-view-link")) {
                     // leave for syncTablerRunNav
                 } else if (el.classList.contains("rf-tabler-package-nav")) {
-                    // leave for syncTablerPackageLink
+                    el.hidden = true;
                 } else {
                     el.hidden = false;
                 }
@@ -282,15 +327,18 @@
             document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
                 el.hidden = !isBuild;
             });
+            document.querySelectorAll(".rf-execute-chrome").forEach(function (el) {
+                el.hidden = !isExecute;
+            });
             const label = document.getElementById("rf-workspace-label");
-            if (label) label.textContent = isBuild ? "Build" : "Results";
+            if (label) label.textContent = workspaceLabel(target);
             document.querySelectorAll(".rf-workspace-pick").forEach(function (a) {
-                a.classList.toggle("active", a.getAttribute("data-workspace") === ws);
+                a.classList.toggle("active", a.getAttribute("data-workspace") === target);
             });
             const toggle = document.getElementById("rf-workspace-toggle");
             if (toggle) {
                 toggle.classList.toggle("active", true);
-                toggle.setAttribute("aria-label", isBuild ? "Workspace: Build" : "Workspace: Results");
+                toggle.setAttribute("aria-label", "Workspace: " + workspaceLabel(target));
             }
             // Mark active Build hub link from URL
             if (isBuild) {
@@ -311,9 +359,11 @@
         }
 
         function switchWorkspace(ws) {
-            const target = ws === "build" ? "build" : "results";
+            const target = normalizeWorkspace(ws);
             setStoredWorkspace(target);
-            const dest = target === "build" ? lastBuildPath() : lastResultsPath();
+            const dest = target === "build"
+                ? lastBuildPath()
+                : (target === "execute" ? lastExecutePath() : lastPlanPath());
             if (dest === currentPathWithQuery()) {
                 applyWorkspaceChrome(target);
                 return;
@@ -336,13 +386,14 @@
                 });
             });
 
-            // Brand returns to Results workspace (last Results route)
+            // Brand returns to Plan workspace (last Plan route)
             const brand = document.querySelector(".navbar-brand a");
             if (brand) {
                 brand.addEventListener("click", function (ev) {
-                    if (getStoredWorkspace() === "build" || isConfigRoutePath(window.location.pathname)) {
+                    const current = getStoredWorkspace();
+                    if (current === "build" || current === "execute" || isConfigRoutePath(window.location.pathname) || isExecuteRoutePath(window.location.pathname)) {
                         ev.preventDefault();
-                        switchWorkspace("results");
+                        switchWorkspace("plan");
                     }
                 });
             }
@@ -380,29 +431,38 @@
         function syncTablerRunNav(runId, day) {
             if (!document.documentElement.classList.contains("rf-tabler")) return;
             const hasRun = !!(runId && String(runId).trim());
+            const stored = getStoredWorkspace();
             const onBuild = isConfigRoutePath(window.location.pathname)
-                || (!CLOUD_MODE && getStoredWorkspace() === "build");
+                || (!CLOUD_MODE && stored === "build");
+            const onExecute = isExecuteRoutePath(window.location.pathname)
+                || (!CLOUD_MODE && stored === "execute");
+            const onPlan = !onBuild && !onExecute;
 
-            // Issue #842: Results page links only in Results workspace
+            // Issue #878: Plan page links only in Plan workspace
             document.querySelectorAll(".rf-tabler-run-view-link").forEach(function (li) {
-                li.hidden = onBuild || !hasRun;
+                li.hidden = !onPlan || !hasRun;
             });
             document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
                 if (el.classList.contains("rf-tabler-run-view-link")) return;
-                if (el.classList.contains("rf-tabler-package-nav")) return;
-                el.hidden = onBuild;
+                if (el.classList.contains("rf-tabler-package-nav")) {
+                    el.hidden = true;
+                    return;
+                }
+                el.hidden = !onPlan;
             });
             document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
                 el.hidden = !onBuild;
+            });
+            document.querySelectorAll(".rf-execute-chrome").forEach(function (el) {
+                el.hidden = !onExecute;
             });
 
             const trigger = document.getElementById("rf-runs-trigger-label");
 
             if (!hasRun) {
                 if (trigger) trigger.textContent = "Runs";
-                syncTablerPackageLink(null);
-                if (!onBuild) refreshRunsDropdown(null);
-                applyWorkspaceChrome(onBuild ? "build" : "results");
+                if (onPlan) refreshRunsDropdown(null);
+                applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
                 return;
             }
 
@@ -414,10 +474,8 @@
             } catch (e) { /* ignore */ }
 
             if (trigger) trigger.textContent = formatRunsTriggerLabel(label, id, day);
-            // Package nav item is Results chrome only (after Reports)
-            syncTablerPackageLink(onBuild ? null : id);
-            if (!onBuild) refreshRunsDropdown(id);
-            applyWorkspaceChrome(onBuild ? "build" : "results");
+            if (onPlan) refreshRunsDropdown(id);
+            applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
         }
 
         function configIdFromDataDir(dataDir) {
@@ -429,6 +487,7 @@
             const rest = normalized.slice(idx + marker.length);
             return (rest.split("/")[0] || "");
         }
+        window.rfConfigIdFromDataDir = configIdFromDataDir;
 
         function syncTablerPackageLink(runId) {
             const nav = document.getElementById("rf-tabler-package-nav");
@@ -527,7 +586,7 @@
                 try { sessionStorage.setItem("rf_run_label_" + runId, label); } catch (e) { /* ignore */ }
             }
             localStorage.setItem("selected_run_id", runId);
-            setStoredWorkspace("results");
+            setStoredWorkspace("plan");
             fetch("/api/runs/" + encodeURIComponent(runId) + "/summary", { credentials: "same-origin" })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
@@ -536,12 +595,12 @@
                     const day = days.length ? String(days[0]).toLowerCase() : null;
                     if (day) localStorage.setItem("selected_day", day);
                     const dest = "/overview?run_id=" + encodeURIComponent(runId);
-                    rememberWorkspaceRoute("results", dest);
+                    rememberWorkspaceRoute("plan", dest);
                     window.location.href = dest;
                 })
                 .catch(function () {
                     const dest = "/overview?run_id=" + encodeURIComponent(runId);
-                    rememberWorkspaceRoute("results", dest);
+                    rememberWorkspaceRoute("plan", dest);
                     window.location.href = dest;
                 });
         }
@@ -551,11 +610,14 @@
                 const href = a.getAttribute("href");
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
                 if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
+                if (a.getAttribute("data-rf-execute-view")) {
+                    a.setAttribute("href", "/execute");
+                    return;
+                }
                 if (a.classList.contains("dropdown-toggle") || a.classList.contains("dropdown-item")) return;
                 if (a.classList.contains("rf-workspace-pick")) return;
                 const buildView = a.getAttribute("data-rf-build-view");
                 if (buildView) {
-                    // Issue #842: Build hub links stay view=legs|courses|packages (no run scoping)
                     a.setAttribute("href", "/config?view=" + encodeURIComponent(buildView));
                     return;
                 }
@@ -649,7 +711,7 @@
 
         /**
          * Issue #841: one analysis run = one event day in product chrome.
-         * Derive day from the run; never show a day dropdown; strip ?day= from Results URLs.
+         * Derive day from the run; never show a day dropdown; strip ?day= from Plan URLs.
          */
         async function initRunflowContext() {
             initWorkspaceControl();
@@ -663,7 +725,10 @@
                 return;
             }
 
-            if (!isResultsRoutePath(window.location.pathname)) {
+            if (isExecuteRoutePath(window.location.pathname)) {
+                setStoredWorkspace("execute");
+                rememberWorkspaceRoute("execute");
+                applyWorkspaceChrome("execute");
                 const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
                 const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
                 updateNavLinks(day, storedRun);
@@ -671,8 +736,16 @@
                 return;
             }
 
-            setStoredWorkspace("results");
-            rememberWorkspaceRoute("results");
+            if (!isPlanRoutePath(window.location.pathname)) {
+                const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+                const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
+                updateNavLinks(day, storedRun);
+                announceRunflowContextReady(storedRun, day);
+                return;
+            }
+
+            setStoredWorkspace("plan");
+            rememberWorkspaceRoute("plan");
 
             const params = new URLSearchParams(window.location.search);
             const urlDayRaw = params.get("day");

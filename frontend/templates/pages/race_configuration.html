@@ -18,7 +18,7 @@
 
     <div id="race-config-entry" class="page-shell page-shell--entry">
         <div class="content-card race-config-hub-shell">
-            {# Issue #842 follow-up: hub tabs removed — top nav is Legs | Courses | Packages #}
+            {# Issue #878: top nav is Legs | Courses | Runners | Packages #}
             <div class="race-config-hub-body">
                 <div id="race-config-hub-legs" class="race-config-hub-panel">
                     <div id="race-config-hub-legs-slot" class="race-config-hub-legs-slot"></div>
@@ -77,6 +77,70 @@
                                     <tbody id="org-course-preview-recipe-tbody"></tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="race-config-hub-runners" class="race-config-hub-panel" style="display: none;">
+                    <div class="card-header">
+                        <h3 class="card-title visually-hidden">Runners</h3>
+                        <div class="card-actions">
+                            <button type="button" id="runner-dataset-import-btn" class="course-btn primary">Import actuals</button>
+                        </div>
+                    </div>
+                    <p class="card-help" style="margin: 0 0 0.75rem 0;">
+                        Named, immutable runner datasets. Import race-result CSVs, or create a scenario
+                        (new dataset) from an existing one. Packages select a compatible dataset;
+                        analysis uses a frozen copy on the package.
+                    </p>
+                    <div class="scrollable-table-container">
+                        <table id="race-config-runners-table" class="table-sticky-header">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Events</th>
+                                    <th>Source</th>
+                                    <th>Participants</th>
+                                    <th>Created</th>
+                                    <th class="course-map-action-cell">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="race-config-runners-tbody">
+                                <tr><td colspan="6" class="placeholder">Loading runner datasets…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="runner-dataset-scenario-panel" class="content-card" style="display: none; margin-top: 1.25rem;">
+                        <h4 class="card-title" style="margin: 0 0 0.5rem 0;">Create scenario</h4>
+                        <p id="runner-dataset-scenario-source" class="card-help" style="margin: 0 0 0.75rem 0;"></p>
+                        <label for="runner-dataset-scenario-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+                        <input type="text" id="runner-dataset-scenario-label" class="config-package-input" maxlength="120" style="width: 100%; max-width: 28rem; margin-bottom: 0.75rem;" />
+                        <label for="runner-dataset-scenario-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="font-weight: normal; color: #95a5a6;">(optional)</span></label>
+                        <input type="text" id="runner-dataset-scenario-description" class="config-package-input" maxlength="255" style="width: 100%; max-width: 28rem; margin-bottom: 0.75rem;" />
+                        <div id="runner-dataset-scenario-controls" style="overflow-x: auto; margin-bottom: 0.75rem;"></div>
+                        <p id="runner-dataset-scenario-status" class="card-help" style="display: none; margin: 0 0 0.75rem 0;"></p>
+                        <button type="button" id="runner-dataset-scenario-save" class="course-btn primary">Create dataset</button>
+                        <button type="button" id="runner-dataset-scenario-cancel" class="course-btn">Cancel</button>
+                    </div>
+                </div>
+
+                <div id="runner-dataset-import-modal" class="race-config-modal" role="dialog" aria-labelledby="runner-dataset-import-title" aria-modal="true">
+                    <div class="modal-panel">
+                        <h3 id="runner-dataset-import-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Import actuals</h3>
+                        <p class="card-help" style="margin: 0 0 1rem 0;">
+                            Files must be named <code>{event}_runners.csv</code> (e.g. <code>10k_runners.csv</code>).
+                            <code>runner_id</code> values must be unique across all files in the dataset.
+                        </p>
+                        <label for="runner-dataset-import-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+                        <input type="text" id="runner-dataset-import-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;" placeholder="e.g. 2026 race week actuals" />
+                        <label for="runner-dataset-import-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="font-weight: normal; color: #95a5a6;">(optional)</span></label>
+                        <textarea id="runner-dataset-import-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+                        <label for="runner-dataset-import-files" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">CSV files</label>
+                        <input type="file" id="runner-dataset-import-files" accept=".csv,text/csv" multiple style="display: block; margin-bottom: 1rem; max-width: 100%;" />
+                        <p id="runner-dataset-import-status" style="display: none; margin: 0 0 1rem 0; font-size: 0.9rem;"></p>
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button type="button" id="runner-dataset-import-cancel" class="course-btn">Cancel</button>
+                            <button type="button" id="runner-dataset-import-save" class="course-btn primary">Import</button>
                         </div>
                     </div>
                 </div>
@@ -200,6 +264,13 @@
             </select>
             <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
             <div id="race-config-new-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
+            <label for="race-config-new-runners-dataset" style="display: block; margin: 1rem 0 0.35rem 0; font-weight: 600;">Runner dataset</label>
+            <select id="race-config-new-runners-dataset" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; box-sizing: border-box;">
+                <option value="">Select events first…</option>
+            </select>
+            <p id="race-config-new-runners-help" class="card-help" style="margin: 0.35rem 0 1rem 0;">
+                Only datasets that include every selected event are listed. Extra event files on the dataset are allowed.
+            </p>
             <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
             <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
             <div class="race-config-modal-resources">
@@ -227,6 +298,7 @@
                     <input type="text" id="course-map-name" class="config-package-input" placeholder="Package name" maxlength="120" />
                     <div class="context-actions" id="race-config-context-actions">
                         <div id="race-config-workspace-actions"></div>
+                        <button type="button" id="btn-run-package-analysis" class="course-btn primary" disabled title="Run v2 analysis — enter start times for each event">Run analysis</button>
                     </div>
                 </div>
                 <div class="context-field">
@@ -253,6 +325,10 @@
                         <span class="context-label">EVENTS:</span>
                         <span id="course-map-package-events-text" class="context-value"></span>
                     </div>
+                </div>
+                <div id="package-readiness-checklist" class="package-readiness-checklist" style="display: none;" aria-live="polite">
+                    <h5 class="course-derived-heading" style="margin: 0 0 0.35rem 0; font-size: 0.9rem;">Analysis readiness</h5>
+                    <ul id="package-readiness-list" class="package-readiness-list"></ul>
                 </div>
             </div>
             <nav class="subnav-tabs" role="tablist" aria-label="Package authoring">
@@ -296,9 +372,10 @@
 <script src="/static/js/table_actions.js?v=799e"></script>
 <script src="/static/js/map/location_grid_editor.js?v=773g"></script>
 <script src="/static/js/map/course_mapping.js?v=795b"></script>
-<script src="/static/js/map/segment_recipes.js?v=810-onepage-close"></script>
-<script src="/static/js/map/saved_courses.js?v=791p2"></script>
+<script src="/static/js/map/segment_recipes.js?v=878-no-auto-recipes"></script>
+<script src="/static/js/map/saved_courses.js?v=878-header-run"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
+<script src="/static/js/runner_datasets.js?v=878-metrics"></script>
 <script src="/static/js/map/junctions_authoring.js?v=819x"></script>
-<script src="/static/js/race_configuration.js?v=842c"></script>
+<script src="/static/js/race_configuration.js?v=878-header-run"></script>
 {% endblock %}

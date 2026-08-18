@@ -38,8 +38,8 @@ def test_runflow_context_strips_day_from_results_url(base_source: str):
 
 def test_pick_run_navigates_without_day_query(base_source: str):
     assert '"/overview?run_id=" + encodeURIComponent(runId)' in base_source
-    assert "rememberWorkspaceRoute(\"results\", dest)" in base_source or \
-        'rememberWorkspaceRoute("results", dest)' in base_source
+    assert "rememberWorkspaceRoute(\"plan\", dest)" in base_source or \
+        'rememberWorkspaceRoute("plan", dest)' in base_source
 
 
 def test_run_dropdown_shows_day_when_known(base_source: str):
@@ -50,6 +50,21 @@ def test_run_dropdown_shows_day_when_known(base_source: str):
     assert 'id="rf-tabler-context-day"' not in base_source
     # Old multi-day-only visibility gate removed
     assert "window.runflowDay.available.length > 1" not in base_source
+
+
+def test_segments_heatmap_uses_run_derived_day():
+    src = (
+        REPO_ROOT / "frontend" / "static" / "js" / "map" / "segments.js"
+    ).read_text(encoding="utf-8")
+    fn = src.split("async function showHeatmapPreview", 1)[1]
+    fn = fn.split("function hideHeatmapPreview", 1)[0]
+    assert "currentDayAndRun()" in fn
+    assert "urlParams.get('day')" not in fn
+    html = (REPO_ROOT / "frontend" / "templates" / "pages" / "segments.html").read_text(
+        encoding="utf-8"
+    )
+    assert "segments.js?v=841-heatmap" in html
+
 
 def test_run_context_banner_shows_day_read_only(run_context_source: str):
     assert "always show day as read-only when known" in run_context_source

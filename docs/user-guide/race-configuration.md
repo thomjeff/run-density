@@ -12,17 +12,18 @@ This guide covers the **Race Configuration** hub — the recommended way to buil
 ```text
 GLOBAL
 ├── Legs     → edit routes & locations only here
-└── Courses  → named frozen snapshots per distance
+├── Courses  → named frozen snapshots per distance
+└── Runners  → immutable runner datasets (actuals or scenarios)
 
 RACE CONFIGURATION (package)
 ├── Assign one global course per distance (full / half / 10k)
-├── Runners
+├── Assign a compatible runner dataset (freeze-copies required CSVs)
 └── Build race exports → package-root multi-distance CSVs/GPX for v2 analyze
 ```
 
 - **Legs** are short GPX sections (e.g. "Bridge at Mill → Half Turn") in `runflow/org/legs/`. They are shared across all race configurations.
 - **Courses** are named frozen snapshots for one distance (e.g. **10K University**, **10K River Trail**) in `runflow/org/courses/{id}/`. Saving a course copies the legs used at that moment; later org leg edits do not change already-saved courses.
-- **Race configurations (packages)** assign one course per distance and build multi-distance exports at `runflow/config/{config_id}/` for analysis.
+- **Race configurations (packages)** assign one course per distance and a compatible **runner dataset**, then freeze `{event}_runners.csv` into `runflow/config/{config_id}/` for analysis.
 
 **Key benefits:**
 
@@ -35,20 +36,21 @@ RACE CONFIGURATION (package)
 
 ## Where to find it
 
-Open **Race Configuration** from the main menu. The hub has three top-level views:
+Open **Race Configuration** from the main menu. The hub has four top-level views:
 
 | View | Purpose |
 |------|---------|
-| **Packages** | Create/open race packages; assign courses and runners |
+| **Packages** | Create/open race packages; assign courses and a runner dataset |
 | **Legs** | Organization leg library — import/draw routes, edit metadata, place locations |
 | **Courses** | Create and manage named frozen courses by distance (**New course**) |
+| **Runners** | Immutable runner datasets — import actuals or create a scenario as a new dataset |
 
-Inside a package, the workspace has two tabs:
+Inside a package, the workspace includes:
 
 | Tab | Purpose |
 |-----|---------|
 | **Courses** | Assign one global course per distance; **Build race exports** |
-| **Runners** | Install actual race-result runner files; baseline scenario generation |
+| **Runners** | Pick a compatible runner dataset (must include every package event) |
 
 ---
 
@@ -57,7 +59,7 @@ Inside a package, the workspace has two tabs:
 1. **Legs** — Import or draw shared route pieces; place locations.
 2. **Courses** → **Save course…** — Compose **10K University** (order legs 1…n for the University route). Save again as **10K River Trail** with a different leg order.
 3. Save **Full** and **Half** courses the same way (each distance can have many named courses).
-4. Open a **race configuration** → **Courses** tab — assign Full / Half / 10K (pick University or River Trail for 10K).
+4. Open a **race configuration** → **Courses** tab — assign Full / Half / 10K (pick University or River Trail for 10K). Assign a compatible **runner dataset** on the Runners tab.
 5. **Build race exports** — writes combined `segments.csv`, `flow.csv`, `locations.csv`, and `{event}.gpx` at the package root.
 6. Analyze with `data_dir` pointing at `runflow/config/{config_id}` (all distances together), or at a single course folder for one-distance runs.
 
@@ -191,9 +193,11 @@ Copy or symlink runner CSVs into the course folder (or use a package build for m
 
 ## Package: Assign courses + Build race exports
 
-1. Open a race configuration → **Courses** tab.
-2. For each package event (Full / Half / 10K), select one global course.
+1. Open a race configuration. **Analysis readiness** and **Run analysis** live in the package header (after Event day / Events), so they stay visible on Courses, Junctions, and Runners.
+2. On the **Courses** tab, for each package event (Full / Half / 10K), select one global course.
 3. **Save assignments**, then **Build race exports**.
+
+That merges the assigned course leg snapshots and recipes into package-root files ready for multi-distance analysis:
 
 That merges the assigned course leg snapshots and recipes into package-root files ready for multi-distance analysis:
 
@@ -206,15 +210,17 @@ That merges the assigned course leg snapshots and recipes into package-root file
 
 Analyze with `data_dir`: `runflow/config/{config_id}`.
 
-> **Legacy:** **Edit event recipes** remains available for advanced overrides; prefer Assign courses + Build race exports for the normal path.
+> **Legacy:** **Edit event recipes** remains under Advanced on the package. Recipes that define a new course belong on **Build → Courses** (New course). Opening the package Courses tab does not pop the Event recipes modal.
 
 ---
 
-## Runners tab — actual race results
+## Runners — datasets and package assignment
 
-After a race, import **chip-timed** finisher data as `{event}_runners.csv` files for analysis (post-race review, calibration, etc.). This is separate from **Calculate Baseline → Create New Files**, which generates synthetic scenario files.
+Runner files are **immutable datasets** in `runflow/org/runners/{dataset_id}/`. A Package stores `runners_dataset_id` and freeze-copies the required `{event}_runners.csv` files into the package folder. Analysis still reads those package-local files.
 
-### Recommended workflow
+### Import actuals
+
+After a race, import **chip-timed** finisher data as `{event}_runners.csv` files:
 
 1. Export results from Race Roster as an Excel workbook (one sheet per event).
 2. Run the conversion script (once per results file). From the repo root, either use a local Python env with `requirements.txt` installed, or the dev container (`make dev`):
@@ -235,7 +241,10 @@ After a race, import **chip-timed** finisher data as `{event}_runners.csv` files
 
    Omit `--events` to export all default sheets (5K Elite, 5K Open, 10K, Half, Full). Use `--list-sheets` to see mappings.
 
-3. Open **Race Configuration** for your package → **Runners** tab → **Install runner files** → **Upload CSV files**. Select the generated `*_runners.csv` files.
+3. Open **Build → Runners → Import actuals**. Name the dataset and upload the generated `*_runners.csv` files. `runner_id` must be unique across every file in the dataset.
+4. Open the package → **Runners** tab and assign a dataset that includes **all** package events (extra event files on the dataset are allowed). The tab shows participant counts and pace percentiles (P00–P100, min/km) for the selected dataset.
+
+Scaling pace or participant counts creates a **new** dataset (Create scenario). The source files do not change.
 
 ### Chip-only rule
 
