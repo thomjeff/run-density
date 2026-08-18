@@ -6,6 +6,7 @@ from app.core.progression.payload import (
     build_progression_field,
     build_progression_setup,
     course_active_windows,
+    select_midpack,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "build_progression_field",
     "build_progression_setup",
     "course_active_windows",
+    "select_midpack",
 ]

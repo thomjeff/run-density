@@ -16,6 +16,10 @@
 - Race-day board under the scrubber: one row per event = modeled course-active window (first start → last finish)
 - Same analysis-clock `t` as map / clock / scrubber; click-to-seek; late chips extend course-clear time
 
+### Plan Progression Mid-pack (#885)
+- Fixed P50-of-finish-order runner per event (all snapshot runners, `floor(0.50 × (n − 1))`); Lead/Last unchanged
+- Map glyph is a half-filled event-colour circle (same size as Lead/Last); wallboard stays start → last finish only
+
 ## [v3.0.0] - 2026-08-18
 
 First **v3.x** product release. Density and Flow now calculate on the **trajectory snapshot** (not the 5s sample grid). Product chrome is **Build | Plan | Execute**. Build libraries (legs, courses, runner datasets) assemble into a Package, which freeze-copies what analysis needs.
