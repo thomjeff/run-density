@@ -7,6 +7,11 @@
 - Setup + field APIs serve guns, downsampled event GPX, and the whole `runners_snapshot.parquet` pack — v1 paints Front/Tail only
 - Closed-form `km(t)` (same inverse as Density/Locations); 5s `samples.parquet` stays off the browser
 
+### Plan Progression chrome (#882)
+- Map first; event-grouped **Lead / Last** legend under the map; playback console under the legend
+- One Play/Pause control, Reset to first gun, longer scrubber; no GPS disclaimer chip
+- Marker halos and quieter course lines so Lead/Last stay readable on overlapping polylines
+
 ## [v3.0.0] - 2026-08-18
 
 First **v3.x** product release. Density and Flow now calculate on the **trajectory snapshot** (not the 5s sample grid). Product chrome is **Build | Plan | Execute**. Build libraries (legs, courses, runner datasets) assemble into a Package, which freeze-copies what analysis needs.
