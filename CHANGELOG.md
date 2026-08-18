@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Plan Progression map (#864)
+- Plan nav **Progression** (after Motion) replays the modeled field on the analysis clock
+- Setup + field APIs serve guns, downsampled event GPX, and the whole `runners_snapshot.parquet` pack — v1 paints Front/Tail only
+- Closed-form `km(t)` (same inverse as Density/Locations); 5s `samples.parquet` stays off the browser
+
 ## [v3.0.0] - 2026-08-18
 
 First **v3.x** product release. Density and Flow now calculate on the **trajectory snapshot** (not the 5s sample grid). Product chrome is **Build | Plan | Execute**. Build libraries (legs, courses, runner datasets) assemble into a Package, which freeze-copies what analysis needs.

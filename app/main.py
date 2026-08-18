@@ -30,6 +30,7 @@ from app.routes.api_density import router as api_density_router
 from app.api.flow import router as api_flow_router
 from app.api.junctions import router as api_junctions_router
 from app.api.motion import router as api_motion_router
+from app.api.progression import router as api_progression_router
 from app.api.bidirectional import router as api_bidirectional_router
 from app.routes.api_reports import router as api_reports_router
 from app.routes.api_bins import router as api_bins_router
@@ -147,6 +148,7 @@ app.include_router(api_density_router)
 app.include_router(api_flow_router)
 app.include_router(api_junctions_router)
 app.include_router(api_motion_router)
+app.include_router(api_progression_router)
 app.include_router(api_bidirectional_router)
 app.include_router(api_reports_router)
 app.include_router(api_bins_router)
