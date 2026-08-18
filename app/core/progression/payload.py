@@ -1,13 +1,14 @@
 """Build Progression setup (geometry + clock) and field (snapshot) payloads (#864).
 
 The field is the whole modeled pack so later visualizations can reuse the same
-boundary. v1 UI only paints Front/Tail. Setup also carries per-event
-course-active windows for the wallboard (#881).
+boundary. Setup carries per-event course-active windows (#881) and a fixed
+Mid-pack/P50 runner (#885). Lead/Last remain a client display cohort.
 """
 
 from __future__ import annotations
 
 import json
+from math import floor
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -278,6 +279,41 @@ def course_active_windows(
     return windows
 
 
+def select_midpack(
+    runners: Sequence[Mapping[str, Any]],
+    *,
+    gun_sec: float,
+    finish_km: float,
+) -> Dict[str, Any]:
+    """Fixed P50 representative: all event runners, modeled finish order (#885).
+
+    Index is ``floor(0.50 * (n - 1))``. Late chips stay in the sort; they do not
+    use the Last main-wave cap. Tie-break is runner id.
+    """
+    if not runners:
+        raise ProgressionError("Cannot select Mid-pack: no runners")
+    ranked: List[Tuple[float, str, Mapping[str, Any]]] = []
+    for r in runners:
+        finish_t = arrival_at_km(
+            gun_sec=float(gun_sec),
+            start_offset_sec=float(r["start_offset_sec"]),
+            pace_min_per_km=float(r["pace_min_per_km"]),
+            km=float(finish_km),
+        )
+        ranked.append((float(finish_t), str(r["id"]), r))
+    ranked.sort(key=lambda row: (row[0], row[1]))
+    idx = int(floor(0.50 * (len(ranked) - 1)))
+    idx = max(0, min(len(ranked) - 1, idx))
+    finish_t, runner_id, chosen = ranked[idx]
+    return {
+        "id": runner_id,
+        "finish_sec": int(finish_t),
+        "start_sec": int(
+            runner_start_sec(float(gun_sec), chosen["start_offset_sec"])
+        ),
+    }
+
+
 def _clock_span(
     runners: Sequence[Mapping[str, Any]],
     gun_sec_by_event: Mapping[str, int],
@@ -343,6 +379,12 @@ def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
         gpx_path = _gpx_path_for_event(ctx["analysis"], event, ctx["data_dir"])
         finish_km = float(ctx["finishes"][event])
         active_start, active_end = windows[event]
+        event_runners = [r for r in ctx["runners"] if r["event"] == event]
+        midpack = select_midpack(
+            event_runners,
+            gun_sec=float(ctx["guns"][event]),
+            finish_km=finish_km,
+        )
         events_out.append(
             {
                 "id": event,
@@ -350,6 +392,8 @@ def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
                 "finish_km": finish_km,
                 "active_start_sec": int(active_start),
                 "active_end_sec": int(active_end),
+                "midpack_id": midpack["id"],
+                "midpack_finish_sec": int(midpack["finish_sec"]),
                 "color": event_color(event),
                 "polyline": _event_polyline(gpx_path, finish_km),
             }
@@ -373,7 +417,7 @@ def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
 
 
 def build_progression_field(run_dir: Path, day: str) -> Dict[str, Any]:
-    """Whole-field snapshot rows (v1 UI paints Front/Tail only)."""
+    """Whole-field snapshot rows. UI paints Lead / Mid-pack / Last from this pack."""
     ctx = _load_day_inputs(run_dir, day)
     return {
         "ok": True,

@@ -18,6 +18,7 @@ from app.core.progression.payload import (
     build_progression_setup,
     course_active_windows,
     downsample_polyline,
+    select_midpack,
 )
 from app.core.trajectory.crossing import arrival_at_km, elapsed_km_at
 from app.core.v2.models import Day, Event
@@ -198,6 +199,8 @@ def test_setup_and_field_from_snapshot(tmp_path: Path):
     assert ev["active_start_sec"] == gun
     assert ev["active_end_sec"] == setup["t1_sec"]
     assert ev["active_end_sec"] > ev["active_start_sec"]
+    assert ev["midpack_id"] == "r1"
+    assert ev["midpack_finish_sec"] == gun + 600
     assert 2 <= len(ev["polyline"]) <= PROGRESSION_POLYLINE_MAX_POINTS
     assert ev["polyline"][0][0] == pytest.approx(45.0, abs=1e-6)
 
@@ -312,8 +315,14 @@ def test_page_and_js_are_lead_last_only():
     assert "elapsedKmAt" in js
     assert '"setup"' in js and '"field"' in js
     assert "/progression/" in js
-    assert "progression.js?v=881b" in page
+    assert "progression.js?v=885d" in page
     assert "Lead" in js and "Last" in js
+    assert "Mid-pack" in js
+    assert "glyphForRoles" in js
+    assert "midpack_id" in js
+    assert "halfFillIcon" in js
+    assert "progression-wallboard-midpack" not in js
+    assert "diamondIcon" not in js
     assert "eventLabel" in js
     assert 'id="progression-playpause"' in page
     assert 'id="progression-reset"' in page
@@ -364,3 +373,27 @@ def test_course_active_window_includes_late_finishers():
     )
     assert end == int(late_finish)
     assert end > int(early_finish)
+
+
+def test_midpack_is_p50_of_all_finishers_not_main_wave():
+    gun = 7 * 3600 + 20 * 60
+    finish_km = 10.0
+    runners = [
+        {"id": "a", "event": "half", "start_offset_sec": 0.0, "pace_min_per_km": 4.0},
+        {"id": "b", "event": "half", "start_offset_sec": 0.0, "pace_min_per_km": 5.0},
+        {"id": "c", "event": "half", "start_offset_sec": 0.0, "pace_min_per_km": 6.0},
+        {"id": "late", "event": "half", "start_offset_sec": 3000.0, "pace_min_per_km": 8.0},
+    ]
+    # n=4 → floor(0.50 * 3) = 1 → second-fastest finish = b (5 min/km).
+    mid = select_midpack(runners, gun_sec=gun, finish_km=finish_km)
+    assert mid["id"] == "b"
+    assert mid["finish_sec"] == int(
+        arrival_at_km(
+            gun_sec=gun,
+            start_offset_sec=0.0,
+            pace_min_per_km=5.0,
+            km=finish_km,
+        )
+    )
+    even_two = select_midpack(runners[:2], gun_sec=gun, finish_km=finish_km)
+    assert even_two["id"] == "a"

@@ -1,14 +1,15 @@
 /**
- * Plan Progression map (#864 / #882 / #881): spatial race clock, Lead/Last,
- * and a course-active wallboard on the same analysis t.
+ * Plan Progression map (#864 / #882 / #881 / #885): spatial race clock,
+ * Lead / Mid-pack / Last, and a course-active wallboard on the same analysis t.
  *
  * Interpolates client-side from the whole-field snapshot + downsampled event GPX.
- * v1 paints Lead/Last only; the field payload is the full pack.
+ * Mid-pack is a fixed P50 runner from setup; Lead/Last stay shipped display cohorts.
  */
 (function () {
     let map = null;
     let setup = null;
     let field = [];
+    let fieldByKey = {};
     let eventsById = {};
     let mainOffsetCap = {};
     let courseLayers = [];
@@ -263,14 +264,15 @@
                 '<span class="progression-legend-event" style="color:' +
                     ev.color +
                     '">' +
-                    '<span class="progression-legend-item">' +
-                    '<span class="progression-swatch is-lead"></span>' +
+                    '<span class="progression-legend-event-name">' +
                     label +
-                    " Lead</span>" +
+                    "</span>" +
                     '<span class="progression-legend-item">' +
-                    '<span class="progression-swatch is-last"></span>' +
-                    label +
-                    " Last</span>" +
+                    '<span class="progression-swatch is-lead"></span> Lead</span>' +
+                    '<span class="progression-legend-item">' +
+                    '<span class="progression-swatch is-midpack"></span> Mid-pack</span>' +
+                    '<span class="progression-legend-item">' +
+                    '<span class="progression-swatch is-last"></span> Last</span>' +
                     "</span>"
             );
         });
@@ -400,29 +402,67 @@
         );
     }
 
-    function markerKey(eventId, role) {
-        return eventId + ":" + role;
+    function markerKey(eventId, runnerId) {
+        return eventId + ":" + runnerId;
     }
 
-    function upsertMarker(key, latlng, color, filled, title) {
+    function glyphForRoles(roles) {
+        if (roles.indexOf("Lead") !== -1) return "lead";
+        if (roles.indexOf("Mid-pack") !== -1) return "mid";
+        return "last";
+    }
+
+    function halfFillIcon(color) {
+        return L.divIcon({
+            className: "progression-midpack-marker",
+            html:
+                '<span class="progression-midpack-half" style="background:linear-gradient(90deg,' +
+                color +
+                ' 50%,#fff 50%);border-color:' +
+                color +
+                '"></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+    }
+
+    function upsertMarker(key, latlng, color, kind, title) {
         let marker = markers[key];
+        if (marker && marker._progressionKind !== kind) {
+            map.removeLayer(marker);
+            marker = null;
+            delete markers[key];
+        }
         if (!marker) {
-            marker = L.circleMarker(latlng, {
-                radius: 9,
-                color: filled ? "#fff" : color,
-                weight: 3,
-                fillColor: filled ? color : "#fff",
-                fillOpacity: 1,
-            }).addTo(map);
+            if (kind === "mid") {
+                marker = L.marker(latlng, {
+                    icon: halfFillIcon(color),
+                    keyboard: false,
+                    zIndexOffset: 400,
+                }).addTo(map);
+            } else {
+                const filled = kind === "lead";
+                marker = L.circleMarker(latlng, {
+                    radius: 9,
+                    color: color,
+                    weight: 3,
+                    fillColor: filled ? color : "#fff",
+                    fillOpacity: 1,
+                }).addTo(map);
+            }
+            marker._progressionKind = kind;
             markers[key] = marker;
         } else {
             marker.setLatLng(latlng);
-            marker.setStyle({
-                color: filled ? "#fff" : color,
-                weight: 3,
-                fillColor: filled ? color : "#fff",
-                fillOpacity: 1,
-            });
+            if (kind !== "mid") {
+                const filled = kind === "lead";
+                marker.setStyle({
+                    color: color,
+                    weight: 3,
+                    fillColor: filled ? color : "#fff",
+                    fillOpacity: 1,
+                });
+            }
         }
         marker.bindTooltip(title, { direction: "top", offset: [0, -8] });
     }
@@ -445,37 +485,52 @@
         }
         const groups = frontTailByEvent(t);
         const active = {};
-        Object.keys(groups).forEach(function (eventId) {
-            const ev = eventsById[eventId];
-            const g = groups[eventId];
-            const same =
-                g.front &&
-                g.tail &&
-                g.front.runner.id === g.tail.runner.id;
-            function place(role, row, filled) {
-                const ll = interpLatLon(ev.polyline, row.km);
+        (setup.events || []).forEach(function (ev) {
+            const g = groups[ev.id] || {};
+            const byRunner = {};
+            function addRole(role, row) {
+                if (!row || !row.runner) return;
+                const id = String(row.runner.id);
+                let slot = byRunner[id];
+                if (!slot) {
+                    slot = byRunner[id] = {
+                        runner: row.runner,
+                        km: row.km,
+                        roles: [],
+                    };
+                }
+                if (slot.roles.indexOf(role) === -1) slot.roles.push(role);
+            }
+            addRole("Lead", g.front);
+            const midRunner = fieldByKey[ev.id + ":" + String(ev.midpack_id || "")];
+            if (midRunner) {
+                const pos = elapsedKmAt(
+                    t,
+                    ev.gun_sec,
+                    midRunner.start_offset_sec,
+                    midRunner.pace_min_per_km,
+                    ev.finish_km
+                );
+                if (pos.status === "on_course") {
+                    addRole("Mid-pack", { runner: midRunner, km: pos.km });
+                }
+            }
+            addRole("Last", g.tail);
+            Object.keys(byRunner).forEach(function (runnerId) {
+                const slot = byRunner[runnerId];
+                const ll = interpLatLon(ev.polyline, slot.km);
                 if (!ll) return;
-                const key = markerKey(eventId, role);
+                const key = markerKey(ev.id, runnerId);
                 active[key] = true;
                 const title =
-                    eventLabel(eventId) +
+                    eventLabel(ev.id) +
                     " " +
-                    (same && g.front && g.tail
-                        ? "Lead/Last"
-                        : role === "front"
-                          ? "Lead"
-                          : "Last") +
+                    slot.roles.join(" / ") +
                     " · " +
-                    row.km.toFixed(2) +
+                    slot.km.toFixed(2) +
                     " km";
-                upsertMarker(key, ll, ev.color, filled, title);
-            }
-            if (same) {
-                place("front", g.front, true);
-            } else {
-                if (g.front) place("front", g.front, true);
-                if (g.tail) place("tail", g.tail, false);
-            }
+                upsertMarker(key, ll, ev.color, glyphForRoles(slot.roles), title);
+            });
         });
         hideUnused(active);
         syncWallboard(t);
@@ -597,6 +652,10 @@
         }
         setup = setupPayload;
         field = fieldPayload.runners || [];
+        fieldByKey = {};
+        field.forEach(function (r) {
+            fieldByKey[r.event + ":" + r.id] = r;
+        });
         eventsById = {};
         (setup.events || []).forEach(function (ev) {
             eventsById[ev.id] = ev;

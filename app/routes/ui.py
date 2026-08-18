@@ -349,7 +349,7 @@ async def motion(request: Request):
 @router.get("/progression", response_class=HTMLResponse)
 async def progression(request: Request):
     """
-    Plan Progression map — spatial race clock, Lead/Last, wallboard (#864 / #882 / #881).
+    Plan Progression map — Lead / Mid-pack / Last and wallboard (#864 / #882 / #881 / #885).
     """
     auth_redirect = require_auth(request)
     if auth_redirect:

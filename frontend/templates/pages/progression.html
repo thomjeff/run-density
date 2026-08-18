@@ -38,13 +38,19 @@
         border-radius: 50%;
         border: 2px solid currentColor;
         box-sizing: border-box;
-        box-shadow: 0 0 0 1px #fff;
     }
     .progression-swatch.is-last {
         background: #fff;
     }
     .progression-swatch.is-lead {
         background: currentColor;
+    }
+    .progression-swatch.is-midpack {
+        background: linear-gradient(90deg, currentColor 50%, #fff 50%);
+    }
+    .progression-legend-event-name {
+        font-weight: 600;
+        margin-right: 0.15rem;
     }
     .progression-console {
         display: flex;
@@ -189,6 +195,19 @@
     .progression-wallboard-dot.is-end {
         background: #fff;
     }
+    .progression-midpack-marker {
+        background: none !important;
+        border: none !important;
+    }
+    .progression-midpack-half {
+        display: block;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 3px solid currentColor;
+        box-sizing: content-box;
+        background: #fff;
+    }
     .progression-wallboard-playhead {
         position: absolute;
         top: 0;
@@ -311,5 +330,5 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=864"></script>
-<script src="/static/js/map/progression.js?v=881b"></script>
+<script src="/static/js/map/progression.js?v=885d"></script>
 {% endblock %}
