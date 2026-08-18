@@ -1,8 +1,8 @@
 /**
- * Plan Progression map (#864): spatial race clock, Front/Tail on modeled km(t).
+ * Plan Progression map (#864 / #882): spatial race clock, Lead/Last on modeled km(t).
  *
  * Interpolates client-side from the whole-field snapshot + downsampled event GPX.
- * v1 paints Front/Tail only; the field payload is the full pack.
+ * v1 paints Lead/Last only; the field payload is the full pack.
  */
 (function () {
     let map = null;
@@ -36,12 +36,28 @@
         return { runId: runId, day: day };
     }
 
+    function eventLabel(id) {
+        const raw = String(id || "");
+        if (raw.toLowerCase() === "10k") return "10K";
+        if (!raw) return "";
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+
     function formatClock(sec) {
         const s = Math.max(0, Math.floor(Number(sec) || 0));
         const hh = String(Math.floor(s / 3600)).padStart(2, "0");
         const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
         const ss = String(s % 60).padStart(2, "0");
         return hh + ":" + mm + ":" + ss;
+    }
+
+    function syncPlayPauseButton() {
+        const btn = document.getElementById("progression-playpause");
+        if (!btn) return;
+        const label = playing ? "Pause" : "Play";
+        btn.title = label;
+        btn.setAttribute("aria-label", label);
+        btn.classList.toggle("is-playing", playing);
     }
 
     function elapsedKmAt(t, gunSec, offsetSec, paceMinPerKm, finishKm) {
@@ -183,8 +199,8 @@
             if (latlngs.length < 2) return;
             const line = L.polyline(latlngs, {
                 color: ev.color,
-                weight: 3,
-                opacity: 0.85,
+                weight: 2,
+                opacity: 0.55,
             }).addTo(map);
             courseLayers.push(line);
             latlngs.forEach(function (ll) {
@@ -201,23 +217,19 @@
         if (!el) return;
         const bits = [];
         (setup.events || []).forEach(function (ev) {
-            const label = String(ev.id).toUpperCase();
+            const label = eventLabel(ev.id);
             bits.push(
-                '<span class="progression-legend-item" style="color:' +
+                '<span class="progression-legend-event" style="color:' +
                     ev.color +
                     '">' +
-                    '<span class="progression-swatch is-front"></span>' +
+                    '<span class="progression-legend-item">' +
+                    '<span class="progression-swatch is-lead"></span>' +
                     label +
-                    " Front" +
-                    "</span>"
-            );
-            bits.push(
-                '<span class="progression-legend-item" style="color:' +
-                    ev.color +
-                    '">' +
-                    '<span class="progression-swatch is-tail"></span>' +
+                    " Lead</span>" +
+                    '<span class="progression-legend-item">' +
+                    '<span class="progression-swatch is-last"></span>' +
                     label +
-                    " Tail" +
+                    " Last</span>" +
                     "</span>"
             );
         });
@@ -232,19 +244,20 @@
         let marker = markers[key];
         if (!marker) {
             marker = L.circleMarker(latlng, {
-                radius: 8,
-                color: color,
-                weight: 2,
-                fillColor: color,
-                fillOpacity: filled ? 1 : 0,
+                radius: 9,
+                color: filled ? "#fff" : color,
+                weight: 3,
+                fillColor: filled ? color : "#fff",
+                fillOpacity: 1,
             }).addTo(map);
             markers[key] = marker;
         } else {
             marker.setLatLng(latlng);
             marker.setStyle({
-                color: color,
-                fillColor: color,
-                fillOpacity: filled ? 1 : 0,
+                color: filled ? "#fff" : color,
+                weight: 3,
+                fillColor: filled ? color : "#fff",
+                fillOpacity: 1,
             });
         }
         marker.bindTooltip(title, { direction: "top", offset: [0, -8] });
@@ -281,13 +294,13 @@
                 const key = markerKey(eventId, role);
                 active[key] = true;
                 const title =
-                    String(eventId).toUpperCase() +
+                    eventLabel(eventId) +
                     " " +
                     (same && g.front && g.tail
-                        ? "Front/Tail"
+                        ? "Lead/Last"
                         : role === "front"
-                          ? "Front"
-                          : "Tail") +
+                          ? "Lead"
+                          : "Last") +
                     " · " +
                     row.km.toFixed(2) +
                     " km";
@@ -305,6 +318,7 @@
 
     function setPlaying(next) {
         playing = next;
+        syncPlayPauseButton();
         if (playing) {
             lastFrameTs = 0;
             if (!rafId) rafId = requestAnimationFrame(tick);
@@ -333,24 +347,22 @@
     function bindControls() {
         if (controlsBound) return;
         controlsBound = true;
-        const play = document.getElementById("progression-play");
-        const pause = document.getElementById("progression-pause");
-        const stop = document.getElementById("progression-stop");
+        const playPause = document.getElementById("progression-playpause");
+        const reset = document.getElementById("progression-reset");
         const scrub = document.getElementById("progression-scrub");
-        if (play) {
-            play.addEventListener("click", function () {
+        if (playPause) {
+            playPause.addEventListener("click", function () {
                 if (!setup) return;
+                if (playing) {
+                    setPlaying(false);
+                    return;
+                }
                 if (clockSec >= setup.t1_sec) paintAt(setup.t0_sec);
                 setPlaying(true);
             });
         }
-        if (pause) {
-            pause.addEventListener("click", function () {
-                setPlaying(false);
-            });
-        }
-        if (stop) {
-            stop.addEventListener("click", function () {
+        if (reset) {
+            reset.addEventListener("click", function () {
                 setPlaying(false);
                 if (setup) paintAt(setup.t0_sec);
             });
@@ -410,10 +422,6 @@
         ensureMap();
         drawCourses();
         renderLegend();
-        const chip = document.getElementById("progression-provenance");
-        if (chip) {
-            chip.textContent = (setup.model && setup.model.label) || "";
-        }
         const scrub = document.getElementById("progression-scrub");
         if (scrub) {
             scrub.min = String(setup.t0_sec);
@@ -421,6 +429,7 @@
             scrub.step = "1";
         }
         bindControls();
+        syncPlayPauseButton();
         paintAt(setup.t0_sec);
     }
 

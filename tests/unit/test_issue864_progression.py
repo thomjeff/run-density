@@ -286,14 +286,18 @@ def test_api_404_without_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert res.status_code == 404
 
 
-def test_page_and_js_are_front_tail_only():
+def test_page_and_js_are_lead_last_only():
     page = (REPO_ROOT / "frontend" / "templates" / "pages" / "progression.html").read_text(
         encoding="utf-8"
     )
     js = (REPO_ROOT / "frontend" / "static" / "js" / "map" / "progression.js").read_text(
         encoding="utf-8"
     )
-    assert "Front" in page and "Tail" in page
+    assert "Modeled runner progression on the analysis clock" in page
+    assert "not GPS" not in page
+    assert "provenance" not in page
+    assert page.find('id="progression-map"') < page.find('id="progression-legend"')
+    assert page.find('id="progression-legend"') < page.find('id="progression-clock"')
     assert "quintile" not in js.lower()
     assert "lead pack" not in js.lower()
     assert "full-field" not in js.lower() and "full field" not in js.lower()
@@ -303,8 +307,11 @@ def test_page_and_js_are_front_tail_only():
     assert "elapsedKmAt" in js
     assert '"setup"' in js and '"field"' in js
     assert "/progression/" in js
-    assert "progression.js?v=864d" in page
-    assert page.count("course-map-action-btn") >= 3
-    assert 'id="progression-play"' in page
-    assert 'id="progression-pause"' in page
-    assert 'id="progression-stop"' in page
+    assert "progression.js?v=882b" in page
+    assert "Lead" in js and "Last" in js
+    assert "eventLabel" in js
+    assert 'id="progression-playpause"' in page
+    assert 'id="progression-reset"' in page
+    assert 'id="progression-pause"' not in page
+    assert 'id="progression-stop"' not in page
+    assert page.count('class="course-map-action-btn"') == 2
