@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Progression{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #progression-map {
+        height: min(70vh, 640px);
+        min-height: 420px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        background: transparent !important;
+    }
+    .progression-clock-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem 0.9rem;
+        margin-bottom: 0.75rem;
+    }
+    .progression-clock {
+        font-variant-numeric: tabular-nums;
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        min-width: 7.5rem;
+    }
+    .progression-playback {
+        display: inline-flex;
+        align-items: center;
+    }
+    #progression-scrub {
+        flex: 1 1 12rem;
+        min-width: 10rem;
+    }
+    .progression-provenance {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        color: #5c6b73;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 0.2rem 0.7rem;
+    }
+    .progression-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem 1rem;
+        font-size: 0.8rem;
+        color: #4a5568;
+        margin-bottom: 0.65rem;
+    }
+    .progression-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .progression-swatch {
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        box-sizing: border-box;
+    }
+    .progression-swatch.is-tail {
+        background: transparent;
+    }
+    .progression-swatch.is-front {
+        background: currentColor;
+    }
+    #basemap-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10000;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        display: none;
+        gap: 0.25rem;
+    }
+    #basemap-toggle button {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+    #basemap-toggle button.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Progression</h2>
+    <p class="text-secondary" style="margin-top: 0.25rem;">
+        Modeled field on the analysis clock. Front and Tail of each event at time
+        <em>t</em> — the race as a spatial clock, not live GPS.
+    </p>
+</div>
+{% include "partials/run_context.html" %}
+
+<div id="progression-empty" class="card" style="display:none;">
+    <p class="text-secondary mb-0" id="progression-empty-msg">
+        No progression snapshot for this run. Re-run analysis so the trajectory layer exists.
+    </p>
+</div>
+
+<div id="progression-root" class="card" style="display:none;">
+    <div class="progression-clock-bar">
+        <div id="progression-clock" class="progression-clock" aria-live="polite">--:--:--</div>
+        <div class="progression-playback" role="group" aria-label="Playback">
+            <button type="button" class="course-map-action-btn" id="progression-play" title="Play" aria-label="Play">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            </button>
+            <button type="button" class="course-map-action-btn" id="progression-pause" title="Pause" aria-label="Pause">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            </button>
+            <button type="button" class="course-map-action-btn" id="progression-stop" title="Stop" aria-label="Stop">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/></svg>
+            </button>
+        </div>
+        <label class="mb-0" for="progression-speed">
+            <span class="visually-hidden">Speed</span>
+            <select id="progression-speed" class="form-select form-select-sm" style="width: auto;">
+                <option value="1">1×</option>
+                <option value="10">10×</option>
+                <option value="30" selected>30×</option>
+                <option value="60">60×</option>
+                <option value="120">120×</option>
+            </select>
+        </label>
+        <input id="progression-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Race clock">
+        <span id="progression-provenance" class="progression-provenance"></span>
+    </div>
+    <div id="progression-legend" class="progression-legend"></div>
+    <div style="position: relative;">
+        <div id="basemap-toggle">
+            <button type="button" id="btn-street" class="active">Street</button>
+            <button type="button" id="btn-satellite">Satellite</button>
+        </div>
+        <div id="progression-map"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js?v=864"></script>
+<script src="/static/js/map/progression.js?v=864d"></script>
+{% endblock %}

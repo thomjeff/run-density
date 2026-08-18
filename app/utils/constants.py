@@ -215,6 +215,16 @@ MOTION_VISIT_KM_GAP = 0.5
 # Default equals the reporting window so any co-binned enters can match.
 MOTION_QUINTILE_PARTNER_DWELL_SEC = MOTION_STREAM_WINDOW_SEC
 
+# Plan Progression map (#864): downsample event GPX for the browser interpolator.
+PROGRESSION_POLYLINE_MAX_POINTS = 400
+PROGRESSION_EVENT_COLORS = {
+    "full": "#1a5276",
+    "half": "#c0392b",
+    "10k": "#1e8449",
+    "elite": "#6c3483",
+    "open": "#b9770e",
+}
+
 # Data directory path (Issue #596)
 DATA_DIR = "data"
 

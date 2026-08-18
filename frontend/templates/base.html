@@ -84,6 +84,9 @@
                             <a class="nav-link{% if request.url and request.url.path == '/motion' %} active{% endif %}" href="/motion" data-rf-run-view="1">Motion</a>
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/progression' %} active{% endif %}" href="/progression" data-rf-run-view="1">Progression</a>
+                        </li>
+                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations" data-rf-run-view="1">Locations</a>
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
@@ -202,6 +205,7 @@
             "/flow",
             "/junctions",
             "/motion",
+            "/progression",
             "/locations",
             "/reports",
         ];

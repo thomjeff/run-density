@@ -70,7 +70,7 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Motion · Locations · Reports | Logout
+- Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Motion · Progression · Locations · Reports | Logout
 - Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Runners · Packages | Logout
 - Top bar (Execute): **Runflow** | **Execute ▾** | Race day | Logout — placeholder only (Issue #878); no Locations item
 - Workspace control switches Build ↔ Plan ↔ Execute (mutually exclusive chrome; Issue #878, formerly Results/Build in #842)

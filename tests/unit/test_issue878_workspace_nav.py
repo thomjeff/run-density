@@ -136,3 +136,21 @@ def test_base_html_renders_plan_execute_chrome():
     assert 'data-rf-build-view="runners"' in html
     assert 'id="rf-878-smoke"' in html
     assert 'id="rf-tabler-open-package"' not in html
+
+
+def test_plan_nav_places_progression_between_motion_and_locations(base_source: str):
+    motion = base_source.find('href="/motion"')
+    progression = base_source.find('href="/progression"', motion)
+    locations = base_source.find('href="/locations"', progression)
+    assert motion != -1 and progression != -1 and locations != -1
+    assert motion < progression < locations
+    assert '"/progression"' in base_source
+    run_context = (TEMPLATES_DIR / "partials" / "run_context.html").read_text(
+        encoding="utf-8"
+    )
+    assert run_context.find('data-results-path="/motion"') < run_context.find(
+        'data-results-path="/progression"'
+    )
+    assert run_context.find('data-results-path="/progression"') < run_context.find(
+        'data-results-path="/locations"'
+    )
