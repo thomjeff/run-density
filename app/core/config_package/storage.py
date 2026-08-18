@@ -795,24 +795,38 @@ def upload_runner_files_to_package(
     """
     Save uploaded ``*_runners.csv`` files into a config package (validated).
 
-    uploads: sequence of (filename, bytes).
+    uploads: sequence of (filename, bytes). Validates each CSV and
+    cross-file ``runner_id`` uniqueness against the resulting package set
+    (Issue #852) before writing.
     """
-    from app.core.baseline.validation import validate_runner_csv_bytes
+    from app.core.config_package.runner_files import validate_runner_csv_set
 
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
-    saved: List[str] = []
+    incoming: List[tuple] = []
+    replacing = set()
     for name, data in uploads:
         safe = Path(str(name or "")).name
         if not safe:
             raise ValueError("Upload filename is required")
-        validate_runner_csv_bytes(data, safe)
+        incoming.append((safe, data))
+        replacing.add(safe)
+
+    if not incoming:
+        raise ValueError("No runner files uploaded")
+
+    combined: List[tuple] = list(incoming)
+    for existing in sorted(package_path.glob("*_runners.csv")):
+        if not existing.is_file() or existing.name in replacing:
+            continue
+        combined.append((existing.name, existing.read_bytes()))
+    validate_runner_csv_set(combined)
+
+    saved: List[str] = []
+    for safe, data in incoming:
         dest = package_path / safe
         dest.write_bytes(data)
         saved.append(safe)
-
-    if not saved:
-        raise ValueError("No runner files uploaded")
 
     logger.info("Uploaded %s runner file(s) to %s", len(saved), cid)
     return saved

@@ -15,13 +15,20 @@ from pydantic import BaseModel, Field
 
 from app.core.v2.start_time import START_TIME_MAX_MINUTES, START_TIME_MIN_MINUTES
 from app.core.config_package import (
+    assign_runner_dataset,
+    assign_runner_dataset_or_delete_package,
     create_config_package,
+    create_runner_dataset,
+    create_scenario_dataset,
     delete_config_package,
     export_config_package_segments,
+    get_package_runner_assignment,
     import_runner_files_from_package,
     list_config_packages,
+    list_runner_datasets,
     load_config_course,
     load_config_manifest,
+    load_runner_dataset,
     package_readiness,
     resolve_config_package_path,
     save_config_course,
@@ -103,6 +110,10 @@ class CreateConfigPackageRequest(BaseModel):
         description="Event ids for this package (e.g. full, half, 10k)",
     )
     resources: Optional[List[PackageResourceEntry]] = None
+    runners_dataset_id: Optional[str] = Field(
+        default=None,
+        description="Optional org runner dataset to freeze into the new package",
+    )
 
 
 class UpdateConfigPackageRequest(BaseModel):
@@ -117,6 +128,16 @@ class ImportRunnersRequest(BaseModel):
         default_factory=list,
         description="Optional runner filenames to copy; empty copies all *_runners.csv",
     )
+
+
+class AssignRunnerDatasetRequest(BaseModel):
+    dataset_id: str = Field(..., min_length=10, max_length=64)
+
+
+class CreateRunnerScenarioRequest(BaseModel):
+    label: str = Field(..., min_length=1, max_length=120)
+    description: str = Field("", max_length=255)
+    control_variables: Dict[str, Dict[str, Any]]
 
 
 class SaveConfigCourseRequest(BaseModel):
@@ -264,6 +285,14 @@ async def api_create_config_package(
             package_events=body.package_events,
             resources=resource_payload,
         )
+        dataset_id = (body.runners_dataset_id or "").strip() or None
+        if dataset_id:
+            assigned = assign_runner_dataset_or_delete_package(
+                result["config_id"], dataset_id
+            )
+            result["manifest"] = assigned.get("manifest") or result.get("manifest")
+            result["runners_dataset_id"] = assigned["runners_dataset_id"]
+            result["copied_files"] = assigned.get("copied_files") or []
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
             content={"ok": True, **result},
@@ -887,6 +916,91 @@ async def api_list_org_courses(
         return JSONResponse(content={"ok": True, "courses": courses})
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/org/runners")
+async def api_list_org_runners(request: Request) -> JSONResponse:
+    """List immutable runner datasets (runflow/org/runners/)."""
+    require_auth(request)
+    try:
+        datasets = list_runner_datasets()
+        return JSONResponse(content={"ok": True, "datasets": datasets})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/org/runners/{dataset_id}")
+async def api_get_org_runner_dataset(
+    request: Request,
+    dataset_id: str,
+) -> JSONResponse:
+    """Load one runner dataset."""
+    require_auth(request)
+    try:
+        dataset = load_runner_dataset(dataset_id)
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/runners")
+async def api_create_org_runner_dataset(
+    request: Request,
+    label: str = Form(...),
+    description: str = Form(""),
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Import actuals as a new immutable runner dataset."""
+    require_auth(request)
+    try:
+        uploads = []
+        for upload in files:
+            data = await upload.read()
+            if not data:
+                continue
+            uploads.append((upload.filename or "runners.csv", data))
+        dataset = create_runner_dataset(label, uploads, description=description)
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to create runner dataset")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create runner dataset: {e}",
+        )
+
+
+@router.post("/api/org/runners/{dataset_id}/scenarios")
+async def api_create_org_runner_scenario(
+    request: Request,
+    dataset_id: str,
+    body: CreateRunnerScenarioRequest,
+) -> JSONResponse:
+    """Create a new dataset by applying control variables to a source dataset."""
+    require_auth(request)
+    try:
+        dataset = create_scenario_dataset(
+            dataset_id,
+            label=body.label,
+            description=body.description,
+            control_variables=body.control_variables,
+        )
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to create runner scenario dataset")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create runner scenario: {e}",
+        )
 
 
 @router.post("/api/org/courses")
@@ -1633,6 +1747,52 @@ async def api_list_package_files(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/runner-datasets")
+async def api_get_package_runner_datasets(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Compatible runner datasets plus current package assignment."""
+    require_auth(request)
+    try:
+        assignment = get_package_runner_assignment(config_id)
+        return JSONResponse(content={"ok": True, **assignment})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/runner-dataset")
+async def api_assign_package_runner_dataset(
+    request: Request,
+    config_id: str,
+    body: AssignRunnerDatasetRequest,
+) -> JSONResponse:
+    """Atomically assign a compatible runner dataset and freeze required CSVs."""
+    require_auth(request)
+    try:
+        result = assign_runner_dataset(config_id, body.dataset_id)
+        package_path = resolve_config_package_path(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                **result,
+                "readiness": package_readiness(package_path),
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to assign runner dataset")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign runner dataset: {e}",
+        )
 
 
 @router.post("/api/config/packages/{config_id}/import-runners")

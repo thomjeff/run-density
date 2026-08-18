@@ -37,7 +37,7 @@ html.rf-tabler .navbar .navbar-nav {
 }
 
 /* Tabler adds margin-bottom on .nav-item; with align-items:center that
-   offsets the workspace dropdown vs the run dropdown (Results only). */
+   offsets the workspace dropdown vs the run dropdown (Plan only). */
 html.rf-tabler .navbar-expand-md .navbar-nav > .nav-item {
     margin-bottom: 0 !important;
     align-self: center;
@@ -99,7 +99,8 @@ html.rf-tabler .rf-runs-toggle.dropdown-toggle::after {
 }
 
 html.rf-tabler .rf-build-chrome .nav-link.active,
-html.rf-tabler .rf-results-chrome .nav-link.active {
+html.rf-tabler .rf-results-chrome .nav-link.active,
+html.rf-tabler .rf-execute-chrome .nav-link.active {
     font-weight: 700;
 }
 

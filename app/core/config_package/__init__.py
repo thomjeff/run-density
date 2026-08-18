@@ -6,6 +6,16 @@ Issue #757: load/save course.json via config package APIs.
 Issue #758: export segments.csv from course.json into config package.
 """
 
+from app.core.config_package.runner_datasets import (
+    assign_runner_dataset,
+    assign_runner_dataset_or_delete_package,
+    create_runner_dataset,
+    create_scenario_dataset,
+    get_package_runner_assignment,
+    list_compatible_runner_datasets,
+    list_runner_datasets,
+    load_runner_dataset,
+)
 from app.core.config_package.storage import (
     append_package_index,
     create_config_package,
@@ -30,7 +40,15 @@ from app.core.config_package.storage import (
 
 __all__ = [
     "append_package_index",
+    "assign_runner_dataset",
+    "assign_runner_dataset_or_delete_package",
     "create_config_package",
+    "create_runner_dataset",
+    "create_scenario_dataset",
+    "get_package_runner_assignment",
+    "list_compatible_runner_datasets",
+    "list_runner_datasets",
+    "load_runner_dataset",
     "default_course_json",
     "delete_config_package",
     "export_config_package_segments",

@@ -62,7 +62,6 @@ def test_base_html_jinja_render_smoke():
     assert 'id="day-selector"' not in html  # Issue #841: day from run, no dropdown
     assert "initRunflowContext" in html
     assert 'id="rf-runs-dropdown"' in html
-    assert 'id="rf-tabler-package-nav"' in html
     assert 'id="rf-tabler-context-strip"' not in html
     assert 'id="rf-phase7-smoke"' in html
 

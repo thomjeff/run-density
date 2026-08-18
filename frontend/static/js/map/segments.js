@@ -7,7 +7,7 @@
  */
 
 // Version stamp to detect stale/cached script loads
-console.log("segments.js VERSION:", "2025-12-13T21:20Z");
+console.log("segments.js VERSION:", "2026-08-18T841-heatmap");
 
 // LOS colors from reporting.yml (SSOT)
 const losColors = {
@@ -466,9 +466,8 @@ async function showHeatmapPreview(segmentId) {
 
     if (!overlay || !img || !status) return;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const day = (urlParams.get('day') || '').toLowerCase().trim();
-    const runId = (urlParams.get('run_id') || '').trim();
+    // Issue #841: day is not on the URL; use run-derived chrome context.
+    const { day, run_id: runId } = currentDayAndRun();
     if (!day || !runId) {
         status.textContent = 'Missing day/run context.';
         img.style.display = 'none';

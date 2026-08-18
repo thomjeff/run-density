@@ -7,6 +7,7 @@
     const CONFIG_PATH_PREFIX = '/config';
 
     let packagesListData = [];
+    let packagesListLoaded = false;
     let packageSortColumn = 'updated';
     let packageSortDirection = 'desc';
     let currentConfigId = null;
@@ -32,7 +33,7 @@
 
     function getHubView() {
         const raw = getQuery().get('view');
-        if (raw === 'legs' || raw === 'courses' || raw === 'packages') return raw;
+        if (raw === 'legs' || raw === 'courses' || raw === 'packages' || raw === 'runners') return raw;
         return 'legs';
     }
 
@@ -74,6 +75,8 @@
     const RESOURCE_CODE_MAX_LEN = 16;
     let newPackageResourcesDraft = [];
     let editPackageResourcesDraft = [];
+    let newPackageDatasets = [];
+    let newPackageDatasetsLoaded = false;
 
     function cloneDefaultResources() {
         return DEFAULT_PACKAGE_RESOURCES.map(function (r) {
@@ -211,7 +214,11 @@
             },
             packages: {
                 title: 'Packages',
-                lead: 'Each package assigns one course per distance (Full / Half / 10K) and holds runner files for multi-distance analysis.',
+                lead: 'Each package assigns one course per distance (Full / Half / 10K) and a compatible runner dataset for analysis.',
+            },
+            runners: {
+                title: 'Runners',
+                lead: 'Immutable runner datasets used in planning. Import actuals or create a scenario as a new dataset; packages select which dataset to use.',
             },
         };
         const cfg = copy[view] || copy.legs;
@@ -224,6 +231,7 @@
         const packagesPanel = document.getElementById('race-config-hub-packages');
         const legsPanel = document.getElementById('race-config-hub-legs');
         const coursesPanel = document.getElementById('race-config-hub-courses');
+        const runnersPanel = document.getElementById('race-config-hub-runners');
         // Legacy in-page hub tabs (removed from markup; keep for safety if restored)
         document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
             const isActive = btn.getAttribute('data-hub-view') === view;
@@ -233,6 +241,7 @@
         if (packagesPanel) packagesPanel.style.display = view === 'packages' ? 'block' : 'none';
         if (legsPanel) legsPanel.style.display = view === 'legs' ? 'block' : 'none';
         if (coursesPanel) coursesPanel.style.display = view === 'courses' ? 'block' : 'none';
+        if (runnersPanel) runnersPanel.style.display = view === 'runners' ? 'block' : 'none';
         syncHubPageHeader(view);
 
         if (view === 'legs') {
@@ -255,6 +264,11 @@
         }
         if (view === 'courses') {
             document.dispatchEvent(new CustomEvent('race-config-hub-courses-shown'));
+        }
+        if (view === 'runners') {
+            if (window.runnerDatasets && window.runnerDatasets.loadHub) {
+                window.runnerDatasets.loadHub();
+            }
         }
     }
 
@@ -403,11 +417,14 @@
         if (junctionsPanel) junctionsPanel.style.display = tab === 'junctions' ? 'block' : 'none';
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         syncConfigPackagePanels(tab);
-        if (tab === 'runners' && window.initRunnersBaseline) {
-            window.initRunnersBaseline();
+        if (tab === 'runners' && window.runnerDatasets && window.runnerDatasets.loadPackagePicker) {
+            window.runnerDatasets.loadPackagePicker();
         }
         if (tab === 'junctions' && window.initJunctionsAuthoring) {
             window.initJunctionsAuthoring();
+        }
+        if (window.SavedCoursesPanel && window.SavedCoursesPanel.refreshReadiness) {
+            window.SavedCoursesPanel.refreshReadiness();
         }
     }
 
@@ -686,15 +703,100 @@
             if (!resp.ok) throw new Error('Failed to load packages');
             const data = await resp.json();
             packagesListData = data.packages || [];
+            packagesListLoaded = true;
             renderPackageTable(null);
         } catch (e) {
             console.error('Failed to load config packages', e);
             packagesListData = [];
+            packagesListLoaded = true;
             if (tbody) {
                 tbody.innerHTML =
                     '<tr><td colspan="4" class="placeholder">Failed to load packages.</td></tr>';
             }
         }
+    }
+
+    function selectedNewPackageEvents() {
+        const packageEvents = [];
+        document
+            .querySelectorAll('#race-config-new-events input[type="checkbox"]:checked')
+            .forEach(function (cb) {
+                packageEvents.push(String(cb.value || '').toLowerCase());
+            });
+        return packageEvents;
+    }
+
+    function datasetCoversEvents(dataset, requiredEvents) {
+        const have = {};
+        ((dataset && dataset.events) || []).forEach(function (event) {
+            have[String(event || '').toLowerCase()] = true;
+        });
+        if (!requiredEvents.length) return false;
+        return requiredEvents.every(function (event) {
+            return !!have[event];
+        });
+    }
+
+    function renderNewPackageDatasetChoices() {
+        const select = document.getElementById('race-config-new-runners-dataset');
+        const help = document.getElementById('race-config-new-runners-help');
+        if (!select) return;
+        const previous = select.value;
+        const required = selectedNewPackageEvents();
+        select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        if (!required.length) {
+            placeholder.textContent = 'Select events first…';
+            select.appendChild(placeholder);
+            if (help) {
+                help.textContent =
+                    'Only datasets that include every selected event are listed. Extra event files on the dataset are allowed.';
+            }
+            return;
+        }
+        const compatible = newPackageDatasets.filter(function (row) {
+            return datasetCoversEvents(row, required);
+        });
+        if (!newPackageDatasetsLoaded) {
+            placeholder.textContent = 'Loading datasets…';
+            select.appendChild(placeholder);
+            return;
+        }
+        placeholder.textContent = compatible.length
+            ? 'None yet (assign later)'
+            : 'No compatible datasets';
+        select.appendChild(placeholder);
+        compatible.forEach(function (row) {
+            const opt = document.createElement('option');
+            opt.value = row.dataset_id;
+            opt.textContent =
+                (row.label || row.dataset_id) +
+                ' (' +
+                ((row.events || []).join(', ') || '') +
+                ')';
+            if (row.dataset_id === previous) opt.selected = true;
+            select.appendChild(opt);
+        });
+        if (help) {
+            help.textContent = compatible.length
+                ? 'Only datasets that include every selected event are listed. Extra event files on the dataset are allowed.'
+                : 'No dataset includes all selected events. Import actuals under Build → Runners, or create the package and assign later.';
+        }
+    }
+
+    async function loadNewPackageDatasets() {
+        try {
+            const resp = await fetch('/api/org/runners', { credentials: 'same-origin' });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(data.detail || 'Failed to load datasets');
+            newPackageDatasets = data.datasets || [];
+        } catch (err) {
+            console.error(err);
+            newPackageDatasets = [];
+        }
+        newPackageDatasetsLoaded = true;
+        renderNewPackageDatasetChoices();
     }
 
     function renderNewPackageEventChoices() {
@@ -709,10 +811,12 @@
             cb.id = id;
             cb.value = choice.value;
             cb.name = 'package_events';
+            cb.addEventListener('change', renderNewPackageDatasetChoices);
             label.appendChild(cb);
             label.appendChild(document.createTextNode(choice.label));
             host.appendChild(label);
         });
+        renderNewPackageDatasetChoices();
     }
 
     function openNewModal() {
@@ -724,6 +828,8 @@
         if (descInput) descInput.value = '';
         if (dayInput) dayInput.value = '';
         renderNewPackageEventChoices();
+        renderNewPackageDatasetChoices();
+        loadNewPackageDatasets();
         newPackageResourcesDraft = cloneDefaultResources();
         renderModalResourcesList(
             document.getElementById('race-config-new-resources-list'),
@@ -746,12 +852,9 @@
         const label = labelInput && labelInput.value.trim();
         const description = descInput && descInput.value.trim();
         const eventDay = dayInput && dayInput.value.trim();
-        const packageEvents = [];
-        document
-            .querySelectorAll('#race-config-new-events input[type="checkbox"]:checked')
-            .forEach(function (cb) {
-                packageEvents.push(cb.value);
-            });
+        const packageEvents = selectedNewPackageEvents();
+        const datasetSelect = document.getElementById('race-config-new-runners-dataset');
+        const runnersDatasetId = datasetSelect && datasetSelect.value ? datasetSelect.value.trim() : '';
         if (!label) {
             alert('Enter a name (e.g. FM 2027 Test).');
             return;
@@ -775,6 +878,7 @@
                     description: description || '',
                     event_day: eventDay,
                     package_events: packageEvents,
+                    runners_dataset_id: runnersDatasetId || null,
                     resources: newPackageResourcesDraft.map(function (r) {
                         return { code: r.code, label: r.label || r.code.toUpperCase() };
                     }),

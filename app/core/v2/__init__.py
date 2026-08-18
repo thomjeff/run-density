@@ -17,6 +17,7 @@ from app.core.v2.validation import (
     validate_start_times,
     validate_segment_spans,
     validate_runner_uniqueness,
+    assert_unique_runner_ids,
     validate_gpx_files,
     validate_locations_resource_counts,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "validate_start_times",
     "validate_segment_spans",
     "validate_runner_uniqueness",
+    "assert_unique_runner_ids",
     "validate_gpx_files",
     "validate_locations_resource_counts",
     # Loaders

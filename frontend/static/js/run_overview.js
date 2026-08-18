@@ -27,6 +27,15 @@
             + '<div class="rf-overview-meta">'
             + '<strong>Run ID:</strong> ' + escapeHtml(data.run_id || '—') + '<br>'
             + '<strong>Description:</strong> ' + escapeHtml(data.description || 'N/A')
+            + (data.package_id
+                ? ('<br><strong>Package Name:</strong> '
+                    + (data.package_href
+                        ? ('<a href="' + escapeHtml(data.package_href) + '" id="rf-overview-package-link">'
+                            + escapeHtml(data.package_name || data.package_id) + '</a>')
+                        : escapeHtml(data.package_name || data.package_id))
+                    + '<br><strong>Package ID:</strong> <span class="rf-overview-package-id">'
+                    + escapeHtml(data.package_id) + '</span>')
+                : '')
             + '</div>'
             + '<h4 class="rf-overview-subhead">Events</h4>'
             + '<div class="scrollable-table-container"><table class="table-sticky-header"><thead><tr>'
@@ -64,6 +73,14 @@
         }
         html += '</tbody></table></div>';
         content.innerHTML = html;
+        var pkgLink = document.getElementById('rf-overview-package-link');
+        if (pkgLink) {
+            pkgLink.addEventListener('click', function () {
+                try { localStorage.setItem('rf_workspace', 'build'); } catch (e) { /* ignore */ }
+                var href = pkgLink.getAttribute('href') || '';
+                try { localStorage.setItem('rf_last_build_path', href); } catch (e) { /* ignore */ }
+            });
+        }
     }
 
     function renderRunDetailView(data) {

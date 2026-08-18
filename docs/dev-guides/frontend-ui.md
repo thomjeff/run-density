@@ -70,15 +70,18 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar (Results): **Runflow** | **Results ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Locations · Reports | Logout
-- Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Packages | Logout
-- Workspace control switches Results ↔ Build (mutually exclusive chrome; Issue #842)
-- **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Results only)
+- Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Motion · Locations · Reports | Logout
+- Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Runners · Packages | Logout
+- Top bar (Execute): **Runflow** | **Execute ▾** | Race day | Logout — placeholder only (Issue #878); no Locations item
+- Workspace control switches Build ↔ Plan ↔ Execute (mutually exclusive chrome; Issue #878, formerly Results/Build in #842)
+- **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Plan only)
 - Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
-- Context strip removed: run label/id/day live on the Results run dropdown; **Package** nav link (after Reports) opens the source config when known
-- Last Results route/run and last Build route are restored when switching workspaces
+- Context strip removed: run label/id/day live on the Plan run dropdown; **Package** is on Overview Analysis Inputs (name links to Build → that package)
+- Last Plan route/run, last Build route, and last Execute route are restored when switching workspaces
 - Runs catalog is history-only
-- Build hub page still has Legs / Courses / Packages panels; top nav mirrors hub views
+- Build hub page still has Legs / Courses / Runners / Packages panels; top nav mirrors hub views
+- **Build → Runners** is the org runner-dataset library (`runflow/org/runners/{dataset_id}/`). Datasets are immutable; a Package assigns a compatible dataset and freeze-copies required `{event}_runners.csv` files (Issue #879)
+- Package header (not Assign courses) owns **Analysis readiness** and **Run analysis**; Assign courses keeps **Build race exports**
 - Historical multi-day analysis trees are not browsed in product chrome; archive offline if needed
 
 ### Attribution & license
