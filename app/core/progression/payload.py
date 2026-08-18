@@ -1,7 +1,8 @@
 """Build Progression setup (geometry + clock) and field (snapshot) payloads (#864).
 
 The field is the whole modeled pack so later visualizations can reuse the same
-boundary. v1 UI only paints Front/Tail.
+boundary. v1 UI only paints Front/Tail. Setup also carries per-event
+course-active windows for the wallboard (#881).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import pandas as pd
 
 from app.core.gpx.processor import cumulative_km, parse_gpx_file
 from app.core.motion.course_map import compiled_course_length_km
-from app.core.trajectory.crossing import arrival_at_km
+from app.core.trajectory.crossing import arrival_at_km, runner_start_sec
 from app.core.trajectory.layer import try_load_day_snapshot
 from app.utils.constants import (
     DISPLAY_TIMEZONE,
@@ -240,23 +241,52 @@ def _snapshot_rows(snapshot: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def course_active_windows(
+    runners: Sequence[Mapping[str, Any]],
+    gun_sec_by_event: Mapping[str, int],
+    finish_km_by_event: Mapping[str, float],
+) -> Dict[str, Tuple[int, int]]:
+    """Per-event modeled course-active window: first start → last finish.
+
+    Operational, not Lead/Last: late chips extend the clear time. Used by the
+    Progression wallboard (#881). Clock ``t0`` remains first gun.
+    """
+    windows: Dict[str, Tuple[int, int]] = {}
+    for r in runners:
+        event = r["event"]
+        if event not in gun_sec_by_event or event not in finish_km_by_event:
+            raise ProgressionError(
+                f"Course-active window missing gun or finish km for event '{event}'"
+            )
+        gun = float(gun_sec_by_event[event])
+        start = int(runner_start_sec(gun, r["start_offset_sec"]))
+        end = int(
+            arrival_at_km(
+                gun_sec=gun,
+                start_offset_sec=float(r["start_offset_sec"]),
+                pace_min_per_km=float(r["pace_min_per_km"]),
+                km=float(finish_km_by_event[event]),
+            )
+        )
+        if event not in windows:
+            windows[event] = (start, end)
+        else:
+            prev_start, prev_end = windows[event]
+            windows[event] = (min(prev_start, start), max(prev_end, end))
+    if not windows:
+        raise ProgressionError("Cannot compute course-active windows: no runners")
+    return windows
+
+
 def _clock_span(
     runners: Sequence[Mapping[str, Any]],
     gun_sec_by_event: Mapping[str, int],
     finish_km_by_event: Mapping[str, float],
-) -> Tuple[int, int]:
+) -> Tuple[int, int, Dict[str, Tuple[int, int]]]:
+    windows = course_active_windows(runners, gun_sec_by_event, finish_km_by_event)
     t0 = min(int(gun_sec_by_event[r["event"]]) for r in runners)
-    t1 = t0
-    for r in runners:
-        event = r["event"]
-        finish_t = arrival_at_km(
-            gun_sec=float(gun_sec_by_event[event]),
-            start_offset_sec=float(r["start_offset_sec"]),
-            pace_min_per_km=float(r["pace_min_per_km"]),
-            km=float(finish_km_by_event[event]),
-        )
-        t1 = max(t1, int(finish_t))
-    return int(t0), int(t1)
+    t1 = max(end for _start, end in windows.values())
+    return int(t0), int(t1), windows
 
 
 def _event_polyline(gpx_path: Path, finish_km: float) -> List[List[float]]:
@@ -306,17 +336,20 @@ def _load_day_inputs(run_dir: Path, day: str) -> Dict[str, Any]:
 def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
     """Geometry, guns, and clock span for the Plan Progression map."""
     ctx = _load_day_inputs(run_dir, day)
-    t0, t1 = _clock_span(ctx["runners"], ctx["guns"], ctx["finishes"])
+    t0, t1, windows = _clock_span(ctx["runners"], ctx["guns"], ctx["finishes"])
     metadata = ctx["metadata"]
     events_out: List[Dict[str, Any]] = []
     for event in ctx["events"]:
         gpx_path = _gpx_path_for_event(ctx["analysis"], event, ctx["data_dir"])
         finish_km = float(ctx["finishes"][event])
+        active_start, active_end = windows[event]
         events_out.append(
             {
                 "id": event,
                 "gun_sec": int(ctx["guns"][event]),
                 "finish_km": finish_km,
+                "active_start_sec": int(active_start),
+                "active_end_sec": int(active_end),
                 "color": event_color(event),
                 "polyline": _event_polyline(gpx_path, finish_km),
             }

@@ -79,6 +79,150 @@
         min-width: 12rem;
         width: 65%;
     }
+    .progression-wallboard {
+        margin-top: 1.1rem;
+        padding-top: 0.85rem;
+        border-top: 1px solid #e2e8f0;
+    }
+    .progression-wallboard-body {
+        display: grid;
+        grid-template-columns: 4.25rem minmax(0, 1fr);
+        column-gap: 0.75rem;
+        align-items: start;
+    }
+    .progression-wallboard-labels,
+    .progression-wallboard-time {
+        min-width: 0;
+    }
+    .progression-wallboard-time {
+        position: relative;
+        cursor: pointer;
+    }
+    .progression-wallboard-axis {
+        position: relative;
+        height: 1.7rem;
+        margin-top: 0.2rem;
+    }
+    .progression-wallboard-axis::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 1px;
+        background: #cbd5e0;
+    }
+    .progression-wallboard-stack {
+        position: relative;
+    }
+    .progression-wallboard-tick {
+        position: absolute;
+        top: 0;
+        width: 0;
+        pointer-events: none;
+    }
+    .progression-wallboard-tick-mark {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1px;
+        height: 8px;
+        background: #a0aec0;
+    }
+    .progression-wallboard-tick-label {
+        position: absolute;
+        top: 10px;
+        left: 0;
+        transform: translateX(-50%);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.72rem;
+        color: #718096;
+        white-space: nowrap;
+    }
+    .progression-wallboard-tick-label.is-edge-start {
+        transform: translateX(0);
+    }
+    .progression-wallboard-tick-label.is-edge-end {
+        transform: translateX(-100%);
+    }
+    .progression-wallboard-label {
+        display: flex;
+        align-items: center;
+        height: 1.7rem;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #4a5568;
+        line-height: 1;
+    }
+    .progression-wallboard-track {
+        position: relative;
+        height: 1.7rem;
+    }
+    .progression-wallboard-bar {
+        position: absolute;
+        top: 50%;
+        height: 4px;
+        transform: translateY(-50%);
+        background: currentColor;
+        border-radius: 2px;
+        opacity: 0.38;
+        pointer-events: none;
+    }
+    .progression-wallboard-track.is-on-course .progression-wallboard-bar {
+        opacity: 0.9;
+    }
+    .progression-wallboard-dot {
+        position: absolute;
+        top: 50%;
+        width: 0.72rem;
+        height: 0.72rem;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px solid currentColor;
+        box-sizing: border-box;
+        pointer-events: none;
+        box-shadow: 0 0 0 1px #fff;
+    }
+    .progression-wallboard-dot.is-start {
+        background: currentColor;
+    }
+    .progression-wallboard-dot.is-end {
+        background: #fff;
+    }
+    .progression-wallboard-playhead {
+        position: absolute;
+        top: 0;
+        bottom: 1.7rem;
+        width: 0;
+        border-left: 1.5px solid #2d3748;
+        pointer-events: none;
+        z-index: 2;
+    }
+    .progression-wallboard-playhead::after {
+        content: "";
+        position: absolute;
+        left: -5px;
+        bottom: -1px;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 7px solid #2d3748;
+    }
+    .progression-wallboard-key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 1.5rem;
+        margin: 0.55rem 0 0;
+        font-size: 1rem;
+        color: #4a5568;
+    }
+    .progression-wallboard-key-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .progression-wallboard-key .progression-swatch {
+        color: #4a5568;
+    }
     #basemap-toggle {
         position: absolute;
         top: 10px;
@@ -154,11 +298,18 @@
         </label>
         <input id="progression-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Race clock">
     </div>
+    <div
+        id="progression-wallboard"
+        class="progression-wallboard"
+        hidden
+        role="img"
+        aria-label="Course-active windows on the analysis clock. Click a time to seek."
+    ></div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=864"></script>
-<script src="/static/js/map/progression.js?v=882b"></script>
+<script src="/static/js/map/progression.js?v=881b"></script>
 {% endblock %}
