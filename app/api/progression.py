@@ -50,7 +50,7 @@ async def get_progression_setup(
     run_id: str,
     day: Optional[str] = Query(None),
 ):
-    """Event polylines, guns, and clock span for Plan replay."""
+    """Event polylines, guns, clock span, and course-active windows for Plan replay."""
     try:
         resolved_id, selected_day, available_days, run_dir = _run_day(run_id, day)
         payload = build_progression_setup(run_dir, selected_day)

@@ -16,6 +16,7 @@ from app.core.progression.payload import (
     ProgressionNotFound,
     build_progression_field,
     build_progression_setup,
+    course_active_windows,
     downsample_polyline,
 )
 from app.core.trajectory.crossing import arrival_at_km, elapsed_km_at
@@ -194,6 +195,9 @@ def test_setup_and_field_from_snapshot(tmp_path: Path):
     assert ev["gun_sec"] == gun
     assert ev["finish_km"] == pytest.approx(2.0)
     assert ev["color"].startswith("#")
+    assert ev["active_start_sec"] == gun
+    assert ev["active_end_sec"] == setup["t1_sec"]
+    assert ev["active_end_sec"] > ev["active_start_sec"]
     assert 2 <= len(ev["polyline"]) <= PROGRESSION_POLYLINE_MAX_POINTS
     assert ev["polyline"][0][0] == pytest.approx(45.0, abs=1e-6)
 
@@ -298,6 +302,7 @@ def test_page_and_js_are_lead_last_only():
     assert "provenance" not in page
     assert page.find('id="progression-map"') < page.find('id="progression-legend"')
     assert page.find('id="progression-legend"') < page.find('id="progression-clock"')
+    assert page.find('id="progression-scrub"') < page.find('id="progression-wallboard"')
     assert "quintile" not in js.lower()
     assert "lead pack" not in js.lower()
     assert "full-field" not in js.lower() and "full field" not in js.lower()
@@ -307,7 +312,7 @@ def test_page_and_js_are_lead_last_only():
     assert "elapsedKmAt" in js
     assert '"setup"' in js and '"field"' in js
     assert "/progression/" in js
-    assert "progression.js?v=882b" in page
+    assert "progression.js?v=881b" in page
     assert "Lead" in js and "Last" in js
     assert "eventLabel" in js
     assert 'id="progression-playpause"' in page
@@ -315,3 +320,47 @@ def test_page_and_js_are_lead_last_only():
     assert 'id="progression-pause"' not in page
     assert 'id="progression-stop"' not in page
     assert page.count('class="course-map-action-btn"') == 2
+    assert "renderWallboard" in js
+    assert "progression-wallboard-seek" in js
+    assert "progression-wallboard-tick-mark" in js
+    assert "First modeled start" in js
+    assert "Last modeled finish" in js
+    assert "active_start_sec" in js
+
+
+def test_course_active_window_includes_late_finishers():
+    gun = 7 * 3600 + 20 * 60
+    finish_km = 21.1
+    runners = [
+        {
+            "event": "half",
+            "start_offset_sec": 0.0,
+            "pace_min_per_km": 4.5,
+        },
+        {
+            "event": "half",
+            "start_offset_sec": 3347.0,
+            "pace_min_per_km": 6.0,
+        },
+    ]
+    windows = course_active_windows(
+        runners,
+        {"half": gun},
+        {"half": finish_km},
+    )
+    start, end = windows["half"]
+    assert start == gun
+    late_finish = arrival_at_km(
+        gun_sec=gun,
+        start_offset_sec=3347.0,
+        pace_min_per_km=6.0,
+        km=finish_km,
+    )
+    early_finish = arrival_at_km(
+        gun_sec=gun,
+        start_offset_sec=0.0,
+        pace_min_per_km=4.5,
+        km=finish_km,
+    )
+    assert end == int(late_finish)
+    assert end > int(early_finish)

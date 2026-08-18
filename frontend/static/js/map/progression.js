@@ -1,5 +1,6 @@
 /**
- * Plan Progression map (#864 / #882): spatial race clock, Lead/Last on modeled km(t).
+ * Plan Progression map (#864 / #882 / #881): spatial race clock, Lead/Last,
+ * and a course-active wallboard on the same analysis t.
  *
  * Interpolates client-side from the whole-field snapshot + downsampled event GPX.
  * v1 paints Lead/Last only; the field payload is the full pack.
@@ -49,6 +50,46 @@
         const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
         const ss = String(s % 60).padStart(2, "0");
         return hh + ":" + mm + ":" + ss;
+    }
+
+    function formatClockHm(sec) {
+        const s = Math.max(0, Math.floor(Number(sec) || 0));
+        const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+        const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+        return hh + ":" + mm;
+    }
+
+    function clockPct(t) {
+        if (!setup) return 0;
+        const span = Number(setup.t1_sec) - Number(setup.t0_sec);
+        if (span <= 0) return 0;
+        const u = (Number(t) - Number(setup.t0_sec)) / span;
+        return Math.max(0, Math.min(100, u * 100));
+    }
+
+    function axisTickStep(spanSec) {
+        if (spanSec > 6 * 3600) return 3600;
+        if (spanSec > 90 * 60) return 1800;
+        if (spanSec > 30 * 60) return 900;
+        return 300;
+    }
+
+    function axisTicks(t0, t1) {
+        const span = t1 - t0;
+        const step = axisTickStep(span);
+        const ticks = [];
+        let t = Math.ceil(t0 / step) * step;
+        while (t <= t1) {
+            ticks.push(t);
+            t += step;
+        }
+        if (!ticks.length || ticks[0] - t0 > step * 0.35) {
+            ticks.unshift(t0);
+        }
+        if (t1 - ticks[ticks.length - 1] > step * 0.35) {
+            ticks.push(t1);
+        }
+        return ticks;
     }
 
     function syncPlayPauseButton() {
@@ -236,6 +277,129 @@
         el.innerHTML = bits.join("");
     }
 
+    function renderWallboard() {
+        const root = document.getElementById("progression-wallboard");
+        if (!root || !setup) return;
+        const events = (setup.events || []).filter(function (ev) {
+            return (
+                ev.active_start_sec != null &&
+                ev.active_end_sec != null &&
+                Number(ev.active_end_sec) > Number(ev.active_start_sec)
+            );
+        });
+        if (!events.length) {
+            root.hidden = true;
+            root.innerHTML = "";
+            return;
+        }
+        const t0 = Number(setup.t0_sec);
+        const t1 = Number(setup.t1_sec);
+        const ticks = axisTicks(t0, t1);
+        const tickHtml = ticks
+            .map(function (t, i) {
+                const edge =
+                    i === 0
+                        ? " is-edge-start"
+                        : i === ticks.length - 1
+                          ? " is-edge-end"
+                          : "";
+                return (
+                    '<span class="progression-wallboard-tick" style="left:' +
+                    clockPct(t).toFixed(3) +
+                    '%">' +
+                    '<span class="progression-wallboard-tick-mark"></span>' +
+                    '<span class="progression-wallboard-tick-label' +
+                    edge +
+                    '">' +
+                    formatClockHm(t) +
+                    "</span></span>"
+                );
+            })
+            .join("");
+        const labelsHtml = events
+            .map(function (ev) {
+                return (
+                    '<div class="progression-wallboard-label">' +
+                    eventLabel(ev.id) +
+                    "</div>"
+                );
+            })
+            .join("");
+        const tracksHtml = events
+            .map(function (ev) {
+                const startPct = clockPct(ev.active_start_sec);
+                const endPct = clockPct(ev.active_end_sec);
+                const width = Math.max(0, endPct - startPct);
+                const label = eventLabel(ev.id);
+                const title =
+                    label +
+                    " on course " +
+                    formatClockHm(ev.active_start_sec) +
+                    "–" +
+                    formatClockHm(ev.active_end_sec);
+                return (
+                    '<div class="progression-wallboard-track" data-event="' +
+                    ev.id +
+                    '" style="color:' +
+                    ev.color +
+                    '" title="' +
+                    title +
+                    '">' +
+                    '<span class="progression-wallboard-bar" style="left:' +
+                    startPct.toFixed(3) +
+                    "%;width:" +
+                    width.toFixed(3) +
+                    '%"></span>' +
+                    '<span class="progression-wallboard-dot is-start" style="left:' +
+                    startPct.toFixed(3) +
+                    '%" title="First modeled start"></span>' +
+                    '<span class="progression-wallboard-dot is-end" style="left:' +
+                    endPct.toFixed(3) +
+                    '%" title="Last modeled finish"></span>' +
+                    "</div>"
+                );
+            })
+            .join("");
+        root.innerHTML =
+            '<div class="progression-wallboard-body">' +
+            '<div class="progression-wallboard-labels">' +
+            labelsHtml +
+            "</div>" +
+            '<div class="progression-wallboard-time" id="progression-wallboard-seek">' +
+            '<div class="progression-wallboard-stack">' +
+            tracksHtml +
+            "</div>" +
+            '<div class="progression-wallboard-axis">' +
+            tickHtml +
+            "</div>" +
+            '<div class="progression-wallboard-playhead" id="progression-wallboard-playhead"></div>' +
+            "</div></div>" +
+            '<p class="progression-wallboard-key">' +
+            '<span class="progression-wallboard-key-item">' +
+            '<span class="progression-swatch is-lead"></span>First modeled start</span>' +
+            '<span class="progression-wallboard-key-item">' +
+            '<span class="progression-swatch is-last"></span>Last modeled finish</span>' +
+            "</p>";
+        root.hidden = false;
+    }
+
+    function syncWallboard(t) {
+        const playhead = document.getElementById("progression-wallboard-playhead");
+        if (playhead) playhead.style.left = clockPct(t).toFixed(3) + "%";
+        const root = document.getElementById("progression-wallboard");
+        if (!root) return;
+        root.querySelectorAll(".progression-wallboard-track[data-event]").forEach(
+            function (row) {
+                const ev = eventsById[row.getAttribute("data-event")];
+                if (!ev) return;
+                const onCourse =
+                    t >= Number(ev.active_start_sec) &&
+                    t <= Number(ev.active_end_sec);
+                row.classList.toggle("is-on-course", onCourse);
+            }
+        );
+    }
+
     function markerKey(eventId, role) {
         return eventId + ":" + role;
     }
@@ -314,6 +478,7 @@
             }
         });
         hideUnused(active);
+        syncWallboard(t);
     }
 
     function setPlaying(next) {
@@ -373,6 +538,25 @@
                 paintAt(Number(scrub.value));
             });
         }
+        const wallboard = document.getElementById("progression-wallboard");
+        if (wallboard) {
+            wallboard.addEventListener("click", function (ev) {
+                const seek = document.getElementById("progression-wallboard-seek");
+                if (!setup || !seek || !seek.contains(ev.target)) return;
+                const rect = seek.getBoundingClientRect();
+                if (!rect.width) return;
+                const u = Math.max(
+                    0,
+                    Math.min(1, (ev.clientX - rect.left) / rect.width)
+                );
+                const next = Math.round(
+                    Number(setup.t0_sec) +
+                        u * (Number(setup.t1_sec) - Number(setup.t0_sec))
+                );
+                setPlaying(false);
+                paintAt(next);
+            });
+        }
     }
 
     async function fetchJson(url) {
@@ -422,6 +606,7 @@
         ensureMap();
         drawCourses();
         renderLegend();
+        renderWallboard();
         const scrub = document.getElementById("progression-scrub");
         if (scrub) {
             scrub.min = String(setup.t0_sec);

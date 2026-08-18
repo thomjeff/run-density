@@ -12,6 +12,10 @@
 - One Play/Pause control, Reset to first gun, longer scrubber; no GPS disclaimer chip
 - Marker halos and quieter course lines so Lead/Last stay readable on overlapping polylines
 
+### Plan Progression wallboard (#881)
+- Race-day board under the scrubber: one row per event = modeled course-active window (first start → last finish)
+- Same analysis-clock `t` as map / clock / scrubber; click-to-seek; late chips extend course-clear time
+
 ## [v3.0.0] - 2026-08-18
 
 First **v3.x** product release. Density and Flow now calculate on the **trajectory snapshot** (not the 5s sample grid). Product chrome is **Build | Plan | Execute**. Build libraries (legs, courses, runner datasets) assemble into a Package, which freeze-copies what analysis needs.
