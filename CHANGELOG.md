@@ -2,32 +2,58 @@
 
 ## [Unreleased]
 
-### Issue #868 — Overview poll and small UX/ops
-- Overview progress poll is ~15s (elapsed clock still ticks locally every 1s); retries use the same interval
-- Footer year 2026; drop the stuck “Last updated: Loading…” line on run history
-- Run-history timestamps use `DISPLAY_TIMEZONE` (`America/Halifax`) instead of raw UTC
+## [v3.0.0] - 2026-08-18
 
-### Issue #870 — Analysis log hygiene
-- Run file log (`analysis/{run_id}/logs/app.log`) attaches to the `app` logger, not root, and drops dashboard / uvicorn poll lines
-- INFO is named costs and work ≳1s (Motion, Density, Flow, Bins, UI maps/heatmaps, report splits) plus one-line counts; per-pin / per-segment / BINNING / fz_runners zone-skips / Density.md template steps are DEBUG
-- Timing summary lists ≥1s work by name (no Phase 1–11 banners); leftover `/app/.cursor/debug.log` traces removed
-- Reports timing line counts Density.md / Flow.csv / Locations.csv from the paths actually written
+First **v3.x** product release. Density and Flow now calculate on the **trajectory snapshot** (not the 5s sample grid). Product chrome is **Build | Plan | Execute**. Build libraries (legs, courses, runner datasets) assemble into a Package, which freeze-copies what analysis needs.
 
-### Issue #871 — Location sheets: HTML in analysis, export on demand
+Race-day Execute (clearance / clock, #863 / #832 / #830) remains a **placeholder workspace** and is **not** in this tag.
+
+### Summary
+- **Density and Flow** read `runners_snapshot.parquet` and evaluate closed-form `km(t)` (min/km). The old km/h `/3600` bug is gone.
+- **Build / Plan / Execute** workspace chrome; Plan is the analysis workspace (was Results).
+- **Runner datasets** are an immutable org library; a Package selects a compatible dataset and freeze-copies `{event}_runners.csv`.
+- Location sheets are HTML-only during analysis; export zips them on demand.
+- Analysis logs and Overview polling are quieter and easier to scan.
+
+### Density & Flow on the trajectory layer (#862 / #869)
+- Density concurrency and bin windows evaluate `km(t)` on `runners_snapshot.parquet` (~N runners) instead of slicing the 5s `samples.parquet` grid per segment × window
+- Flow `SegmentFlowCache` is filled from the same snapshot; overtake / co-presence algorithms are unchanged
+- Snapshot includes `distance` so Flow’s reach-the-zone filter stays identical
+- Flow no longer reads `samples.parquet`
+- Same min/km trajectory formula throughout — do not restore the km/h `/3600` bug
+- Parity vs v2.1.0 golden `7Te3perYQVabto9n9caJqk` (FM2027 10K River Trail): **Flow.csv** and **Locations.csv** exact; bins density correlation ~0.98 (5s sample grid vs continuous km). Density *peak concurrency* in `density_results.json` drops vs v2.1.0 because the old engine treated `pace` as km/h
+
+### Build / Plan / Execute (#878)
+- Top-level workspaces: **Build** (Legs · Courses · Runners · Packages), **Plan** (run selector + Overview…Reports), **Execute** (placeholder)
+- Plan replaces the Results label; a **Run** is still an immutable `run_id` under `runflow/analysis/`
+- Package lives on Overview **Analysis Inputs** (name links to Build → that package), not as a Plan top-nav item
+- Execute has no Locations nav item yet (one location entity; operational projection comes later)
+
+### Packaged objects — runner datasets (#879)
+- Immutable library: `runflow/org/runners/{dataset_id}/` (`manifest.json` + `{event}_runners.csv`)
+- **Build → Runners:** import actuals; create a scenario as a *new* dataset (`source_dataset_id` lineage)
+- Package stores `runners_dataset_id` and freeze-copies required event files; analysis still reads those package-local CSVs
+- Picker and backend require every package event; extra dataset event files are allowed; failed assign leaves the package unchanged
+- Cross-file `runner_id` uniqueness on dataset create/import (#852)
+- Package header owns analysis readiness and **Run analysis**; Assign courses keeps **Build race exports**
+- Event recipes no longer auto-open on Package Courses (recipes belong on Build → Courses)
+- Package Runners tab shows participant counts and pace percentiles for the selected dataset
+- Segments heatmap preview uses run-derived day/run context (Plan URLs are `run_id`-only)
+
+### Location sheets (#871)
 - Analysis writes volunteer HTML under `{day}/reports/loc_sheets/html/` only — no ReportLab PDFs and no in-run map-tile stitching
-- Results **Locations** (and Loc Sheets) **Export location sheets** zips the HTML already on disk
+- Plan **Locations** **Export location sheets** zips the HTML already on disk
 - Maps in the HTML load in the browser (Leaflet / Carto Light)
 
-### Issue #869 — Density / bins on the snapshot clock
-- Density concurrency and bin windows evaluate closed-form `km(t)` on `runners_snapshot.parquet` (~N runners) instead of slicing the 5s `samples.parquet` grid per segment × window
-- Same min/km trajectory formula as #862 (do not restore the km/h `/3600` bug)
-- Flow loads the snapshot only; it no longer reads `samples.parquet`
+### Ops / UX (#868 / #870)
+- Overview progress poll is ~15s (elapsed clock still ticks locally every 1s)
+- Run-history timestamps use `DISPLAY_TIMEZONE` (`America/Halifax`)
+- Run file log attaches to the `app` logger and drops dashboard / uvicorn poll lines
+- INFO is named costs and work ≳1s; timing summary lists ≥1s work by name
 
-### Issue #862 — Density & Flow on the trajectory layer (v3.0 in progress)
-- Density concurrency and bin windows originally read Phase 2.5 `samples.parquet` (superseded for those engines by #869)
-- Flow `SegmentFlowCache` is filled from `runners_snapshot.parquet`; overtake / co-presence algorithms unchanged
-- Snapshot now includes `distance` so Flow’s reach-the-zone filter stays identical
-- Parity vs v2.1.0 golden `7Te3perYQVabto9n9caJqk` (FM2027 10K River Trail): **Flow.csv** and **Locations.csv** exact; bins density correlation ~0.98 (5s sample grid vs continuous km). Density *peak concurrency* in `density_results.json` drops vs v2.1.0 because the old engine treated `pace` as km/h (`/3600`) instead of min/km.
+### Not in this release
+- **#832 / #830 / #863** Clearance model and race-day clock — still parked (`feat/832-clearance-model`, `feat/830-execute-clock`)
+- Execute Locations as an operational projection of the same location entity
 
 ## [v2.1.0] - 2026-08-15
 
