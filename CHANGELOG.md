@@ -19,6 +19,7 @@
 ### Plan Progression Mid-pack (#885)
 - Fixed P50-of-finish-order runner per event (all snapshot runners, `floor(0.50 × (n − 1))`); Lead/Last unchanged
 - Map glyph is a half-filled event-colour circle (same size as Lead/Last); wallboard stays start → last finish only
+- Legend and wallboard event groups follow earliest modeled start, then package event order (not distance)
 
 ## [v3.0.0] - 2026-08-18
 

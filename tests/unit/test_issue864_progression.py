@@ -18,6 +18,7 @@ from app.core.progression.payload import (
     build_progression_setup,
     course_active_windows,
     downsample_polyline,
+    order_progression_events,
     select_midpack,
 )
 from app.core.trajectory.crossing import arrival_at_km, elapsed_km_at
@@ -397,3 +398,39 @@ def test_midpack_is_p50_of_all_finishers_not_main_wave():
     )
     even_two = select_midpack(runners[:2], gun_sec=gun, finish_km=finish_km)
     assert even_two["id"] == "a"
+
+
+def test_progression_events_ordered_by_earliest_modeled_start():
+    windows = {
+        "10k": (27600, 36000),
+        "full": (25200, 46500),
+        "half": (26400, 40800),
+    }
+    analysis = {
+        "events": [
+            {"name": "10k"},
+            {"name": "half"},
+            {"name": "full"},
+        ]
+    }
+    assert order_progression_events(
+        ["10k", "full", "half"], windows, analysis
+    ) == ["full", "half", "10k"]
+
+
+def test_progression_event_order_tie_breaks_on_package_order_not_distance():
+    windows = {
+        "10k": (25200, 30000),
+        "full": (25200, 40000),
+        "half": (25200, 35000),
+    }
+    analysis = {
+        "events": [
+            {"name": "10k"},
+            {"name": "half"},
+            {"name": "full"},
+        ]
+    }
+    assert order_progression_events(
+        ["full", "half", "10k"], windows, analysis
+    ) == ["10k", "half", "full"]

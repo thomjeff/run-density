@@ -279,6 +279,61 @@ def course_active_windows(
     return windows
 
 
+def _package_event_rank(
+    analysis: Mapping[str, Any],
+    events: Sequence[str],
+) -> Dict[str, int]:
+    """Tie-break rank from analysis/package event order (not distance vocabulary)."""
+    ordered: List[str] = []
+    seen: set = set()
+
+    def _push(raw: Any) -> None:
+        name = str(raw or "").lower().strip()
+        if not name or name in seen:
+            return
+        seen.add(name)
+        ordered.append(name)
+
+    for ev in analysis.get("events") or []:
+        if isinstance(ev, Mapping):
+            _push(ev.get("name"))
+        else:
+            _push(ev)
+    start_times = analysis.get("start_times") or {}
+    if isinstance(start_times, Mapping):
+        for key in start_times.keys():
+            _push(key)
+    for event in events:
+        _push(event)
+    return {name: i for i, name in enumerate(ordered)}
+
+
+def order_progression_events(
+    events: Sequence[str],
+    windows: Mapping[str, Tuple[int, int]],
+    analysis: Mapping[str, Any],
+) -> List[str]:
+    """Legend/wallboard order: earliest modeled start, then package event order."""
+    present = [str(e).lower().strip() for e in events if str(e).strip()]
+    unique: List[str] = []
+    seen: set = set()
+    for event in present:
+        if event in seen:
+            continue
+        seen.add(event)
+        unique.append(event)
+    missing = [e for e in unique if e not in windows]
+    if missing:
+        raise ProgressionError(
+            f"Course-active window missing for event(s): {', '.join(missing)}"
+        )
+    rank = _package_event_rank(analysis, unique)
+    return sorted(
+        unique,
+        key=lambda event: (int(windows[event][0]), rank.get(event, 10**9)),
+    )
+
+
 def select_midpack(
     runners: Sequence[Mapping[str, Any]],
     *,
@@ -350,7 +405,7 @@ def _load_day_inputs(run_dir: Path, day: str) -> Dict[str, Any]:
     analysis = _load_analysis(run_dir)
     metadata = _load_motion_metadata(day_path)
     runners = _snapshot_rows(snapshot)
-    events = sorted({r["event"] for r in runners})
+    events = list(dict.fromkeys(r["event"] for r in runners))
     data_dir = _resolve_data_dir(analysis)
     guns = _gun_sec_by_event(metadata=metadata, analysis=analysis, events=events)
     finishes = _finish_km_by_event(
@@ -374,8 +429,9 @@ def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
     ctx = _load_day_inputs(run_dir, day)
     t0, t1, windows = _clock_span(ctx["runners"], ctx["guns"], ctx["finishes"])
     metadata = ctx["metadata"]
+    events = order_progression_events(ctx["events"], windows, ctx["analysis"])
     events_out: List[Dict[str, Any]] = []
-    for event in ctx["events"]:
+    for event in events:
         gpx_path = _gpx_path_for_event(ctx["analysis"], event, ctx["data_dir"])
         finish_km = float(ctx["finishes"][event])
         active_start, active_end = windows[event]
