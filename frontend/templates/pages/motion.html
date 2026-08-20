@@ -166,7 +166,7 @@
         text-align: center;
         white-space: nowrap;
         padding: 0.28rem 0.45rem;
-        min-width: 2.4rem;
+        min-width: 3.1rem;
         font-variant-numeric: tabular-nums;
     }
     .motion-matrix-grid thead th.motion-matrix-stream {
@@ -178,7 +178,7 @@
     .motion-matrix-grid th.motion-matrix-rowhead {
         text-align: left;
         font-weight: 600;
-        min-width: 2.75rem;
+        min-width: 4.5rem;
         padding-left: 0.55rem;
         padding-right: 0.55rem;
     }
@@ -350,8 +350,11 @@
                 <td>
                     Click a <strong>Visit summary</strong> row for that visit’s stats and concurrent partner
                     streams (first / peak / last). Click a <strong>Passage window</strong> row for that window’s
-                    movement volumes and pace quintile profiles. Same-window concurrent volume
-                    is not a physical meeting. Optional cross/parallel/merge labels via package
+                    movement volumes and pace quintile profiles. Q×Q headers show unique
+                    enters in that quintile this window (e.g. Full Q1 (4)); cells are unique
+                    row-stream runners paired to a nearest partner — 24 in Q5×Q1 can share
+                    those 4. Same-window concurrent volume is not a physical meeting.
+                    Optional cross/parallel/merge labels via package
                     <code>motion_movements.json</code>.
                 </td>
             </tr>
@@ -395,13 +398,34 @@
             .join(" · ");
     }
 
-    function renderQuintileMatrix(matrix, streamA, streamB) {
+    function profileForStream(profiles, stream) {
+        if (!stream || !profiles || !profiles.length) return null;
+        const hit = profiles.find((q) =>
+            streamMatchesVisit(
+                { event: q.event, visit_km: q.visit_km },
+                stream.event,
+                stream.visit_km
+            )
+        );
+        return (hit && hit.profile) ? hit.profile : null;
+    }
+
+    function quintileAxisLabel(q, profile) {
+        if (!profile) return `Q${q}`;
+        const n = profile[String(q)];
+        const count = (n == null) ? profile[q] : n;
+        if (count == null) return `Q${q}`;
+        return `Q${q} (${count})`;
+    }
+
+    function renderQuintileMatrix(matrix, streamA, streamB, profiles) {
         if (!matrix) {
             return "<p class=\"text-secondary small mb-0\">Quintile matrix unavailable.</p>";
         }
         const cells = matrix.cells || [];
-        const aLabel = streamLabel(streamA);
         const bLabel = streamLabel(streamB);
+        const profileA = profileForStream(profiles, streamA);
+        const profileB = profileForStream(profiles, streamB);
         if (!cells.length) {
             const aN = matrix.stream_a_with_q || 0;
             const bN = matrix.stream_b_with_q || 0;
@@ -419,7 +443,7 @@
         let html = '<div class="motion-matrix-block">';
         html += `<div class="motion-matrix-meta">Matched ${matrix.matched_a || 0}`
             + ` / ${matrix.stream_a_with_q || 0} ${escapeHtml(streamShort(streamA))} runners`
-            + ` · nearest partner in window</div>`;
+            + ` · nearest partner in window · header (n) = unique enters this window</div>`;
         html += '<table class="table table-sm table-bordered motion-matrix-grid">'
             + "<thead>"
             + "<tr>"
@@ -428,11 +452,11 @@
             + "</tr>"
             + "<tr>";
         for (let qb = 1; qb <= 5; qb++) {
-            html += `<th>Q${qb}</th>`;
+            html += `<th>${escapeHtml(quintileAxisLabel(qb, profileB))}</th>`;
         }
         html += "</tr></thead><tbody>";
         for (let qa = 1; qa <= 5; qa++) {
-            html += `<tr><th scope="row" class="motion-matrix-rowhead">Q${qa}</th>`;
+            html += `<tr><th scope="row" class="motion-matrix-rowhead">${escapeHtml(quintileAxisLabel(qa, profileA))}</th>`;
             for (let qb = 1; qb <= 5; qb++) {
                 const n = grid[`${qa}:${qb}`] || 0;
                 html += n
@@ -576,7 +600,7 @@
             pairs.forEach((p) => {
                 const mov = p.movement_name || p.movement_type;
                 html += `<h5 class="mb-1">${escapeHtml(mov)} · Q×Q</h5>`;
-                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b);
+                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b, profiles);
             });
         }
 
@@ -586,7 +610,7 @@
             otherPairs.forEach((p) => {
                 html += `<h5 class="mb-1">${escapeHtml(streamLabel(p.stream_a))} × `
                     + `${escapeHtml(streamLabel(p.stream_b))} · Q×Q</h5>`;
-                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b);
+                html += renderQuintileMatrix(p.quintile_matrix, p.stream_a, p.stream_b, profiles);
             });
         }
 
