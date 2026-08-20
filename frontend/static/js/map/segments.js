@@ -7,7 +7,7 @@
  */
 
 // Version stamp to detect stale/cached script loads
-console.log("segments.js VERSION:", "2026-08-18T841-heatmap");
+console.log("segments.js VERSION:", "2026-08-20T888-density");
 
 // LOS colors from reporting.yml (SSOT)
 const losColors = {
@@ -49,6 +49,32 @@ function cleanFeature(feature) {
         feature.geometry.coordinates = feature.geometry.coordinates.map(cleanCoords);
     }
     return feature;
+}
+
+function isDensityWorkspace() {
+    return !!document.getElementById('density-table');
+}
+
+function formatDirectionLabel(direction) {
+    const value = String(direction || '').toLowerCase();
+    if (value === 'uni') return 'One-way';
+    if (value === 'bi') return 'Two-way';
+    return direction || 'N/A';
+}
+
+function formatElapsedKm(elapsed) {
+    if (!elapsed || typeof elapsed !== 'object') return '';
+    const labels = { full: 'Full', half: 'Half', '10k': '10K', elite: 'Elite', open: 'Open' };
+    const lines = [];
+    Object.keys(labels).forEach((event) => {
+        const range = elapsed[event];
+        if (!range) return;
+        const fromKm = Number(range.from_km);
+        const toKm = Number(range.to_km);
+        if (Number.isNaN(fromKm) || Number.isNaN(toKm)) return;
+        lines.push(`${labels[event]} ${fromKm.toFixed(1)}–${toKm.toFixed(1)} km`);
+    });
+    return lines.join('<br>');
 }
 
 function currentDayAndRun() {
@@ -145,19 +171,75 @@ function getSegmentStyle(feature) {
  */
 function createTooltipContent(properties) {
     const props = properties || {};
+    const elapsed = formatElapsedKm(props.elapsed_km);
     
     return `
         <div style="font-family: Arial, sans-serif; font-size: 14px;">
             <strong>${props.seg_id || 'Unknown'} — ${props.label || 'Unnamed'}</strong><br>
-            ${props.length_km || 'N/A'} km · ${props.width_m || 'N/A'} m · ${props.direction || 'N/A'}<br>
+            ${props.length_km || 'N/A'} km · ${props.width_m || 'N/A'} m · ${formatDirectionLabel(props.direction)}<br>
             Events: ${props.events ? props.events.join(', ') : 'N/A'}<br>
             LOS: <span style="color: ${losColors[props.worst_los] || '#999'}; font-weight: bold;">${props.worst_los || 'E'}</span>
+            ${elapsed ? `<br>${elapsed}` : ''}
         </div>
     `;
 }
 
 // Use var to avoid duplicate declaration errors if script is re-evaluated
 var segmentsLayer = window.segmentsLayer || null;
+var selectedMapSegId = window.rfSelectedMapSegId || null;
+var hoveredMapSegId = null;
+
+function applySegmentEmphasis(layer) {
+    if (!layer || !layer.feature) return;
+    const segId = layer.feature.properties && layer.feature.properties.seg_id;
+    const base = getSegmentStyle(layer.feature);
+    if (segId && segId === selectedMapSegId) {
+        layer.setStyle({ color: base.color, weight: 7, opacity: 1, fillOpacity: 0.15 });
+        if (layer.bringToFront) layer.bringToFront();
+        return;
+    }
+    if (segId && segId === hoveredMapSegId) {
+        layer.setStyle({ color: base.color, weight: 5, opacity: 1, fillOpacity: 0.12 });
+        return;
+    }
+    layer.setStyle(base);
+}
+
+function restyleAllSegments() {
+    if (!window.segmentsLayer) return;
+    window.segmentsLayer.eachLayer(applySegmentEmphasis);
+}
+
+function emphasizeSegmentOnMap(segmentId, options) {
+    selectedMapSegId = segmentId || null;
+    window.rfSelectedMapSegId = selectedMapSegId;
+    restyleAllSegments();
+    if (!segmentId || !window.segmentsLayer || !window.map) return;
+    const avoidZoom = !options || options.zoom !== true;
+    window.segmentsLayer.eachLayer(function (layer) {
+        const feature = layer.feature;
+        if (!feature || !feature.properties || feature.properties.seg_id !== segmentId) return;
+        const bounds = layer.getBounds && layer.getBounds();
+        if (!bounds || !bounds.isValid()) return;
+        if (avoidZoom) {
+            if (!window.map.getBounds().contains(bounds.getCenter())) {
+                window.map.panTo(bounds.getCenter(), { animate: true });
+            }
+            return;
+        }
+        isProgrammaticMapMove = true;
+        window.map.fitBounds(bounds, { padding: [20, 20], maxZoom: 16 });
+        setTimeout(() => { isProgrammaticMapMove = false; }, 600);
+    });
+}
+
+function hoverSegmentOnMap(segmentId, isHovering) {
+    hoveredMapSegId = isHovering ? segmentId : null;
+    restyleAllSegments();
+}
+
+window.emphasizeSegmentOnMap = emphasizeSegmentOnMap;
+window.hoverSegmentOnMap = hoverSegmentOnMap;
 
 /**
  * Render segments on map with LOS-based styling
@@ -221,22 +303,28 @@ async function renderSegments(map) {
             
             // Add hover effects
             layer.on('mouseover', function(e) {
-                e.target.setStyle({
-                    weight: 5,
-                    opacity: 1.0
-                });
+                hoverSegmentOnMap(feature.properties.seg_id, true);
+                if (isDensityWorkspace() && window.onDensitySegmentHover) {
+                    window.onDensitySegmentHover(feature.properties.seg_id, true);
+                }
             });
             
             layer.on('mouseout', function(e) {
-                e.target.setStyle({
-                    weight: 3,
-                    opacity: 0.8
-                });
+                hoverSegmentOnMap(null, false);
+                if (isDensityWorkspace() && window.onDensitySegmentHover) {
+                    window.onDensitySegmentHover(feature.properties.seg_id, false);
+                }
             });
             
-            // Add click handler for table highlighting
             layer.on('click', function(e) {
                 const segmentId = feature.properties.seg_id;
+                if (isDensityWorkspace()) {
+                    emphasizeSegmentOnMap(segmentId, { zoom: false });
+                    if (window.onDensitySegmentSelect) {
+                        window.onDensitySegmentSelect(segmentId);
+                    }
+                    return;
+                }
                 if (window.highlightSegmentInTable) {
                     window.highlightSegmentInTable(segmentId);
                 }
@@ -251,9 +339,8 @@ async function renderSegments(map) {
     window.filterMapToSegment = filterMapToSegment;
     window.clearMapFilter = clearMapFilter;
     window.segmentsLayer = segmentsLayer;
-    window.updateTable = updateTable;  // Issue #634: Make updateTable globally available for bounds filtering
+    window.updateTable = updateTable;
     
-    // Fit map to segments bounds with padding
     if (data.features.length > 0) {
         const bounds = segmentsLayer.getBounds();
         console.log('🗺️ Segment bounds:', bounds);
@@ -283,8 +370,11 @@ async function renderSegments(map) {
     // Issue #634: Store all features globally for bounds filtering
     window.allSegmentsFeatures = data.features;
     
-    // Update the table with segment data
-    updateTable(data.features);
+    if (!isDensityWorkspace()) {
+        updateTable(data.features);
+    } else {
+        restyleAllSegments();
+    }
     
     // Log LOS distribution for debugging
     const losCounts = {};
@@ -627,7 +717,6 @@ function debouncedFilterTableByMapBounds() {
 function updateTable(features) {
     const tbody = document.querySelector('#segments-table tbody');
     if (!tbody) {
-        console.warn('Table body not found');
         return;
     }
     
@@ -706,11 +795,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Render/refresh segments for current day/run_id
         await renderSegments(window.map);
         
-        // Issue #634: Add event listeners for map pan/zoom to filter table
-        window.map.on('moveend', debouncedFilterTableByMapBounds);
-        window.map.on('zoomend', debouncedFilterTableByMapBounds);
+        if (!isDensityWorkspace()) {
+            window.map.on('moveend', debouncedFilterTableByMapBounds);
+            window.map.on('zoomend', debouncedFilterTableByMapBounds);
+        }
         
-        console.log('✅ Segments map initialized successfully with bounds filtering');
+        console.log('✅ Segments map initialized successfully');
         
     } catch (error) {
         console.error('❌ Failed to initialize segments map:', error);

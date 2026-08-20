@@ -204,6 +204,13 @@
         });
     }
 
+    function compareSegId(a, b) {
+        return String(a || '').localeCompare(String(b || ''), undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        });
+    }
+
     function loadFlowParentPreview() {
         const wrap = document.getElementById('flow-parent-preview');
         const legacy = document.getElementById('flow-legacy-wrap');
@@ -228,6 +235,9 @@
             .then(function (data) {
                 parentSegments = ((data.summary && data.summary.segments) || []).filter(function (seg) {
                     return (seg.events || []).length > 1 || ((seg.pairs || {}).same_pass || []).length;
+                });
+                parentSegments.sort(function (a, b) {
+                    return compareSegId(a.seg_id, b.seg_id);
                 });
                 renderFlowParentPreview(parentSegments);
                 const preferred = parentSegments.find(function (seg) { return seg.seg_id === 'S8'; })
@@ -307,26 +317,26 @@
         const status = seg.pace_mixing_status || '';
         const ready = status === 'ready';
         const windowLabel = (seg.t0 && seg.t1) ? (seg.t0 + '–' + seg.t1) : '—';
-        const overtakerTiles = events.map(function (event) {
-            const count = ready ? ((seg.unique_overtakers || {})[event] || 0) : '—';
+        const eventTiles = events.map(function (event) {
+            const overtakers = ready ? ((seg.unique_overtakers || {})[event] || 0) : '—';
+            const overtaken = ready ? ((seg.unique_overtaken || {})[event] || 0) : '—';
             const share = ready ? (seg.share_of_starters_overtaking || {})[event] : null;
             const field = (seg.field_sizes || {})[event];
-            return '<div class="flow-parent-tile flow-parent-tile-primary">' +
+            return '<div class="flow-parent-tile">' +
                 '<div class="flow-parent-tile-kicker">' + escapeHtml(eventLabel(event)) + '</div>' +
-                '<div class="flow-parent-tile-value">' + escapeHtml(String(count)) + '</div>' +
-                '<div class="flow-parent-tile-label">Unique overtakers</div>' +
+                '<div class="flow-parent-tile-pair">' +
+                '<div class="flow-parent-tile-pair-col">' +
+                '<div class="flow-parent-tile-value">' + escapeHtml(String(overtakers)) + '</div>' +
+                '<div class="flow-parent-tile-label">Overtakers</div>' +
+                '</div>' +
+                '<div class="flow-parent-tile-pair-col flow-parent-tile-pair-col-overtaken">' +
+                '<div class="flow-parent-tile-value">' + escapeHtml(String(overtaken)) + '</div>' +
+                '<div class="flow-parent-tile-label">Overtaken</div>' +
+                '</div></div>' +
                 '<div class="flow-parent-tile-meta">' +
                 (share != null ? (share + '% of starters') : 'Share unavailable') +
                 (field ? (' · ' + field + ' starters') : '') +
                 '</div></div>';
-        }).join('');
-        const overtakenTiles = events.map(function (event) {
-            const count = ready ? ((seg.unique_overtaken || {})[event] || 0) : '—';
-            return '<div class="flow-parent-tile flow-parent-tile-secondary">' +
-                '<div class="flow-parent-tile-kicker">' + escapeHtml(eventLabel(event)) + '</div>' +
-                '<div class="flow-parent-tile-value">' + escapeHtml(String(count)) + '</div>' +
-                '<div class="flow-parent-tile-label">Unique overtaken</div>' +
-                '</div>';
         }).join('');
         const showMulti = events.length > 2;
         const mix = seg.mix_breakdown || {};
@@ -337,12 +347,11 @@
             '<div class="flow-parent-tile-meta">' + escapeHtml(events.map(eventLabel).join(' · ')) +
             ' · union window ' + escapeHtml(windowLabel) + '</div>' +
             '</div>' +
-            '<div class="flow-parent-tile-grid">' + overtakerTiles + '</div>' +
-            '<div class="flow-parent-tile-grid flow-parent-tile-grid-secondary">' + overtakenTiles + '</div>' +
-            '<p class="text-secondary" style="margin:0.85rem 0 0.25rem; font-size:0.8rem;">% of starters uses the analysis-run field size, not DNS and not “entered this segment only.” Parent totals are runner-ID unions across same-pass cross-event pairs.</p>' +
+            '<div class="flow-parent-tile-grid">' + eventTiles + '</div>' +
+            '<p class="text-secondary" style="margin:0.85rem 0 0.25rem; font-size:0.8rem;">Overtakers = unique runners from this event who overtook another event. Overtaken = unique runners from this event who were overtaken. % of starters uses the analysis-run field size. Parent totals are runner-ID unions across same-pass cross-event pairs — do not sum matrix cells.</p>' +
             renderMixMatrix(
-                'Overtaking →',
-                'Each cell is unique runners from the row event who overtook at least one runner from the column event. Unique matches the tile above — a union, so do not sum the → columns. In 2+ pairs counts runners who overtook more than one other field. Corridor and same-event pairs are excluded.',
+                'Who this event overtakes →',
+                'Each cell is unique runners from the row event who overtook at least one runner from the column event. Unique matches the Overtakers tile — a union, so do not sum the → columns. In 2+ pairs counts runners who overtook more than one other field. Corridor and same-event pairs are excluded.',
                 '→',
                 mix.overtaking || {},
                 events,
@@ -350,8 +359,8 @@
                 showMulti
             ) +
             renderMixMatrix(
-                'Overtaken ←',
-                'Each cell is unique runners from the row event who were overtaken by at least one runner from the column event. Unique is a union across those counterparts, not a sum. In 2+ pairs counts runners overtaken by more than one other field.',
+                '← Who overtakes this event',
+                'Each cell is unique runners from the row event who were overtaken by at least one runner from the column event. Unique matches the Overtaken tile — a union, not a sum. In 2+ pairs counts runners overtaken by more than one other field.',
                 '←',
                 mix.overtaken || {},
                 events,
@@ -359,7 +368,7 @@
                 showMulti
             ) +
             '<h4 class="flow-parent-mix-heading">Crowding context</h4>' +
-            '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Concurrent occupancy from same-pass overlap minutes — secondary to pace mixing.</p>' +
+            '<p class="text-secondary" style="font-size:0.8rem; margin-bottom:0.5rem;">Concurrent runners on this segment over time — not overtaking counts. Occupancy from same-pass overlap minutes; it does not sum to Unique Overtakers or Unique Overtaken.</p>' +
             '<div class="flow-parent-chart flow-parent-chart-occ"><canvas id="flow-parent-occ-chart"></canvas></div>' +
             '</div>';
         renderParentCharts(seg);

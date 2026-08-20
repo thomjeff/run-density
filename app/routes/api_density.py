@@ -262,13 +262,34 @@ def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segme
             # Update other fields if missing
             if not label_lookup[seg_id].get("label") or label_lookup[seg_id]["label"] == seg_id:
                 name = row.get("name")
-                if pd.notna(name):
-                    label_lookup[seg_id]["label"] = str(name)
+                if (name is None or (isinstance(name, float) and pd.isna(name))) and "seg_label" in row:
+                    name = row.get("seg_label")
+                if pd.notna(name) and str(name).strip():
+                    label_lookup[seg_id]["label"] = str(name).strip()
             
             if label_lookup[seg_id].get("width_m", 0.0) == 0.0:
                 width_m = row.get("width_m")
                 if pd.notna(width_m):
                     label_lookup[seg_id]["width_m"] = float(width_m)
+
+            description = row.get("description")
+            if pd.notna(description) and str(description).strip():
+                label_lookup[seg_id]["description"] = str(description).strip()
+
+            elapsed_km = {}
+            for event in ("full", "half", "10k", "elite", "open"):
+                flag = str(row.get(event, "")).strip().lower()
+                if flag in ("", "0", "n", "no", "false"):
+                    continue
+                frm = row.get(f"{event}_from_km")
+                to = row.get(f"{event}_to_km")
+                if pd.notna(frm) and pd.notna(to):
+                    elapsed_km[event] = {
+                        "from_km": float(frm),
+                        "to_km": float(to),
+                    }
+            if elapsed_km:
+                label_lookup[seg_id]["elapsed_km"] = elapsed_km
         
         logger.info(f"Enriched label lookup with {len(segments_df)} segments from CSV")
     except Exception as e:
@@ -302,6 +323,12 @@ def _format_bin_detail_display(bin_detail: Dict[str, Any]) -> str:
     return "absent"
 
 
+def _format_field_window(first_runner: Optional[str], last_runner: Optional[str]) -> str:
+    if first_runner and last_runner:
+        return f"{first_runner}–{last_runner}"
+    return "N/A"
+
+
 def _build_segment_record(
     seg_id: str,
     metrics: Dict[str, Any],
@@ -326,19 +353,26 @@ def _build_segment_record(
     utilization = bin_metrics.get("utilization", 0.0)
     worst_bin = bin_metrics.get("worst_bin")
     bin_detail = bin_metrics.get("bin_detail", {})
+    first_runner = bin_metrics.get("first_runner")
+    last_runner = bin_metrics.get("last_runner")
     
     return {
         "seg_id": seg_id,
         "name": label_info.get("label", seg_id),
         "schema": schema,
-        "length_km": label_info.get("length_km", 0.0),  # Issue #652: Add segment length
+        "length_km": label_info.get("length_km", 0.0),
+        "width_m": label_info.get("width_m", 0.0),
+        "direction": label_info.get("direction", ""),
+        "description": label_info.get("description", ""),
+        "elapsed_km": label_info.get("elapsed_km") or {},
         "active": metrics.get("active_window", "N/A"),
+        "field_window": _format_field_window(first_runner, last_runner),
         "peak_density": metrics.get("peak_density", 0.0),
         "worst_los": metrics.get("worst_los", "Unknown"),
         "peak_rate": metrics.get("peak_rate", 0.0),
         "utilization": utilization,
         "flagged": seg_id in flagged_seg_ids,
-        "worst_bin": worst_bin,  # Issue #286: Send raw object for frontend formatting
+        "worst_bin": worst_bin,
         "watch": metrics.get("worst_los") in ["D", "E", "F"],
         "mitigation": "Monitor" if seg_id in flagged_seg_ids else "None",
         "events": events_str,
@@ -558,19 +592,26 @@ def _build_segment_detail_response(
     segments_csv_path: str
 ) -> Dict[str, Any]:
     """Build segment detail response dictionary."""
+    raw_events = metadata.get("events") or []
+    if isinstance(raw_events, str):
+        events_out = raw_events or "N/A"
+    else:
+        events_out = ", ".join(str(e) for e in raw_events) if raw_events else "N/A"
     return {
         "seg_id": seg_id,
-        "name": metadata["label"],
+        "name": metadata.get("label", seg_id),
         "schema": _get_segment_operational_schema(seg_id, segment_metrics, segments_csv_path),
         "active": metrics.get("active_window", "N/A"),
         "peak_density": metrics.get("peak_density", 0.0),
         "worst_los": metrics.get("worst_los", "Unknown"),
         "peak_rate": metrics.get("peak_rate", 0.0),
         "flagged": is_flagged,
-        "events": ", ".join(metadata["events"]) if metadata["events"] else "N/A",
-        "direction": metadata["direction"],
-        "length_km": metadata["length_km"],
-        "width_m": metadata["width_m"],
+        "events": events_out,
+        "direction": metadata.get("direction") or "",
+        "length_km": metadata.get("length_km", 0.0),
+        "width_m": metadata.get("width_m", 0.0),
+        "description": metadata.get("description") or "",
+        "elapsed_km": metadata.get("elapsed_km") or {},
         "heatmap_url": heatmap_url,
         "caption": caption,
         "bin_detail": "absent" if not heatmap_url else "available"
@@ -638,6 +679,31 @@ async def get_density_segment_detail(
                 if props.get("seg_id") == seg_id:
                     metadata = props
                     break
+
+        lookup = _enrich_label_lookup_from_csv(
+            {
+                seg_id: {
+                    "label": metadata.get("label", seg_id),
+                    "length_km": metadata.get("length_km", 0.0),
+                    "width_m": metadata.get("width_m", 0.0),
+                    "direction": metadata.get("direction", ""),
+                    "events": metadata.get("events", []),
+                    "description": metadata.get("description", ""),
+                    "elapsed_km": metadata.get("elapsed_km") or {},
+                }
+            },
+            segments_csv_path_for_api,
+        )
+        csv_meta = lookup.get(seg_id, {})
+        metadata = {
+            "label": csv_meta.get("label") or metadata.get("label", seg_id),
+            "length_km": csv_meta.get("length_km", metadata.get("length_km", 0.0)),
+            "width_m": csv_meta.get("width_m", metadata.get("width_m", 0.0)),
+            "direction": csv_meta.get("direction") or metadata.get("direction", ""),
+            "events": csv_meta.get("events") or metadata.get("events") or [],
+            "description": csv_meta.get("description") or metadata.get("description") or "",
+            "elapsed_km": csv_meta.get("elapsed_km") or metadata.get("elapsed_km") or {},
+        }
         
         # Check if flagged from day-scoped path
         flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
@@ -694,6 +760,7 @@ async def get_density_segment_detail(
         detail["worst_bin"] = worst_bin
         detail["first_runner"] = first_runner
         detail["last_runner"] = last_runner
+        detail["field_window"] = _format_field_window(first_runner, last_runner)
         detail["flagged_bins"] = flagged_bins
         detail["total_bins"] = total_bins
         detail["flagged_bin_pct"] = flagged_bin_pct

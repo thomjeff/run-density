@@ -122,7 +122,8 @@ def enrich_segment_features(segments_geojson: Dict[str, Any],
             "is_flagged": seg_id in flagged_seg_ids,  # Mark if segment is flagged
             
             # Issue #373: Add description from source GeoJSON
-            "description": properties.get("description", "No description available")
+            "description": properties.get("description", "No description available"),
+            "elapsed_km": properties.get("elapsed_km") or {},
         }
         
         # Create enriched feature
@@ -205,6 +206,39 @@ async def get_segments_geojson(
         
         # Enrich features
         enriched_features = enrich_segment_features(segments_geojson, segment_metrics, flagged_seg_ids)
+
+        try:
+            from app.routes.api_density import (
+                _enrich_label_lookup_from_csv,
+                _get_segments_csv_path_for_run,
+            )
+            csv_path = _get_segments_csv_path_for_run(run_id)
+            lookup = {}
+            for feature in enriched_features:
+                props = feature.get("properties") or {}
+                seg_key = props.get("seg_id")
+                if not seg_key:
+                    continue
+                lookup[seg_key] = {
+                    "label": props.get("label", ""),
+                    "length_km": props.get("length_km", 0.0),
+                    "width_m": props.get("width_m", 0.0),
+                    "direction": props.get("direction", ""),
+                    "events": props.get("events", []),
+                    "description": props.get("description", ""),
+                }
+            lookup = _enrich_label_lookup_from_csv(lookup, csv_path)
+            for feature in enriched_features:
+                props = feature.get("properties") or {}
+                extras = lookup.get(props.get("seg_id"), {})
+                if extras.get("elapsed_km"):
+                    props["elapsed_km"] = extras["elapsed_km"]
+                if extras.get("description"):
+                    props["description"] = extras["description"]
+                if extras.get("width_m"):
+                    props["width_m"] = extras["width_m"]
+        except Exception as e:
+            logger.warning(f"Could not enrich segments GeoJSON from segments.csv: {e}")
         
         # Build response
         response_data = {

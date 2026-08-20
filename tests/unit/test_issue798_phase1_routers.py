@@ -40,12 +40,9 @@ def test_canonical_flow_and_bidirectional_routers_importable():
     assert len(bi_router.routes) > 0
 
 
-def test_main_keeps_reports_ui_page_without_empty_reports_router_module():
+def test_main_keeps_reports_api_and_redirects_retired_reports_page():
     """
-    Phase 1 removed empty ``app.routes.reports`` — not the authenticated UI page.
-
-    ``GET /reports`` from ``app.routes.ui`` remains the Reports workspace.
-    Reports JSON/API remains under ``/api/reports``.
+    Issue #891: ``GET /reports`` redirects to Overview. Reports JSON/API remains.
     """
     from app.main import app
     from app.routes.ui import reports as ui_reports_endpoint
@@ -55,8 +52,6 @@ def test_main_keeps_reports_ui_page_without_empty_reports_router_module():
     assert "/reports" in paths
     assert any(p == "/api/reports" or p.startswith("/api/reports/") for p in paths)
     assert any("flow" in p for p in paths)
-
-    # UI page handler still lives on the ui router (not a deleted empty module)
     assert ui_reports_endpoint.__module__ == "app.routes.ui"
 
 

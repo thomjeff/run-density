@@ -8,7 +8,7 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
-    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=878">
+    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=888">
     
     {% block extra_styles %}{% endblock %}
     
@@ -69,9 +69,6 @@
                             <a class="nav-link{% if request.url and request.url.path == '/overview' %} active{% endif %}" href="/overview" data-rf-run-view="1">Overview</a>
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/segments' %} active{% endif %}" href="/segments" data-rf-run-view="1">Segments</a>
-                        </li>
-                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/density' %} active{% endif %}" href="/density" data-rf-run-view="1">Density</a>
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
@@ -88,9 +85,6 @@
                         </li>
                         <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations" data-rf-run-view="1">Locations</a>
-                        </li>
-                        <li class="nav-item rf-results-chrome rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
                         {# Issue #878: Package lives on Overview Analysis Inputs, not Plan top nav #}
                         <li class="nav-item rf-build-chrome" hidden>

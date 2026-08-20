@@ -251,8 +251,20 @@ html.rf-tabler .flow-parent-tile-grid {
     margin-top: 0.75rem;
 }
 
-html.rf-tabler .flow-parent-tile-grid-secondary {
-    margin-top: 0.65rem;
+html.rf-tabler .flow-parent-tile-pair {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.15rem;
+}
+
+html.rf-tabler .flow-parent-tile-pair-col {
+    min-width: 0;
+}
+
+html.rf-tabler .flow-parent-tile-pair-col-overtaken .flow-parent-tile-value {
+    color: #5b6b7c;
 }
 
 html.rf-tabler .flow-parent-tile {
@@ -522,3 +534,105 @@ html.rf-tabler .footer {
     border-top: 1px solid var(--tblr-border-color, #e6e7e9);
     padding: 1rem 0;
 }
+
+/* Issue #888: Density consolidation */
+html.rf-tabler #segments-map {
+    height: 420px;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    background: transparent !important;
+}
+html.rf-tabler .rf-density-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+@media (max-width: 992px) {
+    html.rf-tabler .rf-density-split {
+        grid-template-columns: 1fr;
+    }
+}
+html.rf-tabler .rf-density-heatmap {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+}
+html.rf-tabler .rf-density-primary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem 2rem;
+    margin-bottom: 1rem;
+}
+html.rf-tabler .rf-density-los-value {
+    font-size: 2.4rem;
+    line-height: 1;
+    font-weight: 800;
+}
+html.rf-tabler .rf-density-peak-value {
+    font-size: 1.65rem;
+    line-height: 1.1;
+    font-weight: 700;
+}
+html.rf-tabler .rf-density-kicker {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #667382;
+    margin-bottom: 0.2rem;
+}
+html.rf-tabler .rf-density-support {
+    margin: 0.75rem 0 0;
+    color: #526277;
+    font-size: 0.9rem;
+}
+html.rf-tabler .rf-density-support dt {
+    float: left;
+    clear: left;
+    width: 7.5rem;
+    font-weight: 600;
+    color: #3d4d5c;
+}
+html.rf-tabler .rf-density-support dd {
+    margin: 0 0 0.25rem 7.5rem;
+}
+html.rf-tabler #density-table tbody tr.selected-row,
+html.rf-tabler #density-table tbody tr.rf-row-hover {
+    background: #e8f1fb;
+}
+html.rf-tabler .rf-los-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.85rem;
+}
+html.rf-tabler .rf-los-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+}
+html.rf-tabler .rf-los-chip-range {
+    color: #667382;
+}
+html.rf-tabler .rf-density-narrative {
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+    border-left: 4px solid #2c3e50;
+    border-radius: 4px;
+    color: #2c3e50;
+    line-height: 1.45;
+    font-size: 1.02rem;
+}
+html.rf-tabler .rf-density-analysis-scroll {
+    max-height: 25vh;
+}
+html.rf-tabler .rf-density-los-ref {
+    margin-top: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--tblr-border-color, #e6e7e9);
+}
+

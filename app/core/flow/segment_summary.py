@@ -34,7 +34,17 @@ PACE_MIXING_READY = "ready"
 PACE_MIXING_UNAVAILABLE = "unavailable_needs_pair_keyed_fz_runners"
 
 _SEG_TOKEN_RE = re.compile(r"^[A-Za-z]+\d+[A-Za-z0-9]*$")
+_SEG_ID_SORT_RE = re.compile(r"^([A-Za-z]+)(\d+)(.*)$")
 _HHMM_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def seg_id_sort_key(seg_id: str) -> Tuple[str, int, str]:
+    """Natural Segment ID order: S2 before S10. Does not rename IDs."""
+    text = str(seg_id or "")
+    match = _SEG_ID_SORT_RE.match(text)
+    if not match:
+        return (text.lower(), 0, "")
+    return (match.group(1).lower(), int(match.group(2)), match.group(3))
 
 
 def _norm_event(value: Any) -> str:
@@ -405,7 +415,7 @@ def build_segment_flow_summary(
         _append_pair(seg_id, pair)
 
     parents = []
-    for seg_id, bucket in sorted(grouped.items(), key=lambda item: item[0]):
+    for seg_id, bucket in sorted(grouped.items(), key=lambda item: seg_id_sort_key(item[0])):
         pairs = bucket["pairs"]
         same_pass = [p for p in pairs if p["kind"] == PAIR_KIND_SAME_PASS]
         corridor = [p for p in pairs if p["kind"] == PAIR_KIND_CORRIDOR]

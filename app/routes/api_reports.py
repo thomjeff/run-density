@@ -10,9 +10,12 @@ Architecture: Option 3 - Hybrid Approach
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from io import BytesIO
 import logging
+import re
+import zipfile
 
 # Issue #466 Step 2: Storage consolidated to app.storage
 
@@ -21,6 +24,28 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
+
+_HUMAN_REPORT_EXACT = {"finish_times.csv", "finish_area_demand.pdf"}
+_HUMAN_REPORT_SUBSTRINGS = ("Density", "Flow", "Locations", "Passes")
+_TECHNICAL_SUBSTRINGS = ("bins.", "map_data_", "segment_windows_", "segments_legacy_")
+_TECHNICAL_SUFFIXES = (".parquet", ".geojson", ".json")
+
+
+def is_human_report_name(filename: str) -> bool:
+    """Same allow-list as the former Reports page (Issue #891)."""
+    name = str(filename or "")
+    if any(token in name for token in _TECHNICAL_SUBSTRINGS) or name.endswith(_TECHNICAL_SUFFIXES):
+        return False
+    if name in _HUMAN_REPORT_EXACT:
+        return True
+    if not (name.endswith(".md") or name.endswith(".csv") or name == "finish_area_demand.pdf"):
+        return False
+    return any(token in name for token in _HUMAN_REPORT_SUBSTRINGS)
+
+
+def _safe_export_token(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
+    return cleaned or "unknown"
 
 
 def _get_file_description_from_extension(filename: str) -> str:
@@ -102,19 +127,123 @@ def _add_core_data_files(reports: list, run_id: str) -> None:
             stat = file_path.stat()
             file_name = file_path.name
             description = file_descriptions.get(file_name, f"{file_path.suffix.upper().replace('.', '')} data file")
-            
-            # Issue #596: Use relative path for data files (data/filename.csv)
-            # This matches the download endpoint expectation
-            relative_path = f"{data_dir}/{file_name}"
-            
             reports.append({
                 "name": file_name,
-                "path": relative_path,
+                "path": f"data/{file_name}",
+                "local_path": str(file_path),
                 "mtime": stat.st_mtime,
                 "size": stat.st_size,
                 "description": description,
                 "type": "data_file"
             })
+
+
+def collect_report_listing(
+    run_id: Optional[str] = None,
+    day: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Collect report + data-file entries for a run (shared by list and ZIP export)."""
+    from app.utils.run_id import get_latest_run_id, get_available_days, get_run_directory
+
+    if not run_id:
+        run_id = get_latest_run_id()
+
+    if not run_id:
+        raise HTTPException(
+            status_code=404,
+            detail="No run ID available. Run analysis first or provide run_id parameter."
+        )
+
+    available_days = get_available_days(run_id)
+    if not available_days:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No day directories found for run_id={run_id}"
+        )
+
+    if day:
+        day_lower = day.lower()
+        if day_lower not in available_days:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requested day '{day}' not available for run_id={run_id}. Available days: {', '.join(available_days)}"
+            )
+        days_to_list = [day_lower]
+    else:
+        days_to_list = available_days
+
+    reports = []
+    run_dir = get_run_directory(run_id)
+
+    for day_code in days_to_list:
+        day_reports_dir = run_dir / day_code / "reports"
+        if not day_reports_dir.exists():
+            logger.debug(f"Reports directory not found for day {day_code}: {day_reports_dir}")
+            continue
+
+        for report_file in day_reports_dir.iterdir():
+            if not report_file.is_file():
+                continue
+
+            filename = report_file.name
+            report_descriptions = {
+                "Locations.csv": "Consolidated Location report (one row per loc_id; combined windows)",
+                "Passes.csv": "Pass-level report (one row per pass_id; outbound/return detail)",
+                "finish_times.csv": "Predicted finisher counts by 20-minute clock window (per event and all)",
+                "finish_area_demand.pdf": "Finish-area operational PDF: bar chart, cumulative curve, demand table (event=all)",
+            }
+            description = report_descriptions.get(
+                filename, _get_file_description_from_extension(filename)
+            )
+            stat = report_file.stat()
+            reports.append({
+                "name": filename,
+                "path": f"runflow/analysis/{run_id}/{day_code}/reports/{filename}",
+                "local_path": str(report_file),
+                "day": day_code,
+                "mtime": stat.st_mtime,
+                "size": stat.st_size,
+                "description": description,
+                "type": "report"
+            })
+
+    _add_core_data_files(reports, run_id)
+    return {
+        "reports": reports,
+        "run_id": run_id,
+        "available_days": available_days,
+        "days_listed": days_to_list,
+    }
+
+
+def export_entries_for_kind(entries: List[Dict[str, Any]], kind: str) -> List[Dict[str, Any]]:
+    """Apply the Reports-page allow-list for ZIP contents."""
+    if kind == "data_files":
+        return [entry for entry in entries if entry.get("type") == "data_file"]
+    if kind == "reports":
+        return [
+            entry for entry in entries
+            if entry.get("type") == "report" and is_human_report_name(entry.get("name") or "")
+        ]
+    raise HTTPException(status_code=400, detail="kind must be 'reports' or 'data_files'")
+
+
+def build_export_zip_bytes(entries: List[Dict[str, Any]], kind: str) -> bytes:
+    """Zip allow-listed artifacts as bytes. Arcnames keep day prefixes for reports."""
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for entry in entries:
+            name = entry.get("name") or "file"
+            local_path = Path(entry["local_path"]) if entry.get("local_path") else None
+            if local_path is None or not local_path.is_file():
+                logger.warning("Skipping missing export file: %s", entry.get("path") or name)
+                continue
+            if kind == "reports" and entry.get("day"):
+                arcname = f"{entry['day']}/{name}"
+            else:
+                arcname = name
+            zf.write(local_path, arcname=arcname)
+    return buf.getvalue()
 
 
 @router.get("/api/reports/list")
@@ -131,96 +260,8 @@ async def get_reports_list(
         Array of file objects with name, path, mtime, size, day
     """
     try:
-        from app.utils.run_id import get_latest_run_id, get_available_days, get_run_directory
-        from app.storage import create_runflow_storage
-        
-        # Get run_id (use latest if not provided)
-        if not run_id:
-            run_id = get_latest_run_id()
-        
-        if not run_id:
-            raise HTTPException(
-                status_code=404,
-                detail="No run ID available. Run analysis first or provide run_id parameter."
-            )
-        
-        # Get available days for this run_id
-        available_days = get_available_days(run_id)
-        
-        if not available_days:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No day directories found for run_id={run_id}"
-            )
-        
-        # Determine which days to list
-        if day:
-            day_lower = day.lower()
-            if day_lower not in available_days:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Requested day '{day}' not available for run_id={run_id}. Available days: {', '.join(available_days)}"
-                )
-            days_to_list = [day_lower]
-        else:
-            # List reports from all available days
-            days_to_list = available_days
-        
-        # List report files from all requested days
-        reports = []
-        run_dir = get_run_directory(run_id)
-        
-        for day_code in days_to_list:
-            day_reports_dir = run_dir / day_code / "reports"
-            
-            if not day_reports_dir.exists():
-                logger.debug(f"Reports directory not found for day {day_code}: {day_reports_dir}")
-                continue
-            
-            # List all files in the day's reports directory
-            for report_file in day_reports_dir.iterdir():
-                if not report_file.is_file():
-                    continue
-                
-                filename = report_file.name
-                report_descriptions = {
-                    "Locations.csv": "Consolidated Location report (one row per loc_id; combined windows)",
-                    "Passes.csv": "Pass-level report (one row per pass_id; outbound/return detail)",
-                    "finish_times.csv": "Predicted finisher counts by 20-minute clock window (per event and all)",
-                    "finish_area_demand.pdf": "Finish-area operational PDF: bar chart, cumulative curve, demand table (event=all)",
-                }
-                description = report_descriptions.get(
-                    filename, _get_file_description_from_extension(filename)
-                )
-                
-                # Get file metadata
-                stat = report_file.stat()
-                mtime = stat.st_mtime
-                size = stat.st_size
-                
-                # Path for download: runflow/analysis/<run_id>/<day>/reports/<filename>
-                # Issue #682: Updated to use runflow/analysis/{run_id} structure
-                file_path = f"runflow/analysis/{run_id}/{day_code}/reports/{filename}"
-                
-                reports.append({
-                    "name": filename,
-                    "path": file_path,
-                    "day": day_code,
-                    "mtime": mtime,
-                    "size": size,
-                    "description": description,
-                    "type": "report"
-                })
-        
-        # Add core data files
-        _add_core_data_files(reports, run_id)
-        
-        response = JSONResponse(content={
-            "reports": reports,
-            "run_id": run_id,
-            "available_days": available_days,
-            "days_listed": days_to_list
-        })
+        payload = collect_report_listing(run_id, day)
+        response = JSONResponse(content=payload)
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
@@ -308,3 +349,40 @@ def download_report(path: str = Query(..., description="Report file path")):
         media_type="text/markdown",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/api/reports/export.zip")
+def export_reports_zip(
+    kind: str = Query(..., description="reports | data_files"),
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
+    """ZIP the Reports-page allow-list for the selected run/day (Issue #891)."""
+    kind_norm = (kind or "").strip().lower()
+    if kind_norm not in {"reports", "data_files"}:
+        raise HTTPException(status_code=400, detail="kind must be 'reports' or 'data_files'")
+
+    listing = collect_report_listing(run_id, day)
+    entries = export_entries_for_kind(listing["reports"], kind_norm)
+    if not entries:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {kind_norm.replace('_', ' ')} available for this run/day."
+        )
+
+    zip_bytes = build_export_zip_bytes(entries, kind_norm)
+    if not zip_bytes:
+        raise HTTPException(status_code=404, detail="Export files could not be read.")
+
+    run_token = _safe_export_token(listing["run_id"])
+    days = listing.get("days_listed") or []
+    day_token = _safe_export_token(days[0] if len(days) == 1 else "all")
+    suffix = "reports" if kind_norm == "reports" else "data_files"
+    filename = f"runflow_{run_token}_{day_token}_{suffix}.zip"
+
+    return StreamingResponse(
+        BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+

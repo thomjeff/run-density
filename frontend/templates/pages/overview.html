@@ -6,7 +6,7 @@
 <div class="page-header">
     <h2>Overview</h2>
     <p id="rf-overview-lead" class="rf-overview-lead">
-        Summary of the selected analysis run — inputs and key metrics before Segments, Density, and Flow.
+        Summary of the selected analysis run — inputs, key metrics, and exports before Density and Flow.
     </p>
 </div>
 
@@ -31,6 +31,18 @@
     <div id="run-detail-section" class="card" style="display: none; margin-bottom: 1.25rem;">
         <h3 style="margin-bottom: 1rem;">Analysis Outputs</h3>
         <div id="run-detail-content"></div>
+    </div>
+
+    <div id="rf-overview-exports" class="card" style="margin-bottom: 1.25rem;">
+        <h3 style="margin-bottom: 0.5rem;">Exports</h3>
+        <p class="rf-overview-lead" style="margin-bottom: 1rem;">
+            Download the generated outputs for this analysis run.
+        </p>
+        <div class="rf-overview-export-actions">
+            <a id="rf-export-reports" class="btn btn-primary" href="#">Reports (.zip)</a>
+            <a id="rf-export-data" class="btn btn-outline-primary" href="#">Data Files (.zip)</a>
+        </div>
+        <p id="rf-export-status" class="rf-overview-lead" style="margin-top: 0.75rem;"></p>
     </div>
 </div>
 {% endblock %}
@@ -88,6 +100,11 @@
     text-align: center;
 }
 .rf-progress-elapsed { white-space: nowrap; }
+.rf-overview-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
 </style>
 {% endblock %}
 
@@ -142,6 +159,28 @@
         if (choose) choose.href = withUi('/dashboard');
     }
 
+    function wireExports(runId, day) {
+        var reports = document.getElementById('rf-export-reports');
+        var dataFiles = document.getElementById('rf-export-data');
+        var status = document.getElementById('rf-export-status');
+        if (!reports || !dataFiles) return;
+        if (!runId) {
+            reports.removeAttribute('href');
+            dataFiles.removeAttribute('href');
+            if (status) status.textContent = '';
+            return;
+        }
+        var qs = 'run_id=' + encodeURIComponent(runId);
+        if (day) qs += '&day=' + encodeURIComponent(day);
+        reports.href = '/api/reports/export.zip?kind=reports&' + qs;
+        dataFiles.href = '/api/reports/export.zip?kind=data_files&' + qs;
+        if (status) {
+            status.textContent = day
+                ? ('Exports use run ' + runId + ' / ' + String(day).toUpperCase() + '.')
+                : ('Exports use run ' + runId + '.');
+        }
+    }
+
     function showEmpty() {
         document.getElementById('rf-overview-empty').style.display = 'block';
         document.getElementById('rf-overview-body').style.display = 'none';
@@ -163,6 +202,7 @@
                 if (day) localStorage.setItem('selected_day', day);
                 if (window.updateNavLinks) window.updateNavLinks(day, runId);
                 attachPackageMeta(runId, data);
+                wireExports(runId, day);
                 return data;
             });
     }
@@ -207,8 +247,10 @@
         }
         localStorage.setItem('selected_run_id', runId);
         showBody();
+        wireExports(runId, resolveDay());
         loadSummary(runId).catch(function () {
             showBody();
+            wireExports(runId, resolveDay());
         });
         if (window.RunOverviewProgress) {
             stopProgressWatch = window.RunOverviewProgress.watchRunProgress(

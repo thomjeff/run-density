@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 
-from app.common.config import load_reporting
+from app.common.config import load_reporting, los_reference_rows
 from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
@@ -207,45 +207,19 @@ async def dashboard(request: Request):
     )
 
 
+def _redirect_preserving_query(request: Request, path: str) -> RedirectResponse:
+    qs = str(request.query_params)
+    url = path + (f"?{qs}" if qs else "")
+    return RedirectResponse(url=url, status_code=302)
+
+
 @router.get("/segments", response_class=HTMLResponse)
 async def segments(request: Request):
-    """
-    Segments page with Leaflet map and metadata table.
-    
-    Issue #314: Requires authentication.
-    
-    Returns:
-        HTML: Segment list and course map with LOS colors injected
-    """
+    """Issue #888: Segments UI retired; course map lives on Density."""
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
-    meta = get_stub_meta()
-    
-    # Load LOS colors from SSOT
-    try:
-        reporting_config = load_reporting()
-        los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
-    except Exception as e:
-        # Fallback to hardcoded colors if YAML loading fails
-        los_colors = {
-            "A": "#4CAF50",
-            "B": "#8BC34A", 
-            "C": "#FFC107",
-            "D": "#FF9800",
-            "E": "#FF5722",
-            "F": "#F44336"
-        }
-    
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/segments.html",
-        context={
-            "request": request,
-            "meta": meta,
-            "los_colors": los_colors,
-        },
-    )
+    return _redirect_preserving_query(request, "/density")
 
 
 @router.get("/density", response_class=HTMLResponse)
@@ -287,7 +261,13 @@ async def density(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="pages/density.html",
-        context={"request": request, "meta": meta, "los_colors": los_colors, "run_id": run_id},
+        context={
+            "request": request,
+            "meta": meta,
+            "los_colors": los_colors,
+            "los_reference": los_reference_rows(),
+            "run_id": run_id,
+        },
     )
 
 
@@ -553,23 +533,11 @@ async def course_mapping(request: Request):
 
 @router.get("/reports", response_class=HTMLResponse)
 async def reports(request: Request):
-    """
-    Reports page with download links for generated artifacts.
-    
-    Issue #314: Requires authentication.
-    
-    Returns:
-        HTML: Available reports and datasets
-    """
+    """Issue #891: Reports UI retired; ZIP exports live on Overview."""
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
-    meta = get_stub_meta()
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/reports.html",
-        context={"request": request, "meta": meta},
-    )
+    return _redirect_preserving_query(request, "/overview")
 
 
 @router.get("/analysis", response_class=HTMLResponse)

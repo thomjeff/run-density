@@ -1,0 +1,31 @@
+{# Canonical LOS reference from density_rulebook.yml (passed as los_reference). #}
+{% if compact|default(false) %}
+<div class="rf-los-compact" aria-label="Level of Service reference">
+    {% for row in los_reference %}
+    <span class="rf-los-chip">
+        <span class="badge-los badge-{{ row.grade }}">{{ row.grade }}</span>
+        <span class="rf-los-chip-label">{{ row.label }}</span>
+        <span class="rf-los-chip-range">{{ row.range }}</span>
+    </span>
+    {% endfor %}
+</div>
+{% else %}
+<table class="rf-los-table">
+    <thead>
+        <tr>
+            <th>LOS</th>
+            <th>Density Range (p/m²)</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in los_reference %}
+        <tr>
+            <td><span class="badge-los badge-{{ row.grade }}">{{ row.grade }}</span></td>
+            <td>{{ row.range }}</td>
+            <td>{{ row.label }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

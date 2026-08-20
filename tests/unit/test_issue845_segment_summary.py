@@ -17,6 +17,7 @@ from app.core.flow.segment_summary import (
     classify_pair_kind,
     event_mix_breakdown,
     pair_temporal_state,
+    seg_id_sort_key,
     unique_role_unions,
 )
 from app.flow_report import export_fz_runners_parquet
@@ -25,6 +26,80 @@ from app.main import app
 REFERENCE_RUN = Path(
     "/Users/jthompson/Documents/runflow/analysis/5sqk4pNRRJzLBphCnQbAwi/sun"
 )
+
+
+def test_seg_id_sort_key_puts_s9_before_s10():
+    ordered = sorted(
+        ["S10", "S1", "S9", "S2", "S14"],
+        key=seg_id_sort_key,
+    )
+    assert ordered == ["S1", "S2", "S9", "S10", "S14"]
+
+
+def test_tile_uniques_reconcile_to_mix_matrix_uniques():
+    rows = [
+        {"flow_id": "S8_full_half", "event": "half", "runner_id": "h1", "role": "overtaking"},
+        {"flow_id": "S8_half_10k", "event": "half", "runner_id": "h1", "role": "overtaking"},
+        {"flow_id": "S8_full_half", "event": "half", "runner_id": "h2", "role": "overtaking"},
+        {"flow_id": "S8_full_10k", "event": "full", "runner_id": "f1", "role": "overtaking"},
+        {"flow_id": "S8_full_half", "event": "full", "runner_id": "f9", "role": "overtaken"},
+        {"flow_id": "S8_half_10k", "event": "10k", "runner_id": "k1", "role": "overtaken"},
+        {"flow_id": "S8_full_10k", "event": "10k", "runner_id": "k1", "role": "overtaken"},
+        {"flow_id": "S8_full_10k", "event": "10k", "runner_id": "k2", "role": "overtaken"},
+    ]
+    pairs = [
+        {"flow_id": "S8_full_half", "event_a": "full", "event_b": "half"},
+        {"flow_id": "S8_full_10k", "event_a": "full", "event_b": "10k"},
+        {"flow_id": "S8_half_10k", "event_a": "half", "event_b": "10k"},
+    ]
+    overtakers = unique_role_unions(
+        rows, role="overtaking", allowed_flow_ids=[p["flow_id"] for p in pairs]
+    )
+    overtaken = unique_role_unions(
+        rows, role="overtaken", allowed_flow_ids=[p["flow_id"] for p in pairs]
+    )
+    mix_overtaking = event_mix_breakdown(
+        rows, role="overtaking", events=["full", "half", "10k"], same_pass_pairs=pairs
+    )
+    mix_overtaken = event_mix_breakdown(
+        rows, role="overtaken", events=["full", "half", "10k"], same_pass_pairs=pairs
+    )
+    for event in ("full", "half", "10k"):
+        assert overtakers.get(event, 0) == mix_overtaking[event]["unique"]
+        assert overtaken.get(event, 0) == mix_overtaken[event]["unique"]
+
+
+def test_parent_summary_orders_segments_naturally():
+    flow_segments = {
+        "S10_full_half": {
+            "seg_id": "S10",
+            "segment_label": "Later",
+            "event_a": "full",
+            "event_b": "half",
+            "total_a": 10,
+            "total_b": 10,
+            "worst_zone": {"zone_index": 0, "overtaking_a": 1, "overtaking_b": 0},
+            "zones": [{}],
+        },
+        "S2_full_half": {
+            "seg_id": "S2",
+            "segment_label": "Earlier",
+            "event_a": "full",
+            "event_b": "half",
+            "total_a": 10,
+            "total_b": 10,
+            "worst_zone": {"zone_index": 0, "overtaking_a": 1, "overtaking_b": 0},
+            "zones": [{}],
+        },
+    }
+    ordered = [
+        seg["seg_id"]
+        for seg in build_segment_flow_summary(
+            flow_segments=flow_segments,
+            overlaps_summary={},
+        )["segments"]
+    ]
+    assert ordered == ["S2", "S10"]
 
 
 def test_classify_pair_kind_same_pass_corridor_same_event():
@@ -232,9 +307,24 @@ def test_fz_runners_export_adds_pair_keys_without_dropping_legacy_columns(tmp_pa
     assert set(frame["flow_id"]) == {"S8_full_half"}
 
 
+def _route_paths(routes):
+    paths = []
+    for route in routes:
+        path = getattr(route, "path", None)
+        if path is not None:
+            paths.append(path)
+        original = getattr(route, "original_router", None)
+        if original is not None and hasattr(original, "routes"):
+            paths.extend(_route_paths(original.routes))
+        nested = getattr(route, "routes", None)
+        if nested:
+            paths.extend(_route_paths(nested))
+    return paths
+
+
 def test_existing_flow_segments_api_shape_unchanged():
     client = TestClient(app)
-    routes = {route.path for route in app.routes}
+    routes = set(_route_paths(app.routes))
     assert "/api/flow/segments" in routes
     assert "/api/flow/segment-parents" in routes
     response = client.get("/api/flow/segments")
@@ -261,7 +351,11 @@ def test_flow_html_defaults_to_segment_parent():
     assert "get('flow_parent')" in source
     assert "flag !== '0'" in source
     assert "flowParentPreviewEnabled" in source
-    assert "selectParentSegment" in source
+    assert "Who this event overtakes" in source
+    assert "Who overtakes this event" in source
+    assert "not overtaking counts" in source
+    assert "compareSegId" in source
+    assert "flow-parent-tile-pair" in source
     assert "refreshFlowViews" in source
     assert "loadFlowData();" in source
     assert "loadOverlapData();" in source

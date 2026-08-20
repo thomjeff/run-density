@@ -119,3 +119,28 @@ def load_captioning() -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
+def los_reference_rows() -> list:
+    """Canonical LOS labels and density ranges from the density rulebook."""
+    thresholds = load_rulebook().get("globals", {}).get("los_thresholds")
+    if not thresholds:
+        raise ValueError("Rulebook missing globals.los_thresholds")
+    rows = []
+    for grade in ("A", "B", "C", "D", "E", "F"):
+        band = thresholds.get(grade)
+        if not isinstance(band, dict):
+            raise ValueError(f"Rulebook missing globals.los_thresholds.{grade}")
+        lo = float(band["min"])
+        hi = float(band["max"])
+        if hi >= 999:
+            density_range = f"{lo:.2f}+"
+        else:
+            density_range = f"{lo:.2f} – {hi:.2f}"
+        rows.append({
+            "grade": grade,
+            "range": density_range,
+            "label": str(band.get("label") or grade),
+        })
+    return rows
+
+
