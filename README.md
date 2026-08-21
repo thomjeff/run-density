@@ -4,25 +4,24 @@
 
 ## Overview
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
-It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized for local development.
+It provides comprehensive reporting with Markdown and CSV outputs, and is containerized for local development.
 
-**v2.0.0 Features:**
-- **Multi-day support**: Analyze Saturday and Sunday events independently or together
-- **Day-scoped outputs**: All artifacts organized by `run_id/{day}/` (reports, bins, UI artifacts)
-- **Dynamic event configuration**: Events defined in API payload, not hardcoded
-- **Day selector UI**: Global day selector across all pages (Dashboard, Segments, Density, Flow, Locations, Reports)
-- **E2E test suite**: Comprehensive regression testing with golden file comparisons
+**Current Version: v3.0.0** — Density and Flow calculate on the trajectory snapshot. Product chrome is **Build | Plan | Execute**.
 
-**Current Version: v2.0.6** - Data directory parameter, directory reorganization, baseline utility, performance optimization, and config integrity
+**v3 product chrome:**
+- **Build:** Legs · Courses · Runners · Packages
+- **Plan:** run selector + Overview · Density · Flow · Junctions · Motion · Progression · Locations
+- **Execute:** placeholder (race-day clock not in this release)
+- Day is derived from the selected run (no Plan day dropdown)
+- Overview **Exports** downloads Reports and Data Files as ZIPs; `/reports` and `/segments` redirect to Overview and Density
 
 ## Key Features
-- **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
-- **Temporal Flow Analysis**: Convergence and overtaking analysis between different race events
-- **Heatmap Visualizations**: Interactive PNG heatmaps for race segments
-- **Comprehensive Reporting**: Auto-generated Markdown and CSV reports with detailed analytics
-- **RESTful API**: Full FastAPI integration with configurable parameters
-- **CLI Tools**: Command-line scripts for report generation and analysis
-- **Web UI**: Interactive dashboard with segment details, heatmaps, and operational intelligence
+- **Density Analysis**: Spatial concentration with LOS, Peak Window, and Field Window on the Plan Density workspace (course map + Segment Analysis)
+- **Temporal Flow Analysis**: Convergence and overtaking between events (numeric Segment ID order; unique overtakers / overtaken)
+- **Heatmap Visualizations**: PNG heatmaps for race segments
+- **Exports**: Allow-listed report and data-file ZIPs from Overview
+- **RESTful API**: FastAPI with configurable analysis parameters
+- **Web UI**: Tabler Plan/Build/Execute chrome at http://localhost:8080
 
 ## Quick Start (Local Development)
 
@@ -100,20 +99,18 @@ make smoke-local
 
 ## Web UI Features
 
-### Interactive Dashboard
-- **Segment Overview**: All 22 race segments with density metrics and LOS ratings
-- **Heatmap Visualizations**: PNG heatmaps for each segment showing density patterns
-- **Operational Intelligence**: Bin-level details with filtering and sorting capabilities
-- **Real-time Monitoring**: Health checks and API status monitoring
+### Plan workspace
+- **Overview**: Analysis inputs/outputs plus **Exports** (`Reports (.zip)` / `Data Files (.zip)`)
+- **Density**: LOS-coloured course map, Segment Analysis table, selected-segment heatmap and assessment
+- **Flow / Junctions / Motion / Progression / Locations**: analytical views for the selected run
+- Pick a run from **Runs ▾** (opens Overview). `/dashboard` is the run catalog.
 
-### Heatmap Display
-- **Local Storage**: Heatmaps stored in `runflow/<uuid>/ui/heatmaps/`
-- **Interactive Segments**: Click on segments to view detailed heatmap visualizations
-- **Auto-Captions**: Text summaries for each heatmap generated automatically
-- **UUID-Based Runs**: Each analysis run has a unique ID for tracking
+### Heatmaps
+- Stored under `runflow/analysis/<run_id>/<day>/ui/visualizations/`
+- Served at `/heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png`
 
 ### Access the Web UI
-- **Local (Docker)**: http://localhost:8080/dashboard
+- **Local (Docker)**: http://localhost:8080 (password gate, then Plan Overview)
 
 ## Report Generation
 

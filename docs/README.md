@@ -1,7 +1,7 @@
 # Run-Density Documentation
 
 **Version:** v3.0.0  
-**Last Updated:** 2026-08-18  
+**Last Updated:** 2026-08-21  
 **Architecture:** Local-only, UUID-based runflow structure, API-driven configuration where all analysis parameters are provided via API. 
 
 This documentation is organized by audience and topic for easy navigation.
@@ -35,7 +35,7 @@ This documentation is organized by audience and topic for easy navigation.
 | Document | Purpose |
 |----------|---------|
 | [Developer Guide](dev-guides/developer-guide.md) | **START HERE** - Complete v2 developer guide |
-| [Frontend UI Contract](dev-guides/frontend-ui.md) | Tables, sort, actions, Results chrome, Tabler |
+| [Frontend UI Contract](dev-guides/frontend-ui.md) | Tables, sort, actions, Plan chrome, Tabler |
 | [Canonical paths](architecture/canonical-paths.md) | Supported API → pipeline → report call graphs (Issue #798) |
 | [Deprecation ledger](architecture/deprecation-ledger.md) | Live vs remove vs rename dispositions (Issue #798) |
 | [Domain glossary](architecture/domain-glossary.md) | Runflow vocabulary (Issue #798) |
@@ -72,7 +72,7 @@ make e2e         # Run end-to-end tests
 1. Read [AI Developer Guide](dev-guides/ai-developer-guide.md) - Complete all verification steps
 2. Review mandatory rules and common mistakes
 3. Reference [Developer Guide](dev-guides/developer-guide.md) for v2 patterns
-4. Use [Quick Reference](reference/QUICK_REFERENCE.md) for exact field names
+4. Use [Quick Reference](reference/quick-reference.md) for exact field names
 
 ---
 
@@ -265,7 +265,14 @@ Covers:
 
 ## 🔄 Document Lifecycle
 
-### Recently Updated (June 2026 — leg platform & corridor pairing)
+### Recently Updated (August 2026 — Plan Density / Overview / Flow)
+- ✅ `CHANGELOG.md` - Unreleased: Density absorbs Segments (#888), Overview exports (#891), Flow readability (#890)
+- ✅ `dev-guides/frontend-ui.md` - Plan nav without Segments/Reports; Density table height; Overview Exports
+- ✅ `dev-guides/data-sources.md` - Density is the segment workspace; Overview ZIP exports
+- ✅ `testing/ui-testing-checklist.md` - Current Plan destinations and redirects
+- ✅ `architecture/canonical-paths.md`, `domain-glossary.md`, `deprecation-ledger.md` - Peak/Field Window; retired HTML routes
+
+### Previously Updated (June 2026 — leg platform & corridor pairing)
 - ✅ `user-guide/race-configuration.md` - NEW leg-based course authoring guide
 - ✅ `dev-guides/segment-library-2027.md` - Rewritten for implemented leg platform (org library, pairing, sync)
 - ✅ `user-guide/course-mapping.md` - Marked as legacy workflow; points to Race Configuration
@@ -286,5 +293,5 @@ Covers:
 
 ---
 
-**Last Updated:** 2026-06-10  
+**Last Updated:** 2026-08-21  
 **Maintained By:** Development Team

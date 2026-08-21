@@ -289,9 +289,10 @@ Flow analysis validation oracle.
 - `POST /api/temporal-flow-report` - Generate flow analysis
 - `GET /api/flow/segments` - Get flow interaction data
 
-**Reports:**
-- `GET /api/reports/list` - List available reports
-- `GET /api/reports/download?path=...` - Download report
+**Reports / exports:**
+- `GET /api/reports/list` - List available reports and data files
+- `GET /api/reports/download?path=...` - Download one file
+- `GET /api/reports/export.zip?kind=reports|data_files` - Overview ZIP export
 
 **Map:**
 - `GET /api/map/manifest` - Map configuration

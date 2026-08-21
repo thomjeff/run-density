@@ -22,6 +22,8 @@
 | **Pass** | Timed instance at a Location (`pass_id`; outbound/return share one `loc_id`) |
 | **Configuration package** | Race package: assigned courses, runners, resources, analysis launch (`runflow/config/{config_id}/`) |
 | **Run** | One analysis execution under `runflow/analysis/{run_id}/` |
+| **Peak Window** | Clock of the worst density bin on a segment (`active_window` / Density table **Peak Window**). Not the full occupancy interval. |
+| **Field Window** | First–last modeled occupancy on a segment (Density assessment). Distinct from Peak Window. |
 
 ## Units (prefer explicit suffixes in internal code)
 

@@ -1,6 +1,6 @@
 # Frontend UI contract (Issue #791 Phase 3)
 
-Short guide so new tables and Results chrome do not fork styling again.
+Short guide so new tables and Plan chrome do not fork styling again.
 
 ## Stack
 
@@ -43,15 +43,19 @@ Short guide so new tables and Results chrome do not fork styling again.
 
 Use `frontend/static/js/table_actions.js` (`TableActions.createIconButton`). Buttons get `.course-map-action-btn` (and optional `--copy` / `--reverse`). Styles live in `common.css`.
 
-## Results chrome
+## Plan chrome
 
-On Segments / Density / Flow / Locations / Reports (not Runs):
+On Plan analysis pages (Overview, Density, Flow, Junctions, Motion, Progression, Locations — not the Runs catalog):
 
 ```jinja
 {% include "partials/run_context.html" %}
 ```
 
-Provides Results sub-nav + run banner / empty CTA. Styles: `.rf-results-*` in `common.css`.
+Provides Plan sub-nav + run banner / empty CTA. Styles: `.rf-results-*` in `common.css`.
+
+Retired destinations (Issue #888 / #891): `GET /segments` redirects to Density; `GET /reports` redirects to Overview. Do not add those items back to Plan nav. Segment APIs and report artifacts remain.
+
+**Density Segment Analysis** uses `.rf-density-analysis-scroll` (`max-height: 25vh`) so the course map and selected-segment tile stay on screen. Do not restore the global `50vh` table height on that table.
 
 ## Tabler UI (Issue #798 Phase 7) — sole admin chrome
 
@@ -70,13 +74,15 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 ### UX model (horizontal light shell)
 
-- Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Segments · Density · Flow · Junctions · Motion · Progression · Locations · Reports | Logout
+- Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Density · Flow · Junctions · Motion · Progression · Locations | Logout
 - Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Runners · Packages | Logout
 - Top bar (Execute): **Runflow** | **Execute ▾** | Race day | Logout — placeholder only (Issue #878); no Locations item
 - Workspace control switches Build ↔ Plan ↔ Execute (mutually exclusive chrome; Issue #878, formerly Results/Build in #842)
 - **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Plan only)
 - Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
-- Context strip removed: run label/id/day live on the Plan run dropdown; **Package** is on Overview Analysis Inputs (name links to Build → that package)
+- Context strip: run ID / description / date / day; **Exports** jumps to Overview `#rf-overview-exports`; **Package** is on Overview Analysis Inputs (name links to Build → that package)
+- Overview **Exports** (Issue #891): `Reports (.zip)` and `Data Files (.zip)` for the selected run/day via `/api/reports/export.zip`
+- Density (Issue #888) is the segment workspace (course map + Segment Analysis + selected-segment assessment). Segments is not a Plan destination.
 - Last Plan route/run, last Build route, and last Execute route are restored when switching workspaces
 - Runs catalog is history-only
 - Build hub page still has Legs / Courses / Runners / Packages panels; top nav mirrors hub views

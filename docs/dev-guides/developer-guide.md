@@ -80,7 +80,7 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 - Reference TypeScript (.tsx) files
 - Use build tools (webpack, vite, rollup)
 - Suggest `pnpm dev` or `npm start` commands
-- Invent new inline table/sort CSS on Results pages
+- Invent new inline table/sort CSS on Plan pages
 
 ### Code Organization
 
@@ -88,24 +88,28 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 frontend/
   templates/
     pages/
-      segments.html       # Jinja2 template
-      density.html
+      density.html        # Course map + Segment Analysis + assessment
+      overview.html
+      flow.html
       ...
+    partials/
+      run_context.html    # Plan sub-nav + run banner
+      los_reference.html  # Rulebook LOS chips/table (Density + bin modal)
   static/
     js/
       map/
         base_map.js       # Shared Leaflet initialization
-        segments.js       # Segments-specific logic
-        heatmap.js        # Density heatmap logic
+        segments.js       # Course-map layer (Density; shared selection/hover)
     css/
-      main.css
+      common.css
+      tabler_spike.css
 ```
 
 **Rationale:**
 - Server-side rendering keeps cold-start times minimal (<2s)
 - No client-side build artifacts to serve
 - Simpler deployment pipeline (single Docker image)
-- Consistent with existing pages (dashboard, density, flow, health, reports)
+- Consistent with existing Plan pages (overview, density, flow, locations)
 
 ---
 

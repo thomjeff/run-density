@@ -99,12 +99,13 @@ Issue #600: **Flow.csv** is the operator artifact; Flow.md generation is depreca
 | App entry (local) | `app/main.py` | Full UI + APIs |
 | App entry (cloud skinny) | `app/cloud_app.py` | Read-oriented subset |
 | v2 analyze | `app/routes/v2/analyze.py` | Prefix `/runflow/v2` |
-| Reports list/download UI API | `app/routes/api_reports.py` | Used by frontend |
-| Empty `/reports` shim | ~~removed~~ | Phase 1 deleted empty router |
+| Reports list/download/export UI API | `app/routes/api_reports.py` | Overview **Exports** (`/api/reports/export.zip`); list/download retained |
+| `GET /reports` HTML | `app.routes.ui.reports` | **Redirects to Overview** (Issue #891) |
+| `GET /segments` HTML | `app.routes.ui.segments` | **Redirects to Density** (Issue #888); GeoJSON API kept |
 | Flow API | `app/api/flow.py` | Composed directly from `main.py` (Phase 1) |
 | Bidirectional API | `app/api/bidirectional.py` | Composed directly from `main.py` (Phase 1) |
 | Build / packages | `app/routes/api_config_packages.py` | Large surface; org legs + packages |
-| Results UI pages | `app/routes/ui.py` | Jinja pages |
+| Results UI pages | `app/routes/ui.py` | Jinja Plan pages; `/segments` and `/reports` redirect |
 
 ---
 
@@ -114,7 +115,8 @@ Issue #600: **Flow.csv** is the operator artifact; Flow.md generation is depreca
 |------|--------|
 | Classic header/nav in `base.html` | **REMOVED** (Phase 7) |
 | Tabler shell | **Sole UI** — always on via `html.rf-tabler` in `base.html` |
-| Results pages | Shared templates; chrome from `base.html` + `run_context.html` |
+| Plan pages | Shared templates; chrome from `base.html` + `run_context.html` (Overview · Density · Flow · Junctions · Motion · Progression · Locations) |
+| Retired Plan destinations | `/segments` → Density; `/reports` → Overview (Issue #888 / #891) |
 | Build hub | `race_configuration.html` + map/recipe JS modules |
 
 Tabler is the only chrome as of Issue #798 Phase 7 (was opt-in `?ui=tabler` in Issue #796 / v2.0.11).

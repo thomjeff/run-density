@@ -132,7 +132,7 @@ Configuration data must follow a strict WORM model:
 ⸻
 
 6. UI Must Reflect Configuration, Not Repair It
-The UI layer (Segments page, Density page, Maps):
+The UI layer (Density course map and Segment Analysis, other Plan maps):
 - Must display what the configuration defines and persistent in the UI datafiles produced during the analysis.
 - Must not compensate for missing data in the UI datafiles by reading from configuration files like segments, flow or locations.
 - Must not compute values absent from config
