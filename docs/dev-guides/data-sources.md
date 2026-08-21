@@ -18,11 +18,11 @@ This document defines the canonical sources of truth for each type of data used 
 3. [Detailed Specifications](#detailed-specifications)
 4. [UI → Data Lineage](#ui--data-lineage)
    - [Dashboard Page](#dashboard-page-dashboard)
-   - [Segments Page](#segments-page-segments)
+   - [Dashboard Page](#dashboard-page-dashboard)
    - [Density Page](#density-page-density)
    - [Flow Page](#flow-page-flow)
    - [Locations Page](#locations-page-locations)
-   - [Reports Page](#reports-page-reports)
+   - [Overview Exports](#overview-exports)
    - [Health Page](#health-page-health)
    - [Analysis Page](#analysis-page-analysis)
    - [Create Files Page](#create-files-page-create_files)
@@ -88,13 +88,14 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - Contract: Verify API `peak_density` matches calculated value from artifact
    - E2E: Verify UI displays correct value and LOS badge
 
-**Example 2: Segments GeoJSON Enrichment**
+**Example 2: Density course map (GeoJSON enrichment)**
 1. **Artifacts:** 
    - `ui/geospatial/segments.geojson` → Segment geometries
    - `ui/metrics/segment_metrics.json` → Segment metrics
    - `ui/metrics/flags.json` → Flagged segments
-2. **API:** `GET /api/segments/geojson` → Enriches GeoJSON features with metrics and flag status
-3. **UI:** Segments page → Displays map with enriched segment features
+   - compiled `segments.csv` (from `analysis.json`) → width, description, per-event elapsed km
+2. **API:** `GET /api/segments/geojson` → Enriches GeoJSON features with metrics, flag status, and elapsed-km ranges
+3. **UI:** Density Course Map → LOS-coloured polylines; tooltip shows length/width/direction/LOS and event elapsed km when present
 4. **Tests:**
    - Schema: Validate GeoJSON structure, metrics JSON structure
    - Contract: Verify enriched properties match source artifacts
@@ -107,7 +108,7 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - `ui/metrics/flags.json` → Flagged segments
    - `ui/visualizations/captions.json` → Heatmap captions
 2. **API:** `GET /api/density/segments` → Returns density table data for all segments
-3. **UI:** Density page → Displays table with segment density metrics and heatmap links
+3. **UI:** Density page → Segment Analysis table, then selected-segment heatmap / assessment / narrative
 4. **Tests:**
    - Schema: Validate segment_metrics.json structure
    - Contract: Verify table data matches segment_metrics.json values
@@ -135,16 +136,16 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - Contract: Verify API JSON matches CSV data
    - E2E: Verify locations table displays correctly
 
-**Example 6: Reports Listing**
+**Example 6: Overview ZIP exports (Issue #891)**
 1. **Artifacts:**
-   - `reports/` directory → Report files (Markdown, CSV, Parquet)
-   - `analysis.json` → Data directory path
-2. **API:** `GET /api/reports/list` → Returns list of report files with metadata
-3. **UI:** Reports page → Displays report listing with download links
+   - `{day}/reports/` → Human reports (`Density.md`, `Flow.csv`, `Locations.csv`, `Passes.csv`, `finish_times.csv`, `finish_area_demand.pdf`)
+   - package `data_dir` → analysis input CSV/GPX
+2. **API:** `GET /api/reports/list` (inventory) and `GET /api/reports/export.zip?kind=reports|data_files`
+3. **UI:** Overview **Exports** → `Reports (.zip)` / `Data Files (.zip)` for the selected run/day
 4. **Tests:**
-   - Schema: Validate file metadata (mtime, size)
-   - Contract: Verify file list matches directory contents
-   - E2E: Verify download links work correctly
+   - Allow-list: ZIP contents match the former Reports-page filter (not the whole analysis directory)
+   - Contract: ZIP filename includes run and day tokens
+   - E2E: Overview buttons download non-empty ZIPs
 
 **Example 7: Health Status**
 1. **Artifacts:**
@@ -472,6 +473,8 @@ This section maps each UI page to its API endpoints and underlying artifact sour
 
 ### Dashboard Page (`/dashboard`)
 
+Runs catalog (Plan **View all runs…**). Analysis Inputs / Outputs / Exports live on Overview for a selected `run_id`.
+
 **API Endpoints:**
 - `GET /api/dashboard/summary` - Main dashboard data
 - `GET /api/runs/list` - Run history table
@@ -496,63 +499,50 @@ This section maps each UI page to its API endpoints and underlying artifact sour
 - **Status** → Calculated: "action_required" if `peak_density_los` in ["E", "F"] OR `segments_flagged > 0`, else "normal"
 - **Run History Table** → `index.json` (run-level) + `analysis.json` (description) + `metadata.json` (performance metrics)
 
-### Segments Page (`/segments`)
-
-**API Endpoints:**
-- `GET /api/segments/geojson` - Enriched GeoJSON with metrics
-- `GET /api/segments/summary` - Summary statistics
-- `GET /api/dashboard/summary` - For day selector
-
-**Artifact Sources:**
-- `ui/geospatial/segments.geojson` → Segment geometries (converted from Web Mercator to WGS84)
-- `ui/metrics/segment_metrics.json` → `worst_los`, `peak_density`, `peak_rate`, `active_window`
-- `ui/metrics/flags.json` → Flagged segment IDs
-
-**UI Elements → Data Mapping:**
-- **Map Features** → `segments.geojson` features enriched with metrics
-- **Segment Properties** → `seg_id`, `label`, `length_km`, `width_m`, `direction`, `events` from GeoJSON properties
-- **Worst LOS** → `worst_los` from `segment_metrics.json[seg_id]`
-- **Peak Density** → `peak_density` from `segment_metrics.json[seg_id]`
-- **Peak Rate** → `peak_rate` from `segment_metrics.json[seg_id]`
-- **Active Window** → `active_window` from `segment_metrics.json[seg_id]`
-- **Is Flagged** → Boolean: `seg_id` in flagged segments from `flags.json`
-
 ### Density Page (`/density`)
 
+Plan workspace for segment-level density (Issue #888). The standalone Segments page is retired (`GET /segments` redirects here).
+
 **API Endpoints:**
-- `GET /api/density/segments` - Density table data
-- `GET /api/density/segment/{seg_id}` - Segment detail panel
-- `GET /api/bins` - Bin-level data for detail view
+- `GET /api/segments/geojson` - Course map geometries + LOS / elapsed-km properties
+- `GET /api/density/segments` - Segment Analysis table
+- `GET /api/density/segment/{seg_id}` - Selected-segment assessment (heatmap, field window, flagged-bin counts)
+- `GET /api/bins` - Flagged-bin modal
 
 **Artifact Sources:**
-- `ui/metrics/segment_metrics.json` → Segment-level density metrics
-- `ui/geospatial/segments.geojson` → Segment labels and metadata
-- `ui/metrics/flags.json` → Flagged segments and bins
-- `ui/visualizations/captions.json` → Heatmap captions
-- `bins/bins.parquet` → Bin-level density data (for detail view)
+- `ui/geospatial/segments.geojson` → Segment geometries, labels, width, direction, events, description
+- `ui/metrics/segment_metrics.json` → `worst_los`, `peak_density`, `peak_rate`, `active_window` (Peak Window = worst-bin clock)
+- `ui/metrics/flags.json` → Flagged segments
+- `ui/visualizations/captions.json` → Heatmap narrative
+- `bins/bins.parquet` / `bins/bin_summary.json` → Field Window (occupancy first–last), flagged-bin coverage
+- compiled `segments.csv` (via `analysis.json`) → width, description, `{event}_from_km` / `{event}_to_km`
 
 **UI Elements → Data Mapping:**
-- **Density Table** → Aggregated from `segment_metrics.json` + `segments.geojson` labels
-- **Segment Detail Panel** → `segment_metrics.json[seg_id]` + `segments.geojson` feature
-- **Heatmap URLs** → `/heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png`
-- **Heatmap Captions** → `captions.json[seg_id]`
-- **Bin Detail Table** → `bins.parquet` filtered by `segment_id`
-- **Flag Indicators** → `flags.json` filtered by `seg_id`
+- **Course Map** → GeoJSON features, LOS stroke colour, shared selection/hover with the table
+- **Segment Analysis columns** → `seg_id`, name, `length_km`, `width_m`, Peak Window (`active` / `active_window`), LOS
+- **Selected Segment** → ID, name, description; LOS + Peak Density; Peak Condition (peak clock + km range); Field Window; supporting Peak Rate / Direction / Events / Flagged bins
+- **Heatmap** → `/heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png`
+- **Narrative** → `captions.json[seg_id]`
+- **LOS reference** → `config/density_rulebook.yml` `globals.los_thresholds` (same partial as the bin modal)
+- **Bin modal** → `bins.parquet` filtered by `segment_id`
 
 ### Flow Page (`/flow`)
 
 **API Endpoints:**
-- `GET /api/flow/segments` - Flow table data with zones
+- `GET /api/flow/segment-parents` - Segment-first summary (tiles, mix matrices, occupancy)
+- `GET /api/flow/segments` - Pair-atom flow data with zones (legacy/detail)
 
 **Artifact Sources:**
 - `ui/metrics/flow_segments.json` → Flow metrics per segment-pair
+- overlaps summary under `{day}/reports/` → same-pass windows
 - `ui/visualizations/zone_captions.json` → Zone visualization captions
 
 **UI Elements → Data Mapping:**
-- **Flow Table** → `flow_segments.json` (keyed by `seg_id_event_a_event_b`)
-- **Worst Zone Metrics** → Top-level metrics in `flow_segments.json` entry
-- **Nested Zones** → `zones` array in `flow_segments.json` entry
-- **Zone Captions** → `zone_captions.json` (keyed by `seg_id_event_a_event_b_zone_index`)
+- **Flow Overlaps table** → Parent segments in numeric Segment ID order (`S9` before `S10`)
+- **Event tiles** → Unique overtakers / unique overtaken per event (unions, not summed matrix cells)
+- **Directional matrices** → Mix breakdown vs counterpart events
+- **Crowding Context** → Concurrent occupancy series (not overtaking counts)
+- **Nested Zones** → `zones` array in `flow_segments.json` entry (pair detail)
 
 ### Locations Page (`/locations`)
 
@@ -569,21 +559,23 @@ This section maps each UI page to its API endpoints and underlying artifact sour
 - **Resource Counts** → `resources_available` from `locations_results.json`
 - **Flag Column** → Boolean from CSV (converted from string if needed)
 
-### Reports Page (`/reports`)
+### Overview Exports
+
+Standalone Reports UI is retired (Issue #891). `GET /reports` redirects to Overview. Download infrastructure stays under `/api/reports/*`.
 
 **API Endpoints:**
-- `GET /api/reports/list` - Report file listing
-- `GET /api/reports/download` - File download
+- `GET /api/reports/list` - Inventory (human reports + data files)
+- `GET /api/reports/download` - Single-file download
+- `GET /api/reports/export.zip` - ZIP of the Reports-page allow-list (`kind=reports` or `kind=data_files`)
 
 **Artifact Sources:**
-- `reports/` directory → All report files (Markdown, CSV, Parquet)
-- `analysis.json` → Data directory path for data files
+- `{day}/reports/` → Generated human reports (not the whole analysis tree)
+- `analysis.json` `data_dir` → Input CSV/GPX
 
 **UI Elements → Data Mapping:**
-- **Report List** → Files in `reports/` directory (filtered by day if specified)
-- **Data Files** → CSV/GPX files from `data_dir` (from `analysis.json`)
-- **File Metadata** → Filesystem `mtime` and `size`
-- **Download Links** → `/api/reports/download?path=<relative_path>`
+- **Reports (.zip)** → Allow-listed files whose names match Density/Flow/Locations/Passes/`finish_times.csv`/`finish_area_demand.pdf`
+- **Data Files (.zip)** → `type=data_file` entries from the analysis data directory
+- **ZIP filename** → `runflow_{run_id}_{day}_{reports|data_files}.zip`
 
 ### Health Page (`/health`)
 
@@ -714,6 +706,11 @@ This section maps each UI page to its API endpoints and underlying artifact sour
 - **Query Params:** `path` (required)
 - **Returns:** File download (Markdown, CSV, Parquet, GeoJSON)
 - **Artifacts Read:** Files from `reports/` or data directory
+
+**`GET /api/reports/export.zip`**
+- **Query Params:** `kind` (`reports` | `data_files`), `run_id` (optional), `day` (optional)
+- **Returns:** ZIP of the Overview Exports allow-list for the selected run/day
+- **Artifacts Read:** Same inventory as `GET /api/reports/list` (filtered; not the whole analysis directory)
 
 ### Locations Endpoints
 
@@ -1223,9 +1220,9 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 
 **Test Coverage:**
 - Analysis submission workflow
-- Day selector functionality
-- UI page rendering (Dashboard, Segments, Density, Flow, etc.)
-- Report generation and download
+- Run-derived day on Plan pages
+- UI page rendering (Overview, Density, Flow, Junctions, Motion, Progression, Locations)
+- Overview ZIP exports
 - Golden file regression testing
 
 **Note:** E2E tests focus on **API → UI** workflows. Artifact → API parity is validated by Contract Tests (Issue #687).
@@ -1250,12 +1247,11 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 
 | UI Page | Primary Endpoint | Additional Endpoints |
 |---------|------------------|---------------------|
-| **Dashboard** | `GET /api/dashboard/summary` | `GET /api/runs/list`, `GET /api/runs/{run_id}/summary` |
-| **Segments** | `GET /api/segments/geojson` | `GET /api/segments/summary` |
-| **Density** | `GET /api/density/segments` | `GET /api/density/segment/{seg_id}`, `GET /api/bins` |
-| **Flow** | `GET /api/flow/segments` | - |
+| **Runs catalog (`/dashboard`)** | `GET /api/dashboard/summary` | `GET /api/runs/list`, `GET /api/runs/{run_id}/summary` |
+| **Overview** | `GET /api/runs/{run_id}/summary` | `GET /api/reports/export.zip`, `GET /api/reports/list` |
+| **Density** | `GET /api/density/segments` | `GET /api/segments/geojson`, `GET /api/density/segment/{seg_id}`, `GET /api/bins` |
+| **Flow** | `GET /api/flow/segments` | `GET /api/flow/segment-parents` |
 | **Locations** | `GET /api/locations` | - |
-| **Reports** | `GET /api/reports/list` | `GET /api/reports/download` |
 | **Health** | `GET /api/health/data` | `GET /api/health` |
 | **Analysis** | `POST /runflow/v2/analyze` | `GET /api/analysis/{run_id}/config`, `GET /api/data/files` |
 | **Create Files** | `POST /api/baseline/create-files` | `GET /api/data/files`, `POST /api/baseline/calculate`, `POST /api/baseline/generate` |
@@ -1265,13 +1261,13 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 | Artifact | API Endpoint | UI Element |
 |----------|--------------|------------|
 | `segment_metrics.json` | `GET /api/dashboard/summary` | Dashboard KPIs (peak density, segments total) |
-| `segment_metrics.json` | `GET /api/segments/geojson` | Segments map (worst_los, peak_density) |
-| `segment_metrics.json` | `GET /api/density/segments` | Density table |
+| `segment_metrics.json` | `GET /api/segments/geojson` | Density course map (worst_los, peak_density) |
+| `segment_metrics.json` | `GET /api/density/segments` | Density Segment Analysis table |
 | `flags.json` | `GET /api/dashboard/summary` | Dashboard (segments_flagged, bins_flagged) |
-| `flags.json` | `GET /api/segments/geojson` | Segments map (is_flagged indicator) |
-| `segments.geojson` | `GET /api/segments/geojson` | Segments map (geometries) |
+| `flags.json` | `GET /api/segments/geojson` | Density course map (is_flagged indicator) |
+| `segments.geojson` | `GET /api/segments/geojson` | Density course map (geometries) |
 | `flow_segments.json` | `GET /api/flow/segments` | Flow table (zones, metrics) |
-| `bins.parquet` | `GET /api/bins` | Density detail view (bin-level data) |
+| `bins.parquet` | `GET /api/bins` | Density flagged-bin modal |
 | `Locations.csv` | `GET /api/locations` | Locations table |
 | `health.json` | `GET /api/health/data` | Health status page |
 

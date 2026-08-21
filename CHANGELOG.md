@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Plan Density absorbs Segments (#888)
+- Plan nav is **Overview · Density · Flow · Junctions · Motion · Progression · Locations** (no Segments, no Reports)
+- Density is the segment workspace: LOS-coloured course map, Segment Analysis table (`ID | Name | Length | Width | Peak Window | LOS`), then selected-segment heatmap + assessment + narrative + LOS reference
+- Map and table share selection; hover highlights without changing selection; flagged bins open in a modal
+- `/segments` redirects to Density; segment APIs, `segments.csv`, and geometry are unchanged
+
+### Plan Overview exports (#891)
+- Overview **Exports** downloads allow-listed Reports and Data Files as ZIPs for the selected run/day (`Reports (.zip)` / `Data Files (.zip)`)
+- `/reports` redirects to Overview; `/api/reports/list` and `/api/reports/download` remain; new `/api/reports/export.zip`
+
+### Plan Flow readability (#890)
+- Flow Overlaps use numeric Segment ID order (`S9` before `S10`)
+- One summary tile per event (Unique Overtakers + Unique Overtaken); two directional matrices kept, with clearer headings
+- Crowding Context is labeled as concurrent occupancy, not overtaking counts
+
+### Plan Motion Q×Q headers
+- Window-detail quintile axes show unique-enter counts per quintile (`Q1 (n)`); cell values remain unique paired runners in the 5-minute window
+
 ### Plan Progression map (#864)
 - Plan nav **Progression** (after Motion) replays the modeled field on the analysis clock
 - Setup + field APIs serve guns, downsampled event GPX, and the whole `runners_snapshot.parquet` pack — v1 paints Front/Tail only
@@ -43,7 +61,7 @@ Race-day Execute (clearance / clock, #863 / #832 / #830) remains a **placeholder
 - Parity vs v2.1.0 golden `7Te3perYQVabto9n9caJqk` (FM2027 10K River Trail): **Flow.csv** and **Locations.csv** exact; bins density correlation ~0.98 (5s sample grid vs continuous km). Density *peak concurrency* in `density_results.json` drops vs v2.1.0 because the old engine treated `pace` as km/h
 
 ### Build / Plan / Execute (#878)
-- Top-level workspaces: **Build** (Legs · Courses · Runners · Packages), **Plan** (run selector + Overview…Reports), **Execute** (placeholder)
+- Top-level workspaces: **Build** (Legs · Courses · Runners · Packages), **Plan** (run selector + Overview…Locations), **Execute** (placeholder)
 - Plan replaces the Results label; a **Run** is still an immutable `run_id` under `runflow/analysis/`
 - Package lives on Overview **Analysis Inputs** (name links to Build → that package), not as a Plan top-nav item
 - Execute has no Locations nav item yet (one location entity; operational projection comes later)

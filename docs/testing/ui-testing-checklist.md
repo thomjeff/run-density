@@ -1,7 +1,7 @@
 # UI Testing Checklist
 
-**Version:** 2.1  
-**Last Updated:** 2025-12-19  
+**Version:** 3.1  
+**Last Updated:** 2026-08-21  
 **Purpose:** Comprehensive UI testing steps for verifying local deployments and issue fixes
 
 This document provides a systematic approach to testing local Docker deployments, ensuring all functionality works correctly after code changes. Use this checklist for local deployment verification and issue resolution testing.
@@ -27,145 +27,71 @@ This document provides a systematic approach to testing local Docker deployments
 
 ## Comprehensive Testing Steps
 
-**Multi-Day Support:** All pages support `?day=sat` and `?day=sun` parameters. Test both scenarios to ensure data switches correctly between days.
+**Run context:** Plan URLs are `run_id`-primary. Day is derived from the selected run (no day dropdown). Do not treat stale `?day=` as the product control.
 
-### 1. ✅ Dashboard Page Verification
+**Retired destinations:** `/segments` must redirect to Density; `/reports` must redirect to Overview (query string preserved).
 
-**URL:** `/dashboard` or `/dashboard?day=sat` or `/dashboard?day=sun`
+### 1. ✅ Runs catalog (`/dashboard`)
+
+**URL:** `/dashboard`
 
 **Verification Steps:**
 - [ ] Page loads without errors
-- [ ] All metrics displaying correctly
-- [ ] Peak Density value matches expected E2E run data
-- [ ] Peak Rate value matches expected E2E run data
-- [ ] Flag counts showing correctly (e.g., "17/28 segments with flags")
-- [ ] No zero values in any metrics
-- [ ] Last updated timestamp matches latest E2E run
-- [ ] All model inputs showing correct participant counts
-- [ ] All model outputs showing proper values
-- [ ] Day selector works correctly (if present)
-- [ ] Data updates when switching between `?day=sat` and `?day=sun`
+- [ ] Recent / all runs list is visible
+- [ ] Choosing a run opens `/overview?run_id=…`
+- [ ] Plan chrome shows **Overview · Density · Flow · Junctions · Motion · Progression · Locations** (no Segments, no Reports)
+
+### 2. ✅ Overview
+
+**URL:** `/overview?run_id={uuid}`
+
+**Verification Steps:**
+- [ ] Analysis Inputs and Analysis Outputs render for the selected run
+- [ ] Package name on Analysis Inputs links to Build → that package
+- [ ] **Exports** shows **Reports (.zip)** and **Data Files (.zip)** (no “Download” prefix)
+- [ ] Reports ZIP contains Density/Flow/Locations/Passes/finish artifacts for the run/day, not the whole analysis tree
+- [ ] Data Files ZIP contains analysis input CSV/GPX
+- [ ] Bookmark `/reports?run_id={uuid}` lands on Overview
+
+### 3. ✅ Density
+
+**URL:** `/density?run_id={uuid}`
+
+**Verification Steps:**
+- [ ] Course map loads with LOS-coloured segments
+- [ ] Segment Analysis columns are `ID | Name | Length | Width | Peak Window | LOS` (no Schema / Peak Density / Peak Rate / Flag columns)
+- [ ] Table height is capped (scrolls; does not consume the full viewport)
+- [ ] Clicking a map segment selects the matching table row and opens assessment
+- [ ] Clicking a table row emphasizes the map segment without aggressive zoom
+- [ ] Hover on map or table highlights the counterpart without changing selection
+- [ ] Selected segment shows LOS + Peak Density, Peak Condition (clock + `0.0–0.2 km` style range), Field Window, supporting Peak Rate / Direction / Events / Flagged bins
+- [ ] Narrative sits under the heatmap/assessment row; compact LOS reference is in the same card below the narrative
+- [ ] **View N flagged bins** opens a modal with KM/time/density/rate/LOS plus the same LOS reference
+- [ ] Heatmap loads from `/heatmaps/analysis/{run_id}/{day}/ui/visualizations/{seg_id}.png`
+- [ ] `/segments?run_id={uuid}` redirects to Density
 
 **Expected Results:**
-- Values vary by day and run_id - check E2E test output for expected values
-- Peak Density: Check latest E2E run output
-- Peak Rate: Check latest E2E run output
-- Total Participants: Check latest E2E run output
-- Segments with Flags: Check latest E2E run output
-- Flagged Bins: Check latest E2E run output
+- Map and table stay in sync
+- Peak Window is the worst-bin clock, not the full occupancy interval
+- Field Window is occupancy first–last
+- Bin details are drill-down only (not a permanent table on the main page)
 
-### 2. ✅ Density Page Verification
+### 4. ✅ Flow
 
-**URL:** `/density` or `/density?day=sat` or `/density?day=sun` or `/density?run_id={uuid}&day=sat`
+**URL:** `/flow?run_id={uuid}`
 
 **Verification Steps:**
-- [ ] Page loads without errors
-- [ ] All flags showing correctly (⚠️ icons)
-- [ ] Flagged segments displaying properly (A1, A2, A3, B1, B2, B3, D1, D2, F1, etc.)
-- [ ] No zero values in density, rate, or utilization columns
-- [ ] Pagination working correctly
-- [ ] Segment data matches E2E run expectations
-- [ ] LOS (Level of Service) ratings displaying correctly
-- [ ] Day selector works correctly (if present)
-- [ ] Data updates when switching between `?day=sat` and `?day=sun`
-- [ ] Run ID parameter works correctly (`?run_id={uuid}`)
+- [ ] Flow Overlaps list Segment IDs in numeric order (`S9` before `S10`; IDs are not renamed to `S09`)
+- [ ] Selected-segment detail shows one tile per event with Unique Overtakers and Unique Overtaken together
+- [ ] Two directional matrices remain, with headings **Who this event overtakes →** and **← Who overtakes this event**
+- [ ] Crowding Context copy identifies concurrent occupancy, not overtaking counts
+- [ ] Tile uniques are unions (do not expect matrix cells to sum to the tile)
 
-**Segment Detail Testing:**
-- [ ] Click on any segment row to open detailed view
-- [ ] Verify heatmap image loads correctly from `/heatmaps/{run_id}/{day}/ui/heatmaps/{seg_id}.png`
-- [ ] Confirm segment data matches E2E run (check latest E2E output for expected values)
-- [ ] Verify bin-level details showing
-- [ ] Confirm no zero values in bin data
-- [ ] Verify heatmap timestamp matches latest E2E run
-- [ ] Test with both `?day=sat` and `?day=sun` parameters
+### 5. ✅ Other Plan views (smoke)
 
-**Expected Results:**
-- All flagged segments show ⚠️ icons
-- Heatmaps display correctly (served via static file mount at `/heatmaps/`)
-- Bin data shows proper density and rate values
-- No missing or zero values
-- Values vary by day - check E2E test output for expected values per day
-
-### 3. ✅ Reports Page Verification
-
-**URL:** `/reports`
-
-**Verification Steps:**
-- [ ] Page loads without errors
-- [ ] Reports list displays correctly
-- [ ] Most recent reports from latest E2E run visible
-- [ ] Report timestamps match E2E run completion time
-- [ ] Both Flow.csv and Density.md reports present
-- [ ] Report file sizes reasonable (not zero)
-- [ ] Download links working correctly
-- [ ] Reports organized by run_id and day (if multi-day run)
-
-**Expected Reports (from latest E2E run):**
-- Reports are in `runflow/{run_id}/{day}/reports/` directory
-- Check latest E2E run output for actual report filenames and sizes
-- Typical reports: `Flow.csv`, `Flow.md`, `Density.md`, `Locations.csv`
-- **Example (Run cyvCJ8CCpuepAhe8gkt3nZ):**
-  - SAT: Density.md (5.8K), Flow.csv (3.8K), Flow.md (13K), Locations.csv (2.1K)
-  - SUN: Density.md (110K), Flow.csv (13K), Flow.md (41K), Locations.csv (18K)
-
-**Download Testing:**
-Download the following reports created from your E2E test:
-- [ ] Download Flow.csv successfully (both SAT and SUN)
-- [ ] Download Flow.md successfully (both SAT and SUN)
-- [ ] Download Density.md successfully (both SAT and SUN)
-- [ ] Download Locations.csv successfully (both SAT and SUN)
-- [ ] Verify downloaded files contain expected content
-- [ ] Verify reports are accessible via `/api/reports/download?path=runflow/{run_id}/{day}/reports/{filename}`
-- [ ] Verify file sizes match expected values (SUN reports typically larger than SAT)
-
-### 4. ✅ Flow Page Verification
-
-**URL:** `/flow` or `/flow?day=sat` or `/flow?day=sun` or `/flow?run_id={uuid}&day=sat`
-
-**Verification Steps:**
-- [ ] Page loads without errors
-- [ ] All segments displaying in table
-- [ ] Flow analysis data showing correctly
-- [ ] No zero values or N/A in any columns
-- [ ] Flow types working (overtake, parallel, counterflow)
-- [ ] Percentages and counts displaying properly
-- [ ] Total summary showing correct counts
-- [ ] Day selector works correctly (if present)
-- [ ] Data updates when switching between `?day=sat` and `?day=sun`
-- [ ] Run ID parameter works correctly (`?run_id={uuid}`)
-
-**Expected Results:**
-- All segments showing proper flow data
-- Values vary by day and run_id - check E2E test output for expected values
-- No missing or zero values
-- Segment count matches E2E run output
-
-### 5. ✅ Segments Page Verification
-
-**URL:** `/segments`
-
-**Verification Steps:**
-- [ ] Page loads without errors
-- [ ] Interactive map initializing correctly
-- [ ] All segments displayed in metadata table
-- [ ] Segment details showing properly:
-  - Length (km)
-  - Width (m)
-  - Direction (uni/bi)
-  - Events (Full, Half, 10K)
-  - LOS ratings
-- [ ] No zero values in segment metadata
-- [ ] Map controls working (zoom in/out)
-- [ ] Segment descriptions displaying correctly
-- [ ] Heatmap preview works when selecting segments (if available)
-- [ ] GeoJSON data loads correctly from `/api/segments/geojson`
-
-**Expected Results:**
-- Interactive map loads with all segments
-- Complete segment metadata for all segments
-- Proper LOS ratings (A, B, C, D)
-- No missing or zero values
-- Segment count matches E2E run output
+- [ ] Junctions, Motion, Progression, and Locations load for the selected run
+- [ ] Motion Q×Q headers show unique-enter counts where the window detail is open
+- [ ] Progression map/legend/wallboard follow earliest modeled start
 
 ### 6. ✅ Health Check Page Verification
 
@@ -191,6 +117,7 @@ Download the following reports created from your E2E test:
 - `/api/flow/segments` - 🟢 Up (supports `?day=` and `?run_id=` parameters)
 - `/api/reports/list` - 🟢 Up
 - `/api/reports/download` - 🟢 Up
+- `/api/reports/export.zip` - 🟢 Up
 - `/api/bins/*` - 🟢 Up (if used by frontend)
 - `/runflow/v2/analyze` - 🟢 Up (v2 API endpoint)
 
@@ -199,7 +126,7 @@ Download the following reports created from your E2E test:
 ## Data Validation Checks
 
 ### Heatmap Verification
-- [ ] Heatmaps load from `/heatmaps/{run_id}/{day}/ui/heatmaps/{seg_id}.png` (static file serving)
+- [ ] Heatmaps load from `/heatmaps/analysis/{run_id}/{day}/ui/visualizations/{seg_id}.png` (static file serving)
 - [ ] Heatmap images display correctly without errors
 - [ ] Heatmap timestamp matches latest E2E run
 - [ ] Bin-level details show proper data
@@ -211,10 +138,10 @@ Download the following reports created from your E2E test:
   - SUN: 20 heatmaps (all segments with flagged bins)
 
 ### Report Verification
-- [ ] Reports generated from latest E2E run
+- [ ] Overview **Reports (.zip)** / **Data Files (.zip)** download for the selected run/day
+- [ ] ZIP contents match the allow-list (not every file under the run directory)
 - [ ] Report timestamps match CI completion
 - [ ] File sizes reasonable and non-zero
-- [ ] Download functionality working
 
 ### Data Consistency
 - [ ] No zero values in any metrics
@@ -222,7 +149,7 @@ Download the following reports created from your E2E test:
 - [ ] All segments showing proper data
 - [ ] Flag counts consistent across pages
 - [ ] Run ID consistent across all API calls
-- [ ] Day parameter works consistently across all pages
+- [ ] Selected run's day is used consistently (run-derived, not a Plan day dropdown)
 
 ---
 
@@ -291,8 +218,9 @@ curl -s http://localhost:8080/api/segments/geojson | jq .
 # Latest run_id
 docker exec run-density-dev cat /app/runflow/latest.json | jq .
 
-# List reports
-curl -s http://localhost:8080/api/reports/list | jq .
+# List reports / export ZIP
+curl -s "http://localhost:8080/api/reports/list?run_id={uuid}" | jq .
+curl -sI "http://localhost:8080/api/reports/export.zip?kind=reports&run_id={uuid}&day=sun"
 
 ---
 
@@ -300,12 +228,11 @@ curl -s http://localhost:8080/api/reports/list | jq .
 
 A deployment is considered successful when:
 
-- ✅ All 6 pages load without errors
-- ✅ All flags displaying correctly on Density page
-- ✅ A1 heatmap loads and displays correctly
-- ✅ Reports from latest E2E run available and downloadable
-- ✅ Flow page shows all 28 segments with proper data
-- ✅ No zero values or N/A in any data
+- ✅ Plan pages load without errors (Overview, Density, Flow, Junctions, Motion, Progression, Locations)
+- ✅ `/segments` and `/reports` redirect
+- ✅ Density map/table selection stays in sync; flagged bins open in a modal
+- ✅ Overview ZIP exports download
+- ✅ Flow Segment IDs sort numerically
 - ✅ Health check shows all systems operational
 - ✅ No console errors or visual issues
 - ✅ All API endpoints responding correctly
@@ -319,16 +246,15 @@ A deployment is considered successful when:
 - Always verify core functionality remains intact
 - Check that latest run_id is consistent across all APIs
 - Verify heatmaps and reports are in correct locations (`runflow/<uuid>/<day>/`)
-- Test both `?day=sat` and `?day=sun` scenarios
+- Test `?run_id={uuid}` on Plan pages; day is run-derived
 - Verify `?run_id={uuid}` parameter works when specified
 
 ### URL Parameter Testing
 - [ ] Test pages with `?run_id={uuid}` parameter
-- [ ] Test pages with `?day=sat` parameter
-- [ ] Test pages with `?day=sun` parameter
-- [ ] Test pages with both `?run_id={uuid}&day=sat`
+- [ ] Day comes from the run (chrome / localStorage), not a Plan day dropdown
+- [ ] `/segments?run_id={uuid}` redirects to Density
+- [ ] `/reports?run_id={uuid}` redirects to Overview
 - [ ] Verify fallback to latest run_id when not specified
-- [ ] Verify day parameter defaults correctly when not specified
 
 ---
 
@@ -360,22 +286,13 @@ This checklist should be updated when:
 - New error patterns are discovered
 - Docker configuration changes
 
-**Last Updated:** 2025-12-19  
-**Updated By:** AI Assistant (Issue #544 Phase 3B - E2E Test Review)  
-**Changes in v2.1:**
-- Added multi-day support testing (`?day=sat` and `?day=sun` parameters)
-- Updated API endpoints list (added `/api/health/data`, `/api/segments/geojson`, `/api/density/segment/{seg_id}`, etc.)
-- Updated heatmap verification (static file serving via `/heatmaps/` mount)
-- Made expected results day-agnostic (reference E2E test output)
-- Added URL parameter testing section
-- Fixed path references to include day subdirectory (`runflow/<uuid>/<day>/`)
-- Updated API testing commands with day and run_id parameters
-
-**Changes in v2.2 (2025-12-19):**
-- Added Locations.csv to expected reports list
-- Added file size examples from Run cyvCJ8CCpuepAhe8gkt3nZ
-- Added heatmap count expectations (SAT: 6, SUN: 20)
-- Updated download testing to include Locations.csv
-- Added note about SUN reports typically being larger than SAT
+**Last Updated:** 2026-08-21  
+**Updated By:** Alignment with Plan UI (#888, #890, #891)  
+**Changes in v3.1:**
+- Plan nav no longer includes Segments or Reports
+- Density is the segment workspace (map + table + assessment + bin modal)
+- Overview Exports replace the Reports page
+- Flow numeric Segment ID order and combined event tiles
+- Run-derived day; `/segments` and `/reports` redirects
 
 **Next Review:** When new testing requirements are identified

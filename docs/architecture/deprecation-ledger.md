@@ -33,7 +33,10 @@ Update this file in the same PR that changes disposition or removes a module.
 | `app/core/reports/density/*` | **LIVE** canonical | v2 reports, `save_bins`, façade | **keep** | Phase 6 ✓ | Public API in package `__init__` | — |
 | `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin | Phase 6 / 9 ✓ | Hotspot helpers → `app.core.bin.hotspots` | — |
 | `app/flow_report.py` | **LIVE** | v2 `generate_flow_report_v2` | **keep** | — | Flow.md path deprecated; CSV kept | — |
-| `app/routes/reports.py` | ~~Empty router~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Frontend uses `api_reports` | Phase 1 |
+| `GET /segments` HTML | Redirect to Density | Density course map | **keep** redirect | #888 | Segment APIs/`segments.csv` stay | — |
+| `GET /reports` HTML | Redirect to Overview | Overview Exports | **keep** redirect | #891 | `/api/reports/*` stay | — |
+| `frontend/templates/pages/segments.html` | Unused template | — | **remove** when confirmed unused | after #888 | Route no longer renders it | — |
+| `frontend/templates/pages/reports.html` | Unused template | — | **remove** when confirmed unused | after #891 | Route no longer renders it | — |
 | `app/routes/api_flow.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.flow` | Phase 1 |
 | `app/routes/api_bidirectional.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.bidirectional` | Phase 1 |
 | `app/core/flow/flow.py` `_ShardWriter` | ~~Unused~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
