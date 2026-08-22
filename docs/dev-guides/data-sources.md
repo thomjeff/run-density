@@ -137,6 +137,14 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - Contract: Verify API JSON matches the computation JSON
    - E2E: Verify locations table displays correctly
 
+**Example 5b: Execute board (Issue #893)**
+1. **Artifacts:**
+   - `{day}/computation/locations_report.json` → Planned locations (read-only; `loc_end`, resources, `proxy_loc_id`)
+   - `{day}/execution/state.json` → Operator clock, reopened rows, activity log
+2. **API:** `GET /api/execute/board`, `PUT /api/execute/clock`, `POST /api/execute/reopen`
+3. **UI:** Execute → Race day board (no map on the main screen)
+4. **Tests:** column windowing, gun-shift overlay, reopen persistence, duplicate 409
+
 **Example 6: Overview ZIP exports (Issue #891)**
 1. **Artifacts:**
    - `{day}/reports/` → Human reports (`Density.md`, `Flow.csv`, `Locations.csv`, `Passes.csv`, `finish_times.csv`, `finish_area_demand.pdf`)
@@ -563,6 +571,23 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - **Flag Column** → Boolean on each location row
 - **Linked / proxy locations** → `proxy_loc_id` (human) and `proxy_pass_id` (pass instance)
 
+### Execute Page (`/execute`)
+
+**API Endpoints:**
+- `GET /api/execute/board` — merged Plan locations + execution state
+- `PUT /api/execute/clock` — accept/override guns, pause, jump to now
+- `POST /api/execute/reopen` — confirm primary + selected linked locations
+
+**Artifact Sources:**
+- `{day}/computation/locations_report.json` → read-only planned `loc_end`, resources, proxies
+- `{day}/execution/state.json` → operator clock, `reopened_at`, activity (Issue #893)
+
+**UI Elements → Data Mapping:**
+- **Closed / Reopen next / Reopened** → board columns; Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
+- **Strip time** → display `loc_end` (gun-shift overlay; never overwrite Plan)
+- **Linked locations** → reverse-index of `proxy_loc_id`
+- **Activity log** → `activity` array on execution JSON
+
 ### Overview Exports
 
 Standalone Reports UI is retired (Issue #891). `GET /reports` redirects to Overview. Download infrastructure stays under `/api/reports/*`.
@@ -724,6 +749,28 @@ Standalone Reports UI is retired (Issue #891). `GET /reports` redirects to Overv
 - **Artifacts Read:** `computation/locations_report.json` (required), `computation/locations_results.json` (`onepage` / `resources_available`)
 - **Not read:** `reports/Locations.csv` (export only; Issue #894)
 
+### Execute Endpoints
+
+**`GET /api/execute/board`**
+- **Query Params:** `run_id` (required), `day` (optional)
+- **Returns:** Three-column board (closed / reopen_next / reopened) merged from locations JSON + execution state
+- **Artifacts Read:** `{day}/computation/locations_report.json`, `{day}/execution/state.json`
+
+**`GET /api/execute/state`**
+- **Query Params:** `run_id` (required), `day` (optional)
+- **Returns:** Execution JSON as stored
+- **Artifacts Read:** `{day}/execution/state.json`
+
+**`PUT /api/execute/clock`**
+- **Query Params:** `run_id` (required), `day` (optional)
+- **Body:** `guns`, `guns_accepted`, `paused`, `jump_to_now`
+- **Artifacts Written:** `{day}/execution/state.json` via `write_json`
+
+**`POST /api/execute/reopen`**
+- **Query Params:** `run_id` (required), `day` (optional)
+- **Body:** `loc_id`, `linked_loc_ids`
+- **Artifacts Written:** `{day}/execution/state.json` (`reopened_at`, `operator: null`, activity)
+
 ### Health Endpoints
 
 **`GET /api/health/data`**
@@ -772,6 +819,7 @@ All artifacts are organized under `runflow/analysis/<run_id>/<day>/`:
 │   ├── bins/ (bins.parquet)
 │   ├── audit/ (audit_<day>.parquet) - if enabled
 │   ├── computation/ (locations_report.json, locations_results.json)
+│   ├── execution/ (state.json — Issue #893 operator actions)
 │   ├── metadata.json (day-level metadata)
 │   └── ui/
 │       ├── metadata/ (meta.json, schema_density.json, health.json)

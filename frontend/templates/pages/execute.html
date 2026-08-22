@@ -2,24 +2,94 @@
 
 {% block title %}Execute{% endblock %}
 
-{% block content %}
-<div class="page-header">
-    <h2>Execute</h2>
-    <p class="rf-tabler-runs-lead" style="display:block; margin:0.35rem 0 0; color:#667382; font-size:0.9rem; max-width:42rem;">
-        Race-day operations will live here. This workspace is a placeholder so Build and Plan keep their current meaning.
-    </p>
-</div>
+{% block extra_styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="/static/css/execute_board.css?v=893g">
+{% endblock %}
 
-<div class="card" style="margin-bottom: 1.25rem;">
-    <h3 style="margin-bottom: 0.75rem;">Race day (coming later)</h3>
-    <p style="margin-bottom: 0.75rem; color: #667382; max-width: 44rem;">
-        Execute will project the <strong>same Location entity</strong> used in Build — not a second kind of location —
-        with run/event context, assigned resources, and opening/closing state.
-        Until that ops view exists, use <strong>Plan → Locations</strong> for analysis timings on a selected Run.
-    </p>
-    <p style="margin-bottom: 0; color: #667382; max-width: 44rem;">
-        Reserved operational states (not built in this release):
-        Planned → Ready → Open → Last runner approaching → Clear → Reopened.
-    </p>
+{% block content %}
+<div id="rf-execute-page" class="rf-execute-page">
+    <div class="page-header">
+        <h2>Execute</h2>
+    </div>
+
+    <div id="rf-execute-empty" class="rf-execute-empty-page" hidden>
+        <h3>Select a run</h3>
+        <p>Execute always uses a Plan analysis. Pick a run from <strong>Runs</strong> to open the race-day board.</p>
+    </div>
+
+    <div id="rf-execute-error" class="rf-execute-error" hidden>
+        <h3>Execute is not ready</h3>
+        <p></p>
+    </div>
+
+    <div id="rf-execute-workspace" hidden>
+        <div class="rf-execute-toolbar">
+            <div class="rf-execute-clock" aria-live="polite">
+                <span id="rf-execute-clock-time" class="rf-execute-clock-time">—</span>
+                <span id="rf-execute-clock-tz" class="rf-execute-clock-tz"></span>
+            </div>
+            <div class="rf-execute-clock-actions">
+                <button type="button" class="btn btn-sm" id="rf-execute-pause" aria-pressed="false">Pause</button>
+                <button type="button" class="btn btn-sm" id="rf-execute-jump">Jump to now</button>
+            </div>
+            <input type="search" id="rf-execute-search" class="form-control rf-execute-search" placeholder="Search ID, name, resource" aria-label="Search locations">
+            <div id="rf-execute-counts" class="rf-execute-counts"></div>
+        </div>
+
+        <div id="rf-execute-guns" class="rf-execute-guns" hidden></div>
+
+        <div id="rf-execute-board" class="rf-execute-board">
+            <section class="rf-execute-col" data-col="closed">
+                <header class="rf-execute-col-head">
+                    <span>Closed</span>
+                    <span class="rf-execute-col-count">0</span>
+                </header>
+                <div class="rf-execute-col-body"></div>
+            </section>
+            <section class="rf-execute-col" data-col="reopen_next">
+                <header class="rf-execute-col-head">
+                    <div>
+                        <span>Reopen next</span>
+                        <p class="rf-execute-col-hint">Clock suggests order. Radio decides.</p>
+                    </div>
+                    <span class="rf-execute-col-count">0</span>
+                </header>
+                <div class="rf-execute-col-body"></div>
+            </section>
+            <section class="rf-execute-col" data-col="reopened">
+                <header class="rf-execute-col-head">
+                    <span>Reopened</span>
+                    <span class="rf-execute-col-count">0</span>
+                </header>
+                <div class="rf-execute-col-body"></div>
+            </section>
+        </div>
+
+        <details class="rf-execute-log">
+            <summary>Activity log</summary>
+            <div id="rf-execute-log-body" class="rf-execute-log-body"></div>
+        </details>
+    </div>
+
+    <div id="rf-execute-map-modal" class="rf-execute-map-modal" hidden>
+        <div class="rf-execute-map-backdrop" data-map-close="1"></div>
+        <div class="rf-execute-map-panel" role="dialog" aria-modal="true" aria-labelledby="rf-execute-map-title">
+            <div class="rf-execute-map-header">
+                <h3 class="rf-execute-map-title" id="rf-execute-map-title">Location</h3>
+                <button type="button" class="btn btn-sm" id="rf-execute-map-close" data-map-close="1">Close</button>
+            </div>
+            <div class="rf-execute-map-body">
+                <div id="rf-execute-map" class="rf-execute-map"></div>
+                <p id="rf-execute-map-empty" class="text-secondary small mb-0" hidden>No map coordinates for this location.</p>
+            </div>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/execute_board.js?v=893g"></script>
 {% endblock %}

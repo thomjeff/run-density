@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Execute race-day board (#893)
+- Switching Plan → Execute now opens the selected analysis, not a stale last-Execute URL; the Runs dropdown also loads on Execute
+- Execute is a three-column stand-down board (Closed / Reopen next / Reopened) on the selected Plan run
+- Reopen next follows the clock: overdue `loc_end` plus the next 15 minutes (before the first estimate it previews that earliest cluster); time never auto-reopens a location
+- Operator actions persist in `{day}/execution/state.json` via API `write_json` (operator is `null`)
+- Live Halifax clock with Pause / Jump to now; planned guns can be accepted or overridden (display `loc_end` shifts, Plan is not re-run)
+- Linked traffic rows come from Build `proxy_loc_id` reverse-index
+
 ### Plan Locations JSON store (#894 / #895)
 - Analysis writes `{day}/computation/locations_report.json` (computed location-centric rows)
 - `GET /api/locations` reads that JSON; it no longer converts `Locations.csv`
