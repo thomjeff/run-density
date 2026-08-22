@@ -25,6 +25,7 @@ from pyproj import Transformer
 from app.io.loader import load_locations, load_runners, load_segments
 from app.core.gpx.processor import load_all_courses, GPXCourse
 from app.core.trajectory.crossing import arrival_at_km
+from app.core.locations.report_json import authored_proxy_pass_id
 from app.utils.constants import (
     LOCATION_SNAP_THRESHOLD_M,
     LOCATION_SEGMENT_CLAMP_M,
@@ -871,6 +872,39 @@ def calculate_arrival_times_for_location(
     return arrivals_by_event
 
 
+def _write_computed_locations_json(
+    location_rows: List[Dict[str, Any]],
+    *,
+    run_id: Optional[str],
+    day: Optional[str],
+    output_dir: str,
+) -> Optional[Path]:
+    """Persist location-centric JSON for GET /api/locations (Issues #894 / #895)."""
+    from app.core.locations.report_json import (
+        LOCATIONS_REPORT_FILENAME,
+        build_locations_report_document,
+        computation_dir_for_report,
+        write_locations_report_json,
+    )
+
+    computation_dir = computation_dir_for_report(
+        run_id=run_id, day=day, output_dir=output_dir
+    )
+    if computation_dir is None:
+        logger.debug("Skipping locations_report.json (no computation dir)")
+        return None
+    document = build_locations_report_document(
+        run_id=run_id,
+        day=day,
+        locations=location_rows,
+    )
+    path = write_locations_report_json(
+        computation_dir / LOCATIONS_REPORT_FILENAME, document
+    )
+    logger.info("Locations report JSON saved to: %s", path)
+    return path
+
+
 def generate_location_report(
     locations_csv: str,
     runners_csv: str,
@@ -998,6 +1032,8 @@ def generate_location_report(
             "loc_end": None,
             "duration": None,
             "timing_source": "modeled",
+            "proxy_pass_id": authored_proxy_pass_id(location),
+            "proxy_loc_id": None,
             "notes": location.get("notes", ""),
             "flag": False,
             "flagged_seg_id": None,
@@ -1393,6 +1429,11 @@ def generate_location_report(
                 mins_value = count_value * duration_minutes
                 report_row[mins_col] = int(mins_value) if mins_value >= 0 else 0
     
+    # Resolve human proxy_loc_id from authored proxy_pass_id (Issues #894 / #895)
+    from app.core.locations.report_json import attach_resolved_proxies
+
+    attach_resolved_proxies(report_rows)
+
     # Annotate paired passes; write Passes.csv (instance) + Locations.csv (consolidated)
     from app.core.locations.pairing import (
         annotate_location_passes,
@@ -1413,6 +1454,8 @@ def generate_location_report(
         "by_event",
         "loc_start", "loc_end", "duration",
         "timing_source",
+        "proxy_pass_id",
+        "proxy_loc_id",
         # legacy aliases kept at end of base for importers mid-cutover
         "location_key", "same_location_as",
     ]
@@ -1444,6 +1487,9 @@ def generate_location_report(
     for rec in pass_records:
         rec["by_event"] = parse_by_event(rec.get("by_event"))
     location_rows = consolidate_location_rows(pass_records)
+    _write_computed_locations_json(
+        location_rows, run_id=run_id, day=day, output_dir=output_dir
+    )
     for rec in location_rows:
         rec["by_event"] = serialize_by_event(rec.get("by_event"))
     locations_df_out = pd.DataFrame(location_rows)
@@ -1452,6 +1498,7 @@ def generate_location_report(
         "loc_type", "lat", "lon", "zone",
         "first_runner", "last_runner", "loc_start", "loc_end",
         "peak_start", "peak_end", "by_event", "flag", "onepage", "notes",
+        "proxy_pass_id", "proxy_loc_id",
     ]
     loc_counts = sorted([c for c in locations_df_out.columns if c.endswith("_count") or c.endswith("_mins")])
     loc_cols = [c for c in loc_base + loc_counts if c in locations_df_out.columns]

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Plan Locations JSON store (#894 / #895)
+- Analysis writes `{day}/computation/locations_report.json` (computed location-centric rows)
+- `GET /api/locations` reads that JSON; it no longer converts `Locations.csv`
+- Computed rows include Build proxy ids: `proxy_pass_id` (timing-source pass) and `proxy_loc_id` (human Location id)
+- CSV `Locations.csv` / `Passes.csv` remain exports and now also carry the proxy columns
+- Existing runs need a new analysis to produce the JSON (API 404 until then)
+
 ### Plan Density absorbs Segments (#888)
 - Plan nav is **Overview · Density · Flow · Junctions · Motion · Progression · Locations** (no Segments, no Reports)
 - Density is the segment workspace: LOS-coloured course map, Segment Analysis table (`ID | Name | Length | Width | Peak Window | LOS`), then selected-segment heatmap + assessment + narrative + LOS reference
