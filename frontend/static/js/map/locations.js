@@ -674,6 +674,30 @@ async function renderLocations(map) {
 }
 
 /**
+ * Execute strip links land on Plan Locations with ?loc_id= (Issue #893).
+ */
+function focusLocationFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const locId = (params.get("loc_id") || "").trim();
+    if (!locId) return;
+    if (typeof filterMapToLocation === "function") {
+        filterMapToLocation(locId);
+    }
+    function highlightWhenTableReady(tries) {
+        const rows = document.querySelectorAll("#locations-table tbody tr");
+        if (rows.length) {
+            highlightLocationInTable(locId);
+            return;
+        }
+        if (tries <= 0) return;
+        setTimeout(function () {
+            highlightWhenTableReady(tries - 1);
+        }, 200);
+    }
+    highlightWhenTableReady(15);
+}
+
+/**
  * Filter map to show only the selected location
  * @param {number|string} locId - ID of the location to show
  */
@@ -984,6 +1008,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Make table interaction functions globally available
         window.highlightLocationInTable = highlightLocationInTable;
         window.clearLocationTableHighlight = clearLocationTableHighlight;
+
+        focusLocationFromQuery();
         
         // Add event listeners for map pan/zoom to filter table
         map.on('moveend', debouncedFilterTableByMapBounds);

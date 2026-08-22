@@ -52,7 +52,7 @@
                                 <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="execute">Execute</a>
                             </div>
                         </li>
-                        <li class="nav-item dropdown rf-results-chrome" id="rf-runs-dropdown">
+                        <li class="nav-item dropdown rf-results-chrome rf-execute-runs-chrome" id="rf-runs-dropdown">
                             <a class="nav-link dropdown-toggle rf-runs-toggle{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="#" id="rf-runs-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                 <span id="rf-runs-trigger-label">Runs</span>
                             </a>
@@ -303,7 +303,10 @@
         }
 
         function lastExecutePath() {
-            return (localStorage.getItem(WS_LAST_EXECUTE) || "").trim() || DEFAULT_EXECUTE_PATH;
+            const runId = (localStorage.getItem("selected_run_id") || "").trim();
+            return runId
+                ? ("/execute?run_id=" + encodeURIComponent(runId))
+                : DEFAULT_EXECUTE_PATH;
         }
 
         function applyWorkspaceChrome(ws) {
@@ -312,6 +315,10 @@
             const isExecute = target === "execute";
             const isPlan = target === "plan";
             document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
+                if (el.id === "rf-runs-dropdown") {
+                    el.hidden = !(isPlan || isExecute);
+                    return;
+                }
                 if (!isPlan) {
                     el.hidden = true;
                 } else if (el.classList.contains("rf-tabler-run-view-link")) {
@@ -446,6 +453,10 @@
                     el.hidden = true;
                     return;
                 }
+                if (el.id === "rf-runs-dropdown") {
+                    el.hidden = !(onPlan || onExecute);
+                    return;
+                }
                 el.hidden = !onPlan;
             });
             document.querySelectorAll(".rf-build-chrome").forEach(function (el) {
@@ -459,7 +470,7 @@
 
             if (!hasRun) {
                 if (trigger) trigger.textContent = "Runs";
-                if (onPlan) refreshRunsDropdown(null);
+                if (onPlan || onExecute) refreshRunsDropdown(null);
                 applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
                 return;
             }
@@ -472,7 +483,7 @@
             } catch (e) { /* ignore */ }
 
             if (trigger) trigger.textContent = formatRunsTriggerLabel(label, id, day);
-            if (onPlan) refreshRunsDropdown(id);
+            if (onPlan || onExecute) refreshRunsDropdown(id);
             applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
         }
 
@@ -584,7 +595,8 @@
                 try { sessionStorage.setItem("rf_run_label_" + runId, label); } catch (e) { /* ignore */ }
             }
             localStorage.setItem("selected_run_id", runId);
-            setStoredWorkspace("plan");
+            const stayOnExecute = isExecuteRoutePath(window.location.pathname)
+                || getStoredWorkspace() === "execute";
             fetch("/api/runs/" + encodeURIComponent(runId) + "/summary", { credentials: "same-origin" })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
@@ -592,11 +604,26 @@
                     // Issue #841: day from run only — do not carry ?day= in Results nav
                     const day = days.length ? String(days[0]).toLowerCase() : null;
                     if (day) localStorage.setItem("selected_day", day);
+                    if (stayOnExecute) {
+                        const dest = "/execute?run_id=" + encodeURIComponent(runId);
+                        setStoredWorkspace("execute");
+                        rememberWorkspaceRoute("execute", dest);
+                        window.location.href = dest;
+                        return;
+                    }
+                    setStoredWorkspace("plan");
                     const dest = "/overview?run_id=" + encodeURIComponent(runId);
                     rememberWorkspaceRoute("plan", dest);
                     window.location.href = dest;
                 })
                 .catch(function () {
+                    if (stayOnExecute) {
+                        const dest = "/execute?run_id=" + encodeURIComponent(runId);
+                        setStoredWorkspace("execute");
+                        rememberWorkspaceRoute("execute", dest);
+                        window.location.href = dest;
+                        return;
+                    }
                     const dest = "/overview?run_id=" + encodeURIComponent(runId);
                     rememberWorkspaceRoute("plan", dest);
                     window.location.href = dest;
@@ -609,7 +636,9 @@
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
                 if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
                 if (a.getAttribute("data-rf-execute-view")) {
-                    a.setAttribute("href", "/execute");
+                    let href = "/execute";
+                    if (runId) href = setQueryParam(href, "run_id", runId);
+                    a.setAttribute("href", href);
                     return;
                 }
                 if (a.classList.contains("dropdown-toggle") || a.classList.contains("dropdown-item")) return;
@@ -725,10 +754,21 @@
 
             if (isExecuteRoutePath(window.location.pathname)) {
                 setStoredWorkspace("execute");
+                const params = new URLSearchParams(window.location.search);
+                const urlRun = (params.get("run_id") || "").trim();
+                const storedRun = (urlRun || localStorage.getItem("selected_run_id") || "").trim() || null;
+                if (storedRun) localStorage.setItem("selected_run_id", storedRun);
+                if (storedRun && params.get("run_id") !== storedRun) {
+                    params.set("run_id", storedRun);
+                    window.history.replaceState(
+                        {},
+                        "",
+                        window.location.pathname + "?" + params.toString()
+                    );
+                }
                 rememberWorkspaceRoute("execute");
                 applyWorkspaceChrome("execute");
                 const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
-                const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
                 updateNavLinks(day, storedRun);
                 announceRunflowContextReady(storedRun, day);
                 return;

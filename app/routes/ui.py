@@ -345,10 +345,10 @@ async def progression(request: Request):
 @router.get("/execute", response_class=HTMLResponse)
 async def execute(request: Request):
     """
-    Execute workspace placeholder (Issue #878).
+    Execute race-day reopening board (Issue #893).
 
-    Race-day ops chrome only — no Locations view yet, so Build Locations
-    and Plan Locations remain the only location UIs.
+    Requires a Plan run_id. Planning data is read-only; operator actions
+    persist in {day}/execution/state.json.
     """
     auth_redirect = require_auth(request)
     if auth_redirect:

@@ -48,14 +48,24 @@ def test_plan_chrome_has_no_package_top_nav(base_source: str):
     ).read_text(encoding="utf-8")
 
 
-def test_execute_placeholder_has_no_locations_nav(base_source: str):
+def test_execute_uses_selected_run_and_loads_runs_dropdown(base_source: str):
+    assert "function lastExecutePath()" in base_source
+    assert '("/execute?run_id=" + encodeURIComponent(runId))' in base_source
+    assert "if (onPlan || onExecute) refreshRunsDropdown" in base_source
+    assert 'el.id === "rf-runs-dropdown"' in base_source
+
+
+def test_execute_board_has_three_columns(base_source: str):
     assert 'href="/execute"' in base_source
     assert "rf-execute-chrome" in base_source
     assert 'data-rf-execute-view="1"' in base_source
     execute = EXECUTE.read_text(encoding="utf-8")
-    assert "placeholder" in execute.lower() or "coming later" in execute.lower()
-    assert "Plan → Locations" in execute
-    # Execute landing must not add a second Locations object/UI
+    assert 'id="rf-execute-board"' in execute
+    assert 'data-col="closed"' in execute
+    assert 'data-col="reopen_next"' in execute
+    assert 'data-col="reopened"' in execute
+    assert "Clock suggests order. Radio decides." in execute
+    # Map stays off the main Execute screen; strip links are JS-built
     assert 'href="/locations"' not in execute
 
 
