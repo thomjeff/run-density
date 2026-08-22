@@ -11,14 +11,13 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from typing import Dict, Any, Optional
 import logging
-import os
-from pathlib import Path
 
-from app.location_report import generate_location_report
+from app.location_report import parse_by_event
 from app.utils.run_id import get_latest_run_id
 from app.storage import create_runflow_storage
 from app.utils.env import env_bool
 from app.utils.auth import is_session_valid
+from app.core.locations.report_json import locations_report_relpath
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -63,6 +62,19 @@ def _merge_onepage_into_report_rows(
         row["onepage"] = onepage_by_id.get(key, "n")
 
 
+def _normalize_location_api_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Coerce flag / by_event for the Locations UI without reading CSV."""
+    if "by_event" in row:
+        row["by_event"] = parse_by_event(row.get("by_event"))
+    if "flag" in row:
+        flag = row.get("flag")
+        if isinstance(flag, bool):
+            row["flag"] = flag
+        else:
+            row["flag"] = str(flag).strip().lower() in ("true", "1", "y", "yes")
+    return row
+
+
 @router.get("/api/locations")
 async def get_locations_report(
     request: Request,
@@ -71,18 +83,10 @@ async def get_locations_report(
     generate: bool = Query(False, description="Generate new report if not exists")
 ) -> JSONResponse:
     """
-    Get locations report data.
-    
-    Issue #277: Returns location report as JSON. Issue #745: each row may include
-    ``onepage`` (y|n) from ``locations_results.json`` for loc sheet link eligibility.
-    
-    Args:
-        run_id: Optional run ID (defaults to latest)
-        day: Optional day code (fri|sat|sun|mon) for day-scoped data
-        generate: Whether to generate report if not found
-        
-    Returns:
-        JSON response with location report data
+    Get locations report data from computed JSON (Issues #894 / #895).
+
+    Artifact: ``{day}/computation/locations_report.json``. CSV remains an export only.
+    Issue #745: each row may include ``onepage`` (y|n) from ``locations_results.json``.
     """
     try:
         if env_bool("CLOUD_MODE") and not is_session_valid(request):
@@ -114,46 +118,34 @@ async def get_locations_report(
             except Exception as e:
                 logger.warning(f"Could not load locations_results from {locations_results_path}: {e}")
         
-        # Try to load existing report from day-scoped path
-        report_path = f"{selected_day}/reports/Locations.csv"
-        
-        # Check if CSV exists
-        if storage.exists(report_path):
-            # Read CSV and convert to JSON
-            import pandas as pd
-            import io
-            import numpy as np
-            csv_data = storage.read_text(report_path)
-            df = pd.read_csv(io.StringIO(csv_data))
-            # Replace NaN/Inf values with None for JSON serialization
-            df = df.replace([np.nan, np.inf, -np.inf], None)
-            # Issue #598: Convert flag column to proper boolean (pandas may read as string)
-            if 'flag' in df.columns:
-                # Convert flag column: handle both boolean and string representations
-                df['flag'] = df['flag'].apply(lambda x: True if (x is True or str(x).lower() in ['true', '1', 'y', 'yes']) else False)
-            report_data = df.to_dict('records')
-            # Issue #828: parse by_event JSON column into objects for the UI
-            from app.location_report import parse_by_event
-
-            for row in report_data:
-                if "by_event" in row:
-                    row["by_event"] = parse_by_event(row.get("by_event"))
-            _merge_onepage_into_report_rows(report_data, locations_results, selected_day)
-        elif generate:
-            # Generate new report
-            # Issue #512: Start times must be provided - cannot use hardcoded constants
-            # For v1 compatibility, try to get from latest run metadata or fail
-            raise HTTPException(
-                status_code=400,
-                detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
-                       "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
-            )
-            # Phase 3 cleanup: Removed unreachable code after raise HTTPException
-        else:
+        report_path = locations_report_relpath(selected_day)
+        if not storage.exists(report_path):
+            if generate:
+                raise HTTPException(
+                    status_code=400,
+                    detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
+                           "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
+                )
             raise HTTPException(
                 status_code=404,
-                detail=f"Locations report not found for run_id={run_id}. Use ?generate=true to create it."
+                detail=(
+                    f"Locations report JSON not found for run_id={run_id} day={selected_day}. "
+                    "Re-run analysis to write computation/locations_report.json."
+                ),
             )
+
+        payload = storage.read_json(report_path)
+        report_data = payload.get("locations") or []
+        if not isinstance(report_data, list):
+            raise HTTPException(
+                status_code=500,
+                detail="locations_report.json is invalid: 'locations' must be an array.",
+            )
+        report_data = [_normalize_location_api_row(dict(row)) for row in report_data if isinstance(row, dict)]
+        _merge_onepage_into_report_rows(report_data, locations_results, selected_day)
+        json_resources = payload.get("resources_available")
+        if json_resources:
+            resources_available = json_resources
         
         return JSONResponse(content={
             "ok": True,

@@ -17,6 +17,7 @@ import math
 from typing import Any, Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
 
 from app.core.locations.identity import effective_pass_key
+from app.core.locations.report_json import proxy_from_passes
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,7 @@ def consolidate_location_rows(
             pid = _row_pass_id(p)
             if pid is not None and pid != "":
                 pass_ids.append(pid)
+        proxy_pass_id, proxy_loc_id = proxy_from_passes(passes)
         row = {
             "loc_id": g.get("loc_id") if g.get("loc_id") is not None else g.get("primary_loc_id"),
             "pass_key": g.get("pass_key") or g.get("location_key") or "",
@@ -228,6 +230,8 @@ def consolidate_location_rows(
             "flag": g.get("flag"),
             "onepage": g.get("onepage"),
             "notes": g.get("notes"),
+            "proxy_pass_id": proxy_pass_id,
+            "proxy_loc_id": proxy_loc_id,
         }
         for k, v in g.items():
             if k.endswith("_count") or k.endswith("_mins"):
@@ -284,6 +288,8 @@ def _singleton_group(
         "flag": row.get("flag"),
         "onepage": row.get("onepage"),
         "notes": row.get("notes"),
+        "proxy_pass_id": row.get("proxy_pass_id"),
+        "proxy_loc_id": row.get("proxy_loc_id"),
         **{k: row[k] for k in row if k.endswith("_count") or k.endswith("_mins")},
     }
 
@@ -310,6 +316,7 @@ def _paired_group(key: str, group: List[Dict[str, Any]]) -> Dict[str, Any]:
             pass
 
     pass_ids = [_row_pass_id(r) for r in ordered]
+    proxy_pass_id, proxy_loc_id = proxy_from_passes(ordered)
 
     merged_counts: Dict[str, Any] = {}
     for r in ordered:
@@ -354,5 +361,7 @@ def _paired_group(key: str, group: List[Dict[str, Any]]) -> Dict[str, Any]:
         else primary.get("onepage"),
         "notes": primary.get("notes")
         or next((r.get("notes") for r in ordered if r.get("notes")), ""),
+        "proxy_pass_id": proxy_pass_id,
+        "proxy_loc_id": proxy_loc_id,
         **merged_counts,
     }
