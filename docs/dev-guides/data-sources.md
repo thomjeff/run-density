@@ -127,13 +127,14 @@ The following diagram illustrates the data flow from artifacts through API endpo
 
 **Example 5: Locations Report**
 1. **Artifacts:**
-   - `reports/Locations.csv` → Location report data
-   - `computation/locations_results.json` → Resources available
-2. **API:** `GET /api/locations` → Returns locations report as JSON
+   - `computation/locations_report.json` → Computed location-centric table (API SSOT; Issues #894 / #895)
+   - `reports/Locations.csv` → Export / download only
+   - `computation/locations_results.json` → Package input snapshot + `resources_available` / `onepage`
+2. **API:** `GET /api/locations` → Reads `locations_report.json` (does **not** convert CSV)
 3. **UI:** Locations page → Displays location table with resource counts
 4. **Tests:**
-   - Schema: Validate CSV structure and JSON resources
-   - Contract: Verify API JSON matches CSV data
+   - Schema: Validate `locations_report.json` structure (including `proxy_loc_id` / `proxy_pass_id`)
+   - Contract: Verify API JSON matches the computation JSON
    - E2E: Verify locations table displays correctly
 
 **Example 6: Overview ZIP exports (Issue #891)**
@@ -413,8 +414,9 @@ runner_id,event,pace,distance,start_offset,day
 - `location_key`: Legacy alias of `pass_key`
 
 **Analysis reports**:
-- **`Passes.csv`**: one row per `pass_id` (bottom-up; agencies). Includes `loc_id`, `pass_key`, `pass`, `same_pass_as`.
-- **`Locations.csv`**: one row per human `loc_id` (UI mirror). Combined window = earliest first / latest last; `pass_ids` lists member passes; `pass_key` joins back to Passes.csv.
+- **`locations_report.json`**: computed location-centric rows for the UI (`GET /api/locations`). Includes `loc_end`, resource counts, and Build proxy ids (`proxy_pass_id` = timing-source pass, `proxy_loc_id` = human Location id of that pass). Issues #894 / #895.
+- **`Passes.csv`**: one row per `pass_id` (bottom-up; agencies). Includes `loc_id`, `pass_key`, `pass`, `same_pass_as`, `proxy_pass_id`, `proxy_loc_id`.
+- **`Locations.csv`**: one row per human `loc_id` (export mirror of the JSON). Combined window = earliest first / latest last; `pass_ids` lists member passes; `pass_key` joins back to Passes.csv.
 
 **Issue #810 — paired reverse legs:** when two pass rows share a `pass_key`, they are passes at the same Location (outbound vs return). Volunteer UI and Locations.csv show one Location. Import timed staffing on **`pass_id`**.
 
@@ -550,14 +552,16 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - `GET /api/locations` - Locations report data
 
 **Artifact Sources:**
-- `{day}/reports/Locations.csv` → Day-scoped location report (includes `day` column after `loc_label`; Issue #749)
+- `{day}/computation/locations_report.json` → Computed location table (API SSOT; Issues #894 / #895). Includes `proxy_loc_id` / `proxy_pass_id` for Build-authored timing links.
+- `{day}/reports/Locations.csv` → Day-scoped location report **export** (includes `day` column after `loc_label`; Issue #749)
 - `Locations.csv` (run root, next to day folders) → Combined file for all days in chronological order (Issue #749)
-- `computation/locations_results.json` → `resources_available` array
+- `computation/locations_results.json` → `resources_available` array and `onepage` (Issue #745)
 
 **UI Elements → Data Mapping:**
-- **Locations Table** → `Locations.csv` converted to JSON
-- **Resource Counts** → `resources_available` from `locations_results.json`
-- **Flag Column** → Boolean from CSV (converted from string if needed)
+- **Locations Table** → `GET /api/locations` from `locations_report.json`
+- **Resource Counts** → `resources_available` from the JSON (or `locations_results.json`)
+- **Flag Column** → Boolean on each location row
+- **Linked / proxy locations** → `proxy_loc_id` (human) and `proxy_pass_id` (pass instance)
 
 ### Overview Exports
 
@@ -717,7 +721,8 @@ Standalone Reports UI is retired (Issue #891). `GET /reports` redirects to Overv
 **`GET /api/locations`**
 - **Query Params:** `run_id` (optional), `day` (optional), `generate` (default: false)
 - **Returns:** Locations report as JSON
-- **Artifacts Read:** `reports/Locations.csv`, `computation/locations_results.json`
+- **Artifacts Read:** `computation/locations_report.json` (required), `computation/locations_results.json` (`onepage` / `resources_available`)
+- **Not read:** `reports/Locations.csv` (export only; Issue #894)
 
 ### Health Endpoints
 
@@ -766,7 +771,7 @@ All artifacts are organized under `runflow/analysis/<run_id>/<day>/`:
 │   ├── reports/ (Density.md, Flow.csv, Locations.csv, *.parquet)
 │   ├── bins/ (bins.parquet)
 │   ├── audit/ (audit_<day>.parquet) - if enabled
-│   ├── computation/ (locations_results.json)
+│   ├── computation/ (locations_report.json, locations_results.json)
 │   ├── metadata.json (day-level metadata)
 │   └── ui/
 │       ├── metadata/ (meta.json, schema_density.json, health.json)
@@ -1241,7 +1246,7 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 | **Visualizations** | `<day>/ui/visualizations/` | `captions.json`, `zone_captions.json`, `*.png` |
 | **Reports** | `<day>/reports/` | `Density.md`, `Flow.csv`, `Locations.csv`, `*.parquet` |
 | **Bins** | `<day>/bins/` | `bins.parquet` |
-| **Computation** | `<day>/computation/` | `locations_results.json` |
+| **Computation** | `<day>/computation/` | `locations_report.json`, `locations_results.json` |
 
 ### API Endpoints by UI Page
 
@@ -1268,7 +1273,7 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 | `segments.geojson` | `GET /api/segments/geojson` | Density course map (geometries) |
 | `flow_segments.json` | `GET /api/flow/segments` | Flow table (zones, metrics) |
 | `bins.parquet` | `GET /api/bins` | Density flagged-bin modal |
-| `Locations.csv` | `GET /api/locations` | Locations table |
+| `locations_report.json` | `GET /api/locations` | Locations table |
 | `health.json` | `GET /api/health/data` | Health status page |
 
 ### Common Query Parameters
