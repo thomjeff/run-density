@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=893g">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=898">
 {% endblock %}
 
 {% block content %}
@@ -33,6 +33,7 @@
                 <button type="button" class="btn btn-sm" id="rf-execute-pause" aria-pressed="false">Pause</button>
                 <button type="button" class="btn btn-sm" id="rf-execute-jump">Jump to now</button>
             </div>
+            <a id="rf-execute-export" class="btn btn-sm" href="#" hidden>Reopen CSV</a>
             <input type="search" id="rf-execute-search" class="form-control rf-execute-search" placeholder="Search ID, name, resource" aria-label="Search locations">
             <div id="rf-execute-counts" class="rf-execute-counts"></div>
         </div>
@@ -91,5 +92,5 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/execute_board.js?v=893g"></script>
+<script src="/static/js/execute_board.js?v=898"></script>
 {% endblock %}

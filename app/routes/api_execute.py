@@ -7,14 +7,21 @@ operator actions in {day}/execution/state.json via write_json.
 
 from __future__ import annotations
 
+import io
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.execute.board import assemble_board
+from app.core.execute.report import (
+    build_reopen_rows,
+    csv_columns,
+    reopen_csv_text,
+)
 from app.core.execute.state import (
     apply_clock_update,
     load_or_create_state,
@@ -131,6 +138,53 @@ async def get_execute_board(
     payload = _board_payload(rid, selected_day)
     payload["available_days"] = available_days
     return JSONResponse(content=payload)
+
+
+def _safe_export_token(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
+    return cleaned or "unknown"
+
+
+@router.get("/api/execute/reopen.csv")
+async def get_execute_reopen_csv(
+    request: Request,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+) -> StreamingResponse:
+    _guard_session(request)
+    rid = _require_run_id(run_id)
+    try:
+        selected_day, _available = resolve_selected_day(rid, day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    storage = create_runflow_storage(rid)
+    report = _load_locations(storage, selected_day)
+    analysis = _read_analysis(rid)
+    state = load_or_create_state(
+        storage, run_id=rid, day=selected_day, analysis=analysis
+    )
+    locations = report.get("locations") or []
+    available = report.get("resources_available") or []
+    rows = build_reopen_rows(
+        locations,
+        state,
+        resources_available=available,
+    )
+    fieldnames = csv_columns(locations, available)
+    filename = (
+        "execute_reopen_"
+        + _safe_export_token(rid)
+        + "_"
+        + _safe_export_token(selected_day)
+        + ".csv"
+    )
+    return StreamingResponse(
+        io.BytesIO(reopen_csv_text(rows, fieldnames).encode("utf-8")),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
 
 
 @router.get("/api/execute/state")

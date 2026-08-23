@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Execute reopen variance CSV (#898)
+- Execute toolbar **Reopen CSV** downloads est. `loc_end` vs actual `reopened_at`, signed minute difference, package `*_count` columns (after `loc_label`), and Plan `loc_start` / `first_runner` / `last_runner`
+
 ### Execute race-day board (#893)
 - Switching Plan → Execute now opens the selected analysis, not a stale last-Execute URL; the Runs dropdown also loads on Execute
 - Execute is a three-column stand-down board (Closed / Reopen next / Reopened) on the selected Plan run

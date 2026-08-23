@@ -286,15 +286,31 @@
         renderColumn("reopened", "Reopened", cols.reopened || []);
         renderGuns(board.clock);
         renderLog(board.activity);
+        syncExportLink();
         qs("#rf-execute-workspace").hidden = false;
         qs("#rf-execute-empty").hidden = true;
         qs("#rf-execute-error").hidden = true;
+    }
+
+    function syncExportLink() {
+        var link = qs("#rf-execute-export");
+        if (!link) return;
+        if (!runId()) {
+            link.hidden = true;
+            link.removeAttribute("href");
+            return;
+        }
+        link.hidden = false;
+        link.href = apiUrl("/api/execute/reopen.csv");
+        link.setAttribute("download", "");
     }
 
     function showEmpty() {
         qs("#rf-execute-workspace").hidden = true;
         qs("#rf-execute-error").hidden = true;
         qs("#rf-execute-empty").hidden = false;
+        var link = qs("#rf-execute-export");
+        if (link) link.hidden = true;
     }
 
     function showError(message) {
