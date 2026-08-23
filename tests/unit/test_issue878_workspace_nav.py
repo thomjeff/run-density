@@ -65,6 +65,8 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'data-col="reopen_next"' in execute
     assert 'data-col="reopened"' in execute
     assert "Clock suggests order. Radio decides." in execute
+    assert 'id="rf-execute-export"' in execute
+    assert "Reopen CSV" in execute
     # Map stays off the main Execute screen; strip links are JS-built
     assert 'href="/locations"' not in execute
 

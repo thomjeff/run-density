@@ -575,6 +575,7 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 
 **API Endpoints:**
 - `GET /api/execute/board` — merged Plan locations + execution state
+- `GET /api/execute/reopen.csv` — on-demand reopen variance CSV (Issue #898)
 - `PUT /api/execute/clock` — accept/override guns, pause, jump to now
 - `POST /api/execute/reopen` — confirm primary + selected linked locations
 
@@ -587,6 +588,7 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - **Strip time** → display `loc_end` (gun-shift overlay; never overwrite Plan)
 - **Linked locations** → reverse-index of `proxy_loc_id`
 - **Activity log** → `activity` array on execution JSON
+- **Reopen CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
 
 ### Overview Exports
 
@@ -754,6 +756,11 @@ Standalone Reports UI is retired (Issue #891). `GET /reports` redirects to Overv
 **`GET /api/execute/board`**
 - **Query Params:** `run_id` (required), `day` (optional)
 - **Returns:** Three-column board (closed / reopen_next / reopened) merged from locations JSON + execution state
+- **Artifacts Read:** `{day}/computation/locations_report.json`, `{day}/execution/state.json`
+
+**`GET /api/execute/reopen.csv`**
+- **Query Params:** `run_id` (required), `day` (optional)
+- **Returns:** CSV attachment (`execute_reopen_{run}_{day}.csv`)
 - **Artifacts Read:** `{day}/computation/locations_report.json`, `{day}/execution/state.json`
 
 **`GET /api/execute/state`**
