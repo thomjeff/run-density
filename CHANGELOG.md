@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Reopen board UX (#900)
+- Execute nav item and page title are **Reopen**; Pause / Jump and the “Clock suggests order” hint are removed
+- Location strips show Zone first (`Z3 · YSSR 2`); a global Zone filter applies to all three columns
+- Closed shows the next 10 by `loc_end` (**Show more**); Reopened shows the 10 most recent (**Show earlier**); Reopen Next stays fully listed
+- Toolbar: clock | **Refresh in** `mm:ss` + action icon, then Zone (`All Zones` / `Zone 1`) and search, **Export CSV** on the right; no timezone or column-count summary
+- Activity log is not shown on the board (reopen actions remain in `{day}/execution/state.json`)
+- Reopened lists by action order (most recent first), not `HH:MM` string so an earlier 15:01 cannot cover a later 11:25 local stamp
+
 ### Execute reopen variance CSV (#898)
 - Execute toolbar **Reopen CSV** downloads est. `loc_end` vs actual `reopened_at`, signed minute difference, package `*_count` columns (after `loc_label`), and Plan `loc_start` / `first_runner` / `last_runner`
 

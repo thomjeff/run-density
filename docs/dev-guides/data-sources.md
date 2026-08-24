@@ -142,7 +142,7 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - `{day}/computation/locations_report.json` → Planned locations (read-only; `loc_end`, resources, `proxy_loc_id`)
    - `{day}/execution/state.json` → Operator clock, reopened rows, activity log
 2. **API:** `GET /api/execute/board`, `PUT /api/execute/clock`, `POST /api/execute/reopen`
-3. **UI:** Execute → Race day board (no map on the main screen)
+3. **UI:** Execute → Reopen board (no map on the main screen)
 4. **Tests:** column windowing, gun-shift overlay, reopen persistence, duplicate 409
 
 **Example 6: Overview ZIP exports (Issue #891)**
@@ -585,10 +585,10 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 
 **UI Elements → Data Mapping:**
 - **Closed / Reopen next / Reopened** → board columns; Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
+- **Zone** → Plan `zone` on each strip (`Z3 · YSSR 2`); toolbar filter options are `All Zones` / `Zone 1` and apply to all columns
 - **Strip time** → display `loc_end` (gun-shift overlay; never overwrite Plan)
 - **Linked locations** → reverse-index of `proxy_loc_id`
-- **Activity log** → `activity` array on execution JSON
-- **Reopen CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
+- **Export CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
 
 ### Overview Exports
 

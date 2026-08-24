@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.core.execute.board import assemble_board, reopen_next_ids
+from app.core.execute.board import assemble_board, reopen_next_ids, zone_code
 from app.core.execute.state import (
     empty_state,
     record_reopen,
@@ -33,6 +33,7 @@ def _locations():
             "loc_label": "St John at Queen",
             "loc_type": "course",
             "loc_end": "08:50:00",
+            "zone": 1,
             "yssr_count": 2,
             "awp_count": 0,
             "by_event": {"10k": {"last_runner": "08:40:00"}},
@@ -97,6 +98,15 @@ def test_reopen_next_follows_clock_once_estimates_pass():
     assert 4 not in reopen_next_ids(closed, "14:29:00")
 
 
+def test_zone_code_formats_z_prefix():
+    assert zone_code(3) == "Z3"
+    assert zone_code(3.0) == "Z3"
+    assert zone_code("1") == "Z1"
+    assert zone_code("Z2") == "Z2"
+    assert zone_code(None) is None
+    assert zone_code("") is None
+
+
 def test_missing_loc_end_stays_closed_after_timed():
     state = empty_state(run_id="r", day="sun")
     state["clock"]["guns_accepted"] = True
@@ -111,12 +121,37 @@ def test_missing_loc_end_stays_closed_after_timed():
     next_ids = [row["loc_id"] for row in board["columns"]["reopen_next"]]
     closed_ids = [row["loc_id"] for row in board["columns"]["closed"]]
     assert 2 in next_ids
+    queen = next(
+        row for row in board["columns"]["reopen_next"] if row["loc_id"] == 2
+    )
+    assert queen["zone"] == "Z1"
     assert 8 in next_ids
     assert 9 in next_ids
     assert 3 in closed_ids
     assert 99 in closed_ids
     assert closed_ids[-1] == 99
     assert board["counts"]["reopened"] == 0
+
+
+def test_reopened_column_is_activity_order_not_clock_string():
+    """HH:MM reverse-sort would put 15:01 above a later 11:25 reopen."""
+    state = empty_state(run_id="r", day="sun")
+    state["clock"]["guns_accepted"] = True
+    record_reopen(state, loc_id=3, linked_loc_ids=[], at_hhmm="15:01")
+    record_reopen(state, loc_id=99, linked_loc_ids=[], at_hhmm="08:46")
+    record_reopen(state, loc_id=2, linked_loc_ids=[8], at_hhmm="11:25")
+    board = assemble_board(
+        locations=_locations(),
+        state=state,
+        resources_available=["yssr", "fpf", "vol", "ofc"],
+        run_id="r",
+        day="sun",
+        now_hhmmss="11:26:00",
+    )
+    ids = [row["loc_id"] for row in board["columns"]["reopened"]]
+    assert set(ids[:2]) == {2, 8}
+    assert ids[2:] == [99, 3]
+    assert board["columns"]["reopened"][0]["reopened_at"] == "11:25"
 
 
 def test_elapsed_time_never_auto_reopens():
