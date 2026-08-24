@@ -12,9 +12,24 @@
 
 {% include "partials/run_context.html" %}
 
+<div id="rf-plan-new-analysis" class="card" style="margin-bottom: 1.25rem;">
+    <h3 style="margin-bottom: 0.5rem;">New analysis</h3>
+    <p class="rf-overview-lead" style="margin-bottom: 0.75rem;">
+        Choose a package, set start times, and run. Edit locations on <strong>Build → Legs</strong>; assemble courses on <strong>Build → Packages</strong>.
+    </p>
+    <div class="rf-plan-new-analysis-row">
+        <label for="rf-plan-package-select" class="rf-overview-lead" style="margin: 0;">Package</label>
+        <select id="rf-plan-package-select" class="form-select" style="max-width: 28rem;">
+            <option value="">Loading packages…</option>
+        </select>
+        <button type="button" id="rf-plan-run-analysis" class="btn btn-primary" disabled>Run analysis…</button>
+    </div>
+    <p id="rf-plan-analysis-status" class="rf-overview-lead" style="margin-top: 0.75rem;"></p>
+</div>
+
 <div id="rf-overview-empty" class="card" style="display: none;">
     <p><strong>No analysis run selected.</strong></p>
-    <p>Choose a run from the <strong>Runs</strong> menu, or open the full catalog.</p>
+    <p>Choose a run from the <strong>Runs</strong> menu, start a <strong>New analysis</strong> above, or open the full catalog.</p>
     <p>
         <a id="rf-overview-choose" class="btn btn-primary" href="/dashboard">View all runs</a>
     </p>
@@ -45,6 +60,7 @@
         <p id="rf-export-status" class="rf-overview-lead" style="margin-top: 0.75rem;"></p>
     </div>
 </div>
+{% include "partials/run_analysis_modal.html" %}
 {% endblock %}
 
 {% block extra_styles %}
@@ -105,12 +121,19 @@
     flex-wrap: wrap;
     gap: 0.75rem;
 }
+.rf-plan-new-analysis-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
 </style>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/run_overview.js?v=878"></script>
+<script src="/static/js/run_overview.js?v=904"></script>
 <script src="/static/js/run_overview_progress.js?v=868"></script>
+<script src="/static/js/plan_run_analysis.js?v=904"></script>
 <script>
 (function () {
     var tabler = document.documentElement.classList.contains('rf-tabler');

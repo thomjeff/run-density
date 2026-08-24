@@ -758,7 +758,7 @@
                 dirEl.style.display = 'block';
                 dirEl.title = 'Package folder: runflow/config/' + configId();
                 dirEl.textContent =
-                    'After Build race exports, use Run analysis to launch a Results run from this package.';
+                    'After Build race exports, run analysis from Plan → Overview (choose this package, then set start times).';
             }
             refreshPackageReadiness();
             refreshPackageLatestRuns();
@@ -797,19 +797,9 @@
 
     function syncRunAnalysisButton(readiness) {
         var btn = document.getElementById('btn-run-package-analysis');
-        if (!btn) return;
-        var ready = !!(readiness && readiness.analyze_ready);
-        btn.disabled = !ready || !configId();
-        if (ready) {
-            btn.title = 'Enter start times for each event and start analysis for this package';
-        } else {
-            var missing = (readiness && readiness.missing) || [];
-            var extras = [];
-            if (readiness && !readiness.has_runners) extras.push('runner files');
-            if (readiness && !readiness.has_gpx) extras.push('course GPX');
-            btn.title =
-                'Analysis not ready — missing: ' +
-                (missing.concat(extras).join(', ') || 'required files');
+        if (btn) {
+            var ready = !!(readiness && readiness.analyze_ready);
+            btn.disabled = !ready || !configId();
         }
         renderPackageReadinessChecklist(readiness);
     }
@@ -984,260 +974,6 @@
             });
     }
 
-    function minutesToTime(minutes) {
-        var m = parseInt(minutes, 10);
-        if (isNaN(m)) return '';
-        var h = Math.floor(m / 60);
-        var min = m % 60;
-        return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
-    }
-
-    function timeToMinutes(timeStr) {
-        if (!timeStr) return null;
-        var parts = String(timeStr).trim().split(':');
-        if (parts.length < 2) return null;
-        var h = parseInt(parts[0], 10);
-        var m = parseInt(parts[1], 10);
-        if (isNaN(h) || isNaN(m)) return null;
-        return h * 60 + m;
-    }
-
-    function showRunAnalysisModal(show) {
-        var modal = document.getElementById('run-analysis-modal');
-        if (!modal) return;
-        modal.hidden = !show;
-        modal.setAttribute('aria-hidden', show ? 'false' : 'true');
-    }
-
-    function setRunAnalysisModalError(msg) {
-        var el = document.getElementById('run-analysis-modal-error');
-        if (!el) return;
-        if (!msg) {
-            el.style.display = 'none';
-            el.textContent = '';
-            return;
-        }
-        el.style.display = 'block';
-        el.textContent = msg;
-    }
-
-    function renderRunAnalysisEventRows(events) {
-        var tbody = document.getElementById('run-analysis-events-tbody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        (events || []).forEach(function (ev) {
-            var tr = document.createElement('tr');
-            var nameTd = document.createElement('td');
-            nameTd.textContent = eventLabel(ev.name || ev.id || '');
-            nameTd.dataset.eventName = ev.name;
-            tr.appendChild(nameTd);
-
-            var startTd = document.createElement('td');
-            var startInput = document.createElement('input');
-            startInput.type = 'time';
-            startInput.className = 'config-package-input';
-            startInput.dataset.eventName = ev.name;
-            startInput.required = true;
-            var suggested =
-                ev.suggested_start_time_label ||
-                (ev.suggested_start_time != null ? minutesToTime(ev.suggested_start_time) : '');
-            if (suggested) startInput.value = suggested;
-            startTd.appendChild(startInput);
-            tr.appendChild(startTd);
-
-            var durTd = document.createElement('td');
-            var durInput = document.createElement('input');
-            durInput.type = 'number';
-            durInput.min = '1';
-            durInput.max = '500';
-            durInput.className = 'config-package-input';
-            durInput.style.width = '5rem';
-            durInput.dataset.eventName = ev.name;
-            durInput.required = true;
-            if (ev.suggested_event_duration_minutes != null) {
-                durInput.value = String(ev.suggested_event_duration_minutes);
-            }
-            durTd.appendChild(durInput);
-            tr.appendChild(durTd);
-
-            tbody.appendChild(tr);
-        });
-    }
-
-    function collectRunAnalysisEvents(eventDay) {
-        var tbody = document.getElementById('run-analysis-events-tbody');
-        if (!tbody) return [];
-        var events = [];
-        tbody.querySelectorAll('tr').forEach(function (tr) {
-            var name = tr.querySelector('td[data-event-name]');
-            var startInput = tr.querySelector('input[type="time"]');
-            var durInput = tr.querySelector('input[type="number"]');
-            if (!name || !startInput || !durInput) return;
-            var eventName = name.dataset.eventName;
-            var startMinutes = timeToMinutes(startInput.value);
-            var duration = parseInt(durInput.value, 10);
-            if (!eventName) return;
-            if (startMinutes == null || startMinutes < 300 || startMinutes > 1200) {
-                throw new Error(
-                    eventLabel(eventName) + ': start time must be between 05:00 and 20:00'
-                );
-            }
-            if (isNaN(duration) || duration < 1 || duration > 500) {
-                throw new Error(
-                    eventLabel(eventName) + ': duration must be between 1 and 500 minutes'
-                );
-            }
-            events.push({
-                name: eventName,
-                day: eventDay,
-                start_time: startMinutes,
-                event_duration_minutes: duration,
-            });
-        });
-        return events;
-    }
-
-    var runAnalysisSetup = null;
-
-    function openRunAnalysisModal() {
-        var base = packageApiBase();
-        if (!base) return;
-        setRunAnalysisModalError('');
-        setAssignStatus('Loading analysis setup…');
-        fetch(base + '/analyze-setup', { credentials: 'same-origin' })
-            .then(function (r) {
-                return r.json().then(function (d) {
-                    return { ok: r.ok, data: d };
-                });
-            })
-            .then(function (payload) {
-                if (!payload.ok) {
-                    throw new Error(
-                        (payload.data && payload.data.detail) || 'Failed to load analysis setup'
-                    );
-                }
-                var setup = payload.data;
-                if (!setup.readiness || !setup.readiness.analyze_ready) {
-                    throw new Error('Package is not analysis-ready yet.');
-                }
-                runAnalysisSetup = setup;
-                var dayEl = document.getElementById('run-analysis-event-day');
-                if (dayEl) {
-                    dayEl.textContent =
-                        'Race day: ' + String(setup.event_day || 'sun').toUpperCase();
-                }
-                renderRunAnalysisEventRows(setup.events || []);
-                showRunAnalysisModal(true);
-                setAssignStatus('');
-            })
-            .catch(function (err) {
-                setAssignStatus(err.message || String(err), true);
-            });
-    }
-
-    function submitRunAnalysisModal() {
-        var base = packageApiBase();
-        if (!base || !runAnalysisSetup) return;
-        setRunAnalysisModalError('');
-        var events;
-        try {
-            events = collectRunAnalysisEvents(runAnalysisSetup.event_day || 'sun');
-        } catch (err) {
-            setRunAnalysisModalError(err.message || String(err));
-            return;
-        }
-        if (!events.length) {
-            setRunAnalysisModalError('Add at least one event schedule.');
-            return;
-        }
-        showRunAnalysisModal(false);
-        setAssignStatus('Starting analysis…');
-        fetch(base + '/run-analysis', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                description: runAnalysisSetup.description || '',
-                enable_audit: 'n',
-                events: events,
-            }),
-        })
-            .then(function (r) {
-                return r.json().then(function (d) {
-                    return { ok: r.ok, data: d };
-                });
-            })
-            .then(function (payload) {
-                if (!payload.ok) {
-                    throw new Error(
-                        (payload.data && (payload.data.error || payload.data.detail)) ||
-                            'Analysis start failed'
-                    );
-                }
-                var runId = payload.data.run_id;
-                var eventDay = (
-                    (runAnalysisSetup && runAnalysisSetup.event_day) ||
-                    ''
-                )
-                    .toLowerCase()
-                    .trim();
-                if (runId) {
-                    localStorage.setItem('selected_run_id', runId);
-                    if (eventDay) localStorage.setItem('selected_day', eventDay);
-                }
-                var uiQ = document.documentElement.classList.contains('rf-tabler')
-                    ? '&ui=tabler'
-                    : '';
-                var resultsPath = document.documentElement.classList.contains('rf-tabler')
-                    ? '/overview'
-                    : '/density';
-                var msg =
-                    'Analysis started. Run ID: ' +
-                    runId +
-                    '. Results will appear under Results in a few minutes.';
-                setAssignStatus(
-                    msg +
-                        ' <a href="' +
-                        resultsPath +
-                        '?run_id=' +
-                        encodeURIComponent(runId) +
-                        (eventDay ? '&day=' + encodeURIComponent(eventDay) : '') +
-                        uiQ +
-                        '">Open ' +
-                        (resultsPath === '/overview' ? 'Overview' : 'Density') +
-                        '</a> · <a href="/dashboard?run_id=' +
-                        encodeURIComponent(runId) +
-                        uiQ +
-                        '">Runs</a>',
-                    false,
-                    true
-                );
-                refreshPackageLatestRuns();
-                if (runId && window.confirm(msg + '\n\nOpen results now?')) {
-                    var dest =
-                        resultsPath +
-                        '?run_id=' +
-                        encodeURIComponent(runId);
-                    if (eventDay) dest += '&day=' + encodeURIComponent(eventDay);
-                    if (uiQ) dest += uiQ;
-                    window.location.href = dest;
-                }
-            })
-            .catch(function (err) {
-                setAssignStatus(err.message || String(err), true);
-            });
-    }
-
-    function runPackageAnalysis() {
-        refreshPackageReadiness().then(function (readiness) {
-            if (!readiness || !readiness.analyze_ready) {
-                setAssignStatus('Package is not analysis-ready yet.', true);
-                return;
-            }
-            openRunAnalysisModal();
-        });
-    }
-
     function buildRaceExports() {
         var base = packageApiBase();
         if (!base) return;
@@ -1254,7 +990,7 @@
             .then(function (payload) {
                 if (!payload.ok) throw new Error(payload.data.detail || 'Build failed');
                 var warnings = payload.data.stitch_warnings || [];
-                var msg = 'Race exports built. You can run analysis when readiness is complete.';
+                var msg = 'Race exports built. Run analysis from Plan → Overview when readiness is complete.';
                 if (warnings.length) msg += ' Warnings: ' + warnings.join(' · ');
                 setAssignStatus(msg, warnings.length > 0);
                 syncRunAnalysisButton(payload.data.readiness || null);
@@ -1279,26 +1015,6 @@
         if (saveBtn) saveBtn.addEventListener('click', saveNamedCourse);
         var buildBtn = document.getElementById('btn-build-race-exports');
         if (buildBtn) buildBtn.addEventListener('click', buildRaceExports);
-        var runBtn = document.getElementById('btn-run-package-analysis');
-        if (runBtn) runBtn.addEventListener('click', runPackageAnalysis);
-        var runSubmit = document.getElementById('btn-run-analysis-submit');
-        if (runSubmit) runSubmit.addEventListener('click', submitRunAnalysisModal);
-        ['run-analysis-modal-close', 'run-analysis-modal-cancel'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) {
-                el.addEventListener('click', function () {
-                    showRunAnalysisModal(false);
-                    runAnalysisSetup = null;
-                });
-            }
-        });
-        var runBackdrop = document.querySelector('#run-analysis-modal .course-location-modal-backdrop');
-        if (runBackdrop) {
-            runBackdrop.addEventListener('click', function () {
-                showRunAnalysisModal(false);
-                runAnalysisSetup = null;
-            });
-        }
         var distSel = document.getElementById('saved-course-distance');
         if (distSel) {
             distSel.addEventListener('change', function () {

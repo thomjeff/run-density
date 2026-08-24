@@ -972,11 +972,17 @@
         if (!showBrowser) {
             card.style.display = 'none';
             removeAllLegLocationsLayer();
+            if (window.locationGridEditor) {
+                window.locationGridEditor.updateOpenButtonVisibility(false);
+            }
             return;
         }
         card.style.display = '';
         populateLegLocationsBrowserFilters();
         var allRows = collectAllLegLocationRows();
+        if (window.locationGridEditor) {
+            window.locationGridEditor.updateOpenButtonVisibility(allRows.length > 0);
+        }
         var filters = getLegLocationsBrowserFilters();
         var rows = allRows.filter(function (row) {
             return legLocationRowMatchesFilters(row, filters);
@@ -994,7 +1000,7 @@
                 (allRows.length === 1 ? '' : 's') +
                 ' shown ' +
                 scope +
-                '. Use the view action to edit on the map.';
+                '. Use the view action to edit a pin, or Edit Locations for bulk ops.';
         }
         renderLegLocationsBrowserHeader();
         tbody.innerHTML = '';
@@ -5007,6 +5013,122 @@
             });
     }
 
+    function stripGridLocationPrivateFields(loc) {
+        var clean = JSON.parse(JSON.stringify(loc || {}));
+        delete clean._legId;
+        delete clean._locIndex;
+        delete clean._key;
+        return clean;
+    }
+
+    function collectFilteredLegLocationsForGrid() {
+        var allRows = collectAllLegLocationRows();
+        var filters = getLegLocationsBrowserFilters();
+        return allRows.filter(function (row) {
+            return legLocationRowMatchesFilters(row, filters);
+        }).map(function (row) {
+            var loc = JSON.parse(JSON.stringify(row.loc));
+            loc._legId = row.legId;
+            loc._locIndex = row.locIndex;
+            loc._key = row.key;
+            return loc;
+        });
+    }
+
+    var pendingGridLocations = [];
+
+    function persistLegLocationsFromGrid(working) {
+        var byLeg = {};
+        (working || []).forEach(function (loc) {
+            var legId = String(loc && loc._legId != null ? loc._legId : '').trim();
+            if (!legId) return;
+            if (!byLeg[legId]) byLeg[legId] = [];
+            byLeg[legId].push(loc);
+        });
+        var legs = (libraryState && libraryState.legs) || [];
+        var puts = Object.keys(byLeg).map(function (legId) {
+            var leg = legs.find(function (entry) {
+                return String(entry.id || '').trim() === legId;
+            });
+            if (!leg) return Promise.resolve();
+            var locations = (leg.locations || []).map(function (row) {
+                return JSON.parse(JSON.stringify(row));
+            });
+            byLeg[legId].forEach(function (edited) {
+                var idx = edited._locIndex;
+                if (idx == null || idx < 0 || idx >= locations.length) return;
+                locations[idx] = Object.assign(
+                    {},
+                    locations[idx],
+                    stripGridLocationPrivateFields(edited)
+                );
+            });
+            return saveLegLocations(legId, locations);
+        });
+        return Promise.all(puts);
+    }
+
+    function buildGridProxySelect(loc, rowIndex, editable, onChange) {
+        var excludeKey = loc._key || legLocKey(loc._legId, loc._locIndex);
+        var sel = buildLegProxyTimingSelect(loc, excludeKey, loc._legId);
+        sel.className = 'location-grid-detail-input';
+        sel.disabled = !editable;
+        sel.addEventListener('change', function () {
+            loc.proxy_leg_loc_key = sel.value || '';
+            if (sel.value) {
+                loc.proxy_loc_id = '';
+                loc.proxy_pass_id = '';
+            } else {
+                loc.proxy_leg_loc_key = '';
+            }
+            if (typeof onChange === 'function') onChange();
+        });
+        return sel;
+    }
+
+    function initLegLocationGridEditor() {
+        if (!window.locationGridEditor) return;
+        window.locationGridEditor.init({
+            canEdit: function () {
+                return isOrgLegsHubMode();
+            },
+            getLocations: collectFilteredLegLocationsForGrid,
+            applyLocations: function (locs) {
+                pendingGridLocations = locs || [];
+            },
+            persist: function () {
+                return persistLegLocationsFromGrid(pendingGridLocations);
+            },
+            onSaved: function () {
+                renderLegLocationsBrowser();
+                if (selectedLegId) {
+                    selectLegById(selectedLegId, { preserveZoom: true, keepPinMode: true });
+                } else {
+                    renderAllLegLocationsMapLayer();
+                }
+            },
+            getResources: getPackageResources,
+            getLocationTypeLabel: function (t) {
+                return locationTypes().reduce(function (label, item) {
+                    return item.value === t ? item.label : label;
+                }, t || '');
+            },
+            locationNumericId: function (loc) {
+                var raw = loc && (loc.loc_id != null ? loc.loc_id : loc.id);
+                var n = parseInt(raw, 10);
+                return isNaN(n) ? 0 : n;
+            },
+            offCourseUsesProxyTiming: offCourseUsesProxyTiming,
+            proxyLocIdIsSet: function (loc) {
+                return legLocationProxyIsSet(loc);
+            },
+            isEligibleProxyTimingSource: function (other) {
+                return other && !offCourseUsesProxyTiming(other.loc_type) && !legLocationProxyIsSet(other);
+            },
+            buildProxySelect: buildGridProxySelect
+        });
+    }
+
     function moveOrgLegLocation(sourceLegId, locIndex, targetLegId) {
         return fetch(
             '/api/org/legs/' +
@@ -5382,6 +5504,15 @@
         }
     }
 
+    function focusCoursePreviewLocation(loc) {
+        var map = ensureCoursePreviewMap();
+        if (!map || !loc) return;
+        var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
+        var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
+        if (isNaN(lat) || isNaN(lon)) return;
+        map.setView([lat, lon], Math.max(map.getZoom() || 13, 16));
+    }
+
     function finishCoursePreviewLoad(map, bounds, metaText) {
         var wrap = document.getElementById('course-preview-map-wrap');
         var empty = document.getElementById('course-preview-empty');
@@ -5617,9 +5748,9 @@
         var legacyWrap = document.getElementById('legacy-event-recipes-details');
         var hasCourse = hasCombinedCourse();
         if (legacyWrap) {
-            legacyWrap.style.display = hasCourse ? '' : 'none';
+            legacyWrap.style.display = 'none';
         } else if (editBtn) {
-            editBtn.style.display = hasCourse ? '' : 'none';
+            editBtn.style.display = 'none';
         }
         syncCoursePreviewUi();
         var hasLegs = libraryState && libraryState.legs && libraryState.legs.length;
@@ -6360,6 +6491,7 @@
         onOrgLegsHubShown: function () {
             initOrgLegHubResources();
             bindLegLocationsBrowserUi();
+            initLegLocationGridEditor();
             if (window.configPackageCourse && window.configPackageCourse.removeLocationPins) {
                 window.configPackageCourse.removeLocationPins();
             }
@@ -6386,6 +6518,8 @@
         onCourseTabShown: onCourseTabShown,
         syncCoursePanelUi: syncCoursePanelUi,
         renderCoursePreviewLocations: renderCoursePreviewLocations,
+        focusCoursePreviewLocation: focusCoursePreviewLocation,
+        getCoursePreviewMap: function () { return coursePreviewMap; },
         openRecipesModal: showRecipesModal,
         closeRecipesModal: closeRecipesModal,
         resolveLegLabelsForSegment: resolveLegLabelsForSegment,

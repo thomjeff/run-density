@@ -46,6 +46,7 @@ This document provides a systematic approach to testing local Docker deployments
 **URL:** `/overview?run_id={uuid}`
 
 **Verification Steps:**
+- [ ] **New analysis** card: package dropdown + **Run analysis…** (disabled until the package is analysis-ready)
 - [ ] Analysis Inputs and Analysis Outputs render for the selected run
 - [ ] Package name on Analysis Inputs links to Build → that package
 - [ ] **Exports** shows **Reports (.zip)** and **Data Files (.zip)** (no “Download” prefix)

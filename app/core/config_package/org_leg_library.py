@@ -31,10 +31,9 @@ logger = logging.getLogger(__name__)
 ORG_LEGS_DIRNAME = "legs"
 MANIFEST_YAML = "manifest.yaml"
 
-# Org leg fields whose edits must be reflected in each package's course.json
-# (locations/labels re-merge leg placements; metadata re-syncs segments).
+# Org leg *route metadata* that fans out into each package's course.json.
+# Location ops stay on org legs until Course snapshot / Build race exports (#904).
 _PACKAGE_SYNC_FIELDS = (
-    "locations",
     "start_label",
     "end_label",
     "leg_label",
@@ -1070,12 +1069,10 @@ def update_org_leg_geometry(
 
 def sync_org_leg_changes_into_packages() -> None:
     """
-    Propagate org leg edits into course.json for org-sourced packages.
+    Propagate org leg *route metadata* into course.json for org-sourced packages.
 
-    The Legs tab saves to the org manifest only; without this, a moved
-    location pin (or label/metadata change) stays stale in each package's
-    combined course until the next recipe apply. Packages without applied
-    recipes are skipped by ``sync_leg_locations_if_applied``.
+    Location ops are authored on Build → Legs and picked up by Course snapshot
+    + Build race exports (Issue #904). Location PUTs do not trigger this sync.
     """
     from app.core.config_package.leg_library_resolver import (
         LEG_SOURCE_ORG,

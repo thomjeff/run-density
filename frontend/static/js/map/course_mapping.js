@@ -38,9 +38,10 @@ document.addEventListener('DOMContentLoaded', function () {
         return isConfigPackageMode() && !!document.getElementById('race-config-workspace');
     }
 
-    /** Config package Course tab: edit locations without global course draw Edit mode. */
+    /** Combined-course tables on a package are inspect-only (Issue #904). */
     function canEditLocationsInWorkspace() {
-        return usePackageLevelEditSave() || isEditMode;
+        if (isConfigPackageMode()) return false;
+        return isEditMode;
     }
 
     var POPUP_MAX_WIDTH = 375;
@@ -3495,6 +3496,28 @@ document.addEventListener('DOMContentLoaded', function () {
         return s;
     }
 
+    function zoomToSegmentOnPreview(seg, startIdx, endIdx) {
+        var map = window.courseMappingMap;
+        if (window.segmentRecipes && typeof window.segmentRecipes.getCoursePreviewMap === 'function') {
+            var preview = window.segmentRecipes.getCoursePreviewMap();
+            if (preview) map = preview;
+        }
+        if (!map || !currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) {
+            return;
+        }
+        var coords = currentCourse.geometry.coordinates;
+        var lo = Math.min(startIdx, endIdx);
+        var hi = Math.max(startIdx, endIdx);
+        if (lo > hi || !coords.length) return;
+        var latlngs = [];
+        for (var i = lo; i <= hi && i < coords.length; i++) {
+            latlngs.push(L.latLng(coords[i][1], coords[i][0]));
+        }
+        if (!latlngs.length) return;
+        if (map.closePopup) map.closePopup();
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 18, duration: 0.3 });
+    }
+
     function renderSegmentsList(visibleIndices) {
         var indexFilter = visibleIndexSet(visibleIndices);
         var card = document.getElementById('segments-card');
@@ -3585,9 +3608,15 @@ document.addEventListener('DOMContentLoaded', function () {
             segIdBtn.type = 'button';
             segIdBtn.className = 'pin-link';
             segIdBtn.textContent = segId;
-            segIdBtn.title = 'Edit segment: label, width, schema, direction, description, events';
+            segIdBtn.title = isConfigPackageMode()
+                ? 'Show this segment on the course preview'
+                : 'Edit segment: label, width, schema, direction, description, events';
             segIdBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
+                if (isConfigPackageMode()) {
+                    zoomToSegmentOnPreview(seg, startIdx, endIdx);
+                    return;
+                }
                 openSegmentEditInTile(segIdx);
             });
             segIdCell.appendChild(segIdBtn);
@@ -3615,12 +3644,12 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             tr.appendChild(document.createElement('td')).textContent = Math.round(len * 100) / 100;
             tr.style.cursor = 'pointer';
-            tr.title = usePackageLevelEditSave()
-                ? 'Click row to edit segment'
+            tr.title = isConfigPackageMode()
+                ? 'Click row to zoom the course preview to this segment'
                 : 'Click row to zoom map to this segment';
             tr.addEventListener('click', function () {
-                if (usePackageLevelEditSave()) {
-                    openSegmentEditInTile(segIdx);
+                if (isConfigPackageMode()) {
+                    zoomToSegmentOnPreview(seg, startIdx, endIdx);
                     return;
                 }
                 if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) {
@@ -3749,10 +3778,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 hint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin:0.5rem 0 0 0;';
                 hint.textContent =
                     locEl.seg_id
-                        ? 'Segment ' +
-                          locEl.seg_id +
-                          '. Edit resources and full details in the Locations table (click ID).'
-                        : 'Edit resources and full details in the Locations table (click ID).';
+                        ? 'Segment ' + locEl.seg_id + '.'
+                        : '';
+                if (canEditLocationsInWorkspace()) {
+                    hint.textContent +=
+                        (hint.textContent ? ' ' : '') +
+                        'Edit resources and full details in the Locations table (click ID).';
+                } else if (isConfigPackageMode()) {
+                    hint.textContent +=
+                        (hint.textContent ? ' ' : '') +
+                        'Edit this location on Build → Legs (Edit Locations).';
+                }
                 content.appendChild(hint);
                 var btnWrap = document.createElement('div');
                 btnWrap.style.marginTop = '0.5rem';
@@ -3760,7 +3796,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 btnTable.type = 'button';
                 btnTable.textContent = 'Open in table';
                 btnTable.onclick = function () {
-                    window.courseMappingMap.closePopup();
+                    if (window.courseMappingMap) window.courseMappingMap.closePopup();
+                    highlightLocationRow(idx);
+                    var rows = document.querySelectorAll('#locations-tbody tr:not(.locations-totals-row)');
+                    if (rows[idx]) {
+                        rows[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }
+                    if (isConfigPackageMode()) return;
                     openLocationEditorModal(idx, !canEditLocationsInWorkspace());
                 };
                 btnWrap.appendChild(btnTable);
@@ -3874,17 +3916,32 @@ document.addEventListener('DOMContentLoaded', function () {
             var typeLabel = getLocationTypeLabel(loc.loc_type);
             var locId = loc.id != null ? String(loc.id) : String(i + 1);
             var idCell = document.createElement('td');
-            var idBtn = document.createElement('button');
-            idBtn.type = 'button';
-            idBtn.className = 'loc-id-link';
-            idBtn.textContent = locId;
-            idBtn.title = canEditLocationsInWorkspace()
-                ? 'Edit location details'
-                : 'View location details';
-            idBtn.addEventListener('click', function () {
-                openLocationEditorModal(i, !canEditLocationsInWorkspace());
-            });
-            idCell.appendChild(idBtn);
+            if (isConfigPackageMode()) {
+                var idBtn = document.createElement('button');
+                idBtn.type = 'button';
+                idBtn.className = 'loc-id-link';
+                idBtn.textContent = locId;
+                idBtn.title = 'Show this location on the course preview';
+                idBtn.addEventListener('click', function () {
+                    highlightLocationRow(i);
+                    if (window.segmentRecipes && window.segmentRecipes.focusCoursePreviewLocation) {
+                        window.segmentRecipes.focusCoursePreviewLocation(loc);
+                    }
+                });
+                idCell.appendChild(idBtn);
+            } else {
+                var idBtnEdit = document.createElement('button');
+                idBtnEdit.type = 'button';
+                idBtnEdit.className = 'loc-id-link';
+                idBtnEdit.textContent = locId;
+                idBtnEdit.title = canEditLocationsInWorkspace()
+                    ? 'Edit location details'
+                    : 'View location details';
+                idBtnEdit.addEventListener('click', function () {
+                    openLocationEditorModal(i, !canEditLocationsInWorkspace());
+                });
+                idCell.appendChild(idBtnEdit);
+            }
             tr.appendChild(idCell);
             var humanLocTd = document.createElement('td');
             var humanLoc = loc.loc_id != null && String(loc.loc_id).trim() !== ''
@@ -3950,6 +4007,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 tr.appendChild(actionCell);
             }
+            if (isConfigPackageMode()) {
+                tr.style.cursor = 'pointer';
+                tr.title = 'Click to show this location on the course preview';
+                tr.addEventListener('click', function () {
+                    highlightLocationRow(i);
+                    if (window.segmentRecipes && window.segmentRecipes.focusCoursePreviewLocation) {
+                        window.segmentRecipes.focusCoursePreviewLocation(loc);
+                    }
+                });
+            }
             tbody.appendChild(tr);
         });
         var totalTr = document.createElement('tr');
@@ -3969,15 +4036,6 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.appendChild(totalTr);
         if (window.segmentRecipes && window.segmentRecipes.renderCoursePreviewLocations) {
             window.segmentRecipes.renderCoursePreviewLocations();
-        }
-        if (window.locationGridEditor) {
-            window.locationGridEditor.updateOpenButtonVisibility(
-                !!(
-                    isConfigPackageMode() &&
-                    canEditLocationsInWorkspace() &&
-                    currentCourse.locations.length > 0
-                )
-            );
         }
         if (!indexFilter && isConfigPackageMode() && window.segmentRecipes &&
             window.segmentRecipes.syncCoursePreviewBoundsFilterItems) {
@@ -4924,35 +4982,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var segmentEditorClose = document.getElementById('segment-editor-close');
         if (segmentEditorClose) segmentEditorClose.addEventListener('click', closeSegmentEditor);
-
-        if (window.locationGridEditor) {
-            window.locationGridEditor.init({
-                canEdit: canEditLocationsInWorkspace,
-                getLocations: function () {
-                    return (currentCourse && currentCourse.locations) || [];
-                },
-                applyLocations: function (locs) {
-                    if (!currentCourse) return;
-                    currentCourse.locations = locs;
-                    normalizeCourseLocations(currentCourse);
-                    currentCourse.locations.forEach(syncLocationResourceCounts);
-                    setDirty();
-                },
-                persist: persistConfigPackageCourse,
-                onSaved: function () {
-                    renderLocationsTableHeader();
-                    renderLocationsList();
-                    renderLocationPins();
-                    updateCourseUI();
-                },
-                getResources: getPackageResources,
-                getLocationTypeLabel: getLocationTypeLabel,
-                locationNumericId: locationNumericId,
-                offCourseUsesProxyTiming: offCourseUsesProxyTiming,
-                proxyLocIdIsSet: proxyLocIdIsSet,
-                isEligibleProxyTimingSource: isEligibleProxyTimingSource
-            });
-        }
 
         window.configPackageCourse = {
             enterEdit: function () {

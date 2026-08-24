@@ -154,6 +154,7 @@
             <div class="card-header">
                 <h4 class="card-title">All leg locations</h4>
                 <div class="card-actions">
+                    <button type="button" id="btn-edit-locations-grid" class="course-btn" style="display: none;" title="Bulk-edit zone, buffer, resources, notes, and one-pagers on org legs">Edit Locations</button>
                     <button type="button" id="btn-leg-locations-show-all-pins" class="course-btn" title="Show every location pin on the map (muted); selected leg pins stay on top">Show all pins</button>
                 </div>
             </div>
@@ -246,7 +247,7 @@
                     </details>
                 </div>
             </div>
-            <p id="segments-empty" class="card-help course-derived-empty">Assign global courses above, then <strong>Build race exports</strong>. Pan/zoom the preview map to filter segments and locations tables.</p>
+            <p id="segments-empty" class="card-help course-derived-empty">Assign global courses above, then <strong>Build race exports</strong>. This table is read-only. Pan/zoom the preview map to filter segments and locations. Edit recipes on <strong>Build → Courses</strong>.</p>
             <div id="segments-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="segments-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
@@ -262,12 +263,8 @@
         <section class="content-card course-derived-section" id="locations-card">
             <div class="card-header">
                 <h4 class="card-title">Locations (combined course)</h4>
-                <div class="card-actions">
-                    <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Operational editor for zones, timing, resources, and notes">Edit operations…</button>
-                    <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
-                </div>
             </div>
-            <p id="locations-empty" class="card-help course-derived-empty">Locations appear after <strong>Build race exports</strong> (from assigned course snapshots). <strong>ID</strong> is the crew-facing <code>loc_id</code>; <strong>Key</strong> is a stable internal reference.</p>
+            <p id="locations-empty" class="card-help course-derived-empty">Locations appear after <strong>Build race exports</strong> (from assigned course snapshots). This table is read-only — edit pins on <strong>Build → Legs</strong> (<strong>Edit Locations</strong>), then re-save the Course and export. Click a row to highlight it on the preview map. <strong>ID</strong> is the crew-facing <code>loc_id</code>; <strong>Key</strong> is a stable internal reference.</p>
             <div id="locations-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="locations-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
@@ -362,7 +359,7 @@
     <div class="course-location-modal-backdrop"></div>
     <div class="course-location-modal-panel location-grid-modal-panel" role="dialog" aria-labelledby="location-grid-title">
         <div class="course-location-modal-header">
-            <h4 id="location-grid-title">Location operations</h4>
+            <h4 id="location-grid-title">Edit Locations</h4>
             <button type="button" id="location-grid-close" aria-label="Close">&times;</button>
         </div>
         <div class="location-grid-toolbar">
@@ -417,40 +414,6 @@
             <button type="button" id="location-grid-unsaved-cancel" class="course-btn">Cancel</button>
             <button type="button" id="location-grid-unsaved-discard" class="course-btn">Discard changes</button>
             <button type="button" id="location-grid-unsaved-save-close" class="course-btn primary">Save &amp; close</button>
-        </div>
-    </div>
-</div>
-
-<div id="run-analysis-modal" class="course-location-modal" hidden aria-hidden="true">
-    <div class="course-location-modal-backdrop"></div>
-    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="run-analysis-modal-title">
-        <div class="course-location-modal-header">
-            <h4 id="run-analysis-modal-title" class="course-derived-heading" style="margin: 0;">Run analysis</h4>
-            <button type="button" id="run-analysis-modal-close" aria-label="Close">&times;</button>
-        </div>
-        <div class="course-location-modal-body">
-            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
-                Enter a <strong>start time</strong> (HH:MM, 05:00–20:00) and <strong>duration</strong> (minutes) for each event.
-                Analysis uses the exports built for this package.
-            </p>
-            <p id="run-analysis-event-day" class="course-derived-empty" style="margin: 0 0 0.75rem 0;"></p>
-            <div class="scrollable-table-container course-derived-table-scroll course-derived-table-scroll--modal">
-                <table class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
-                    <thead>
-                        <tr>
-                            <th>Event</th>
-                            <th>Start</th>
-                            <th>Duration (min)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="run-analysis-events-tbody"></tbody>
-                </table>
-            </div>
-            <p id="run-analysis-modal-error" class="course-derived-empty" style="display: none; color: #c0392b; margin: 0.75rem 0 0 0;"></p>
-        </div>
-        <div class="course-location-modal-footer">
-            <button type="button" id="btn-run-analysis-submit" class="course-btn primary">Start analysis</button>
-            <button type="button" id="run-analysis-modal-cancel" class="course-btn">Cancel</button>
         </div>
     </div>
 </div>
