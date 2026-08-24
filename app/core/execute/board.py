@@ -113,10 +113,28 @@ def _sort_active(rows: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     return sorted((dict(r) for r in rows), key=key)
 
 
-def _sort_reopened(rows: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    def key(row: Mapping[str, Any]) -> Tuple[int, str, int]:
-        stamp = str(row.get("reopened_at") or "")
-        return (0 if stamp else 1, stamp, -int(row["loc_id"]))
+def _sort_reopened(
+    rows: Iterable[Mapping[str, Any]],
+    activity: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Most recently reopened first (activity order, not HH:MM lexicographic)."""
+    recency: Dict[int, int] = {}
+    for index, item in enumerate(activity or []):
+        if not isinstance(item, Mapping):
+            continue
+        loc_id = parse_optional_id(item.get("loc_id"))
+        if loc_id is not None:
+            recency[loc_id] = index
+        for linked in item.get("linked_loc_ids") or []:
+            linked_id = parse_optional_id(linked)
+            if linked_id is not None:
+                recency[linked_id] = index
+
+    def key(row: Mapping[str, Any]) -> Tuple[int, int, int]:
+        loc_id = int(row["loc_id"])
+        seq = recency.get(loc_id, -1)
+        stamp = parse_hhmm(row.get("reopened_at"))
+        return (seq, stamp if stamp is not None else -1, loc_id)
 
     return sorted((dict(r) for r in rows), key=key, reverse=True)
 
@@ -147,6 +165,28 @@ def reopen_next_ids(
     return {lid for lid, minutes in timed if minutes <= end}
 
 
+def zone_code(raw: Any) -> Optional[str]:
+    """Display zone as Z3; empty or invalid becomes None."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return f"Z{raw}"
+    if isinstance(raw, float):
+        if raw != raw:  # NaN
+            return None
+        return f"Z{int(raw)}"
+    text = str(raw).strip()
+    if not text or text.lower() in ("nan", "none", "null", "na"):
+        return None
+    if text[0] in ("z", "Z"):
+        rest = text[1:].lstrip()
+        return f"Z{rest}" if rest else None
+    try:
+        return f"Z{int(float(text))}"
+    except (TypeError, ValueError):
+        return f"Z{text}"
+
+
 def build_strip(
     row: Mapping[str, Any],
     *,
@@ -163,6 +203,7 @@ def build_strip(
         "loc_id": loc_id,
         "loc_label": row.get("loc_label") or "",
         "loc_type": row.get("loc_type") or "",
+        "zone": zone_code(row.get("zone")),
         "loc_end": minutes_to_hhmm(loc_end_minutes),
         "loc_end_planned": row.get("loc_end"),
         "estimate_passed": estimate_passed(loc_end_minutes, now_hhmmss),
@@ -267,7 +308,9 @@ def assemble_board(
         "columns": {
             "closed": _sort_active(closed),
             "reopen_next": _sort_active(reopen_next),
-            "reopened": _sort_reopened(reopened),
+            "reopened": _sort_reopened(
+                reopened, state.get("activity") or []
+            ),
         },
         "counts": {
             "closed": len(closed),

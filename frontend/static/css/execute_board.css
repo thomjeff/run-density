@@ -11,18 +11,22 @@
 }
 
 .rf-execute-toolbar {
+    --rf-ex-control-h: 2rem;
+    --rf-ex-control-radius: 0.35rem;
+    --rf-ex-control-border: var(--tblr-border-color, #e6e7e9);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.65rem 1rem;
+    gap: 0.75rem 1.5rem;
     margin-bottom: 0.85rem;
 }
 
-.rf-execute-clock {
+.rf-execute-status {
     display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    min-width: 9.5rem;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: var(--rf-ex-control-h);
+    margin-right: 0.35rem;
 }
 
 .rf-execute-clock-time {
@@ -33,25 +37,83 @@
     line-height: 1;
 }
 
-.rf-execute-clock-tz {
-    color: #667382;
-    font-size: 0.75rem;
+.rf-execute-status-rule {
+    color: #c5cdd6;
+    font-size: 1.05rem;
+    font-weight: 300;
+    line-height: 1;
+    user-select: none;
 }
 
-.rf-execute-clock-actions {
+.rf-execute-next-refresh {
     display: flex;
+    align-items: center;
     gap: 0.35rem;
-}
-
-.rf-execute-search {
-    flex: 1 1 14rem;
-    min-width: 12rem;
-    max-width: 22rem;
-}
-
-.rf-execute-counts {
     color: #667382;
-    font-size: 0.8rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+
+.rf-execute-next-refresh-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: #4b5563;
+}
+
+.rf-execute-toolbar #rf-execute-refresh {
+    width: var(--rf-ex-control-h);
+    height: var(--rf-ex-control-h);
+    margin: 0;
+    border-color: var(--rf-ex-control-border);
+    border-radius: var(--rf-ex-control-radius);
+}
+
+.rf-execute-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rf-execute-toolbar #rf-execute-zone,
+.rf-execute-toolbar #rf-execute-search,
+.rf-execute-toolbar #rf-execute-export {
+    box-sizing: border-box;
+    height: var(--rf-ex-control-h);
+    min-height: var(--rf-ex-control-h);
+    max-height: var(--rf-ex-control-h);
+    padding-top: 0;
+    padding-bottom: 0;
+    border: 1px solid var(--rf-ex-control-border);
+    border-radius: var(--rf-ex-control-radius);
+    font-size: 0.875rem;
+    background-color: #fff;
+    color: #3b4a5a;
+    box-shadow: none;
+}
+
+.rf-execute-toolbar #rf-execute-zone {
+    width: auto;
+    min-width: 8.75rem;
+    padding-left: 0.65rem;
+    padding-right: 1.75rem;
+}
+
+.rf-execute-toolbar #rf-execute-search {
+    flex: 0 0 16rem;
+    width: 16rem;
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+}
+
+.rf-execute-toolbar #rf-execute-export {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    line-height: 1;
+    font-weight: 500;
 }
 
 .rf-execute-guns {
@@ -381,27 +443,6 @@
 .rf-ex-confirm-actions {
     display: flex;
     gap: 0.4rem;
-}
-
-.rf-execute-log {
-    margin-top: 1rem;
-    background: #fff;
-    border: 1px solid #e6e7e9;
-    border-radius: 4px;
-}
-
-.rf-execute-log summary {
-    cursor: pointer;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.rf-execute-log-body {
-    border-top: 1px solid #e6e7e9;
-    padding: 0.4rem 0.75rem 0.65rem;
-    font-size: 0.78rem;
-    color: #4b5563;
 }
 
 .rf-execute-empty-page,

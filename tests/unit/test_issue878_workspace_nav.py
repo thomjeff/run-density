@@ -58,15 +58,43 @@ def test_execute_uses_selected_run_and_loads_runs_dropdown(base_source: str):
 def test_execute_board_has_three_columns(base_source: str):
     assert 'href="/execute"' in base_source
     assert "rf-execute-chrome" in base_source
-    assert 'data-rf-execute-view="1"' in base_source
+    assert 'data-rf-execute-view="1">Reopen</a>' in base_source
+    assert ">Race day<" not in base_source
     execute = EXECUTE.read_text(encoding="utf-8")
     assert 'id="rf-execute-board"' in execute
     assert 'data-col="closed"' in execute
     assert 'data-col="reopen_next"' in execute
     assert 'data-col="reopened"' in execute
-    assert "Clock suggests order. Radio decides." in execute
+    assert "Clock suggests order. Radio decides." not in execute
+    assert "{% block title %}Reopen{% endblock %}" in execute
+    assert "<h2>Reopen</h2>" in execute
+    assert 'id="rf-execute-refresh"' in execute
+    assert 'class="course-map-action-btn"' in execute
+    assert 'id="rf-execute-next-refresh"' in execute
+    assert "Refresh in" in execute
+    assert "Next refresh" not in execute
+    assert 'id="rf-execute-clock-tz"' not in execute
+    assert "America/Halifax" not in execute
+    assert 'id="rf-execute-pause"' not in execute
+    assert 'id="rf-execute-jump"' not in execute
+    assert 'id="rf-execute-zone"' in execute
+    assert "All Zones" in execute
     assert 'id="rf-execute-export"' in execute
-    assert "Reopen CSV" in execute
+    assert "Export CSV" in execute
+    assert "Reopen CSV" not in execute
+    assert 'id="rf-execute-counts"' not in execute
+    assert 'placeholder="Search locations..."' in execute
+    assert "Activity log" not in execute
+    assert "rf-execute-log" not in execute
+    js = (
+        REPO_ROOT / "frontend" / "static" / "js" / "execute_board.js"
+    ).read_text(encoding="utf-8")
+    assert "COLUMN_PREVIEW = 10" in js
+    assert "BOARD_REFRESH_MS = 5 * 60 * 1000" in js
+    assert "Show more" in js
+    assert "Show earlier" in js
+    assert "zoneOptionLabel" in js
+    assert '"Zone "' in js
     # Map stays off the main Execute screen; strip links are JS-built
     assert 'href="/locations"' not in execute
 

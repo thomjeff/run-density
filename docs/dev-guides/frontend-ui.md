@@ -76,7 +76,7 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 
 - Top bar (Plan): **Runflow** | **Plan ▾** | **Runs ▾** | Overview · Density · Flow · Junctions · Motion · Progression · Locations | Logout
 - Top bar (Build): **Runflow** | **Build ▾** | Legs · Courses · Runners · Packages | Logout
-- Top bar (Execute): **Runflow** | **Execute ▾** | Race day | Logout — placeholder only (Issue #878); no Locations item
+- Top bar (Execute): **Runflow** | **Execute ▾** | Reopen | Logout (Issue #900); no Locations item
 - Workspace control switches Build ↔ Plan ↔ Execute (mutually exclusive chrome; Issue #878, formerly Results/Build in #842)
 - **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard` (Plan only)
 - Picking a run opens **`/overview?run_id=`** (day is derived from the run — Issue #841; no day dropdown)
