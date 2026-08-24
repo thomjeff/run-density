@@ -191,7 +191,16 @@
 
     /** Modals live under the package workspace; reparent so hub Legs/Courses can open them. */
     function ensureHubModalsOnBody() {
-        ['leg-editor-modal', 'saved-course-modal', 'resources-editor-modal'].forEach(function (id) {
+        [
+            'leg-editor-modal',
+            'saved-course-modal',
+            'resources-editor-modal',
+            'location-editor-modal',
+            'location-grid-modal',
+            'location-grid-bulk-modal',
+            'location-grid-unsaved-modal',
+            'org-leg-library-modal',
+        ].forEach(function (id) {
             const el = document.getElementById(id);
             if (el && el.parentElement !== document.body) {
                 document.body.appendChild(el);

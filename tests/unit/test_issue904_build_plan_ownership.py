@@ -37,6 +37,16 @@ def test_location_grid_persists_via_org_legs():
     )
 
 
+def test_edit_locations_modals_reparent_to_body_on_legs_hub():
+    """Package workspace is display:none on Build → Legs; hub modals must leave it."""
+    race_js = (JS / "race_configuration.js").read_text(encoding="utf-8")
+    grid = (JS / "map" / "location_grid_editor.js").read_text(encoding="utf-8")
+    assert "location-grid-modal" in race_js
+    assert "location-grid-bulk-modal" in race_js
+    assert "location-grid-unsaved-modal" in race_js
+    assert "document.body.appendChild(modal)" in grid
+
+
 def test_package_combined_course_is_inspect_only():
     mapping = (JS / "map" / "course_mapping.js").read_text(encoding="utf-8")
     recipes = (JS / "map" / "segment_recipes.js").read_text(encoding="utf-8")

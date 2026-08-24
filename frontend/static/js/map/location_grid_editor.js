@@ -666,6 +666,9 @@
 
     function showModal(modal) {
         if (!modal) return;
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
         modal.hidden = false;
         modal.setAttribute('aria-hidden', 'false');
     }
