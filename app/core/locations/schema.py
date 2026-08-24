@@ -154,6 +154,15 @@ def _default_location_fields() -> Dict[str, Any]:
     return fields
 
 
+def _resource_count(value: Any) -> int:
+    if isinstance(value, dict):
+        value = value.get("count")
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _sync_resources_dict(
     loc: Dict[str, Any], resource_codes: Sequence[str]
 ) -> Dict[str, int]:
@@ -164,17 +173,11 @@ def _sync_resources_dict(
     for code in resource_codes:
         col = count_column(code)
         if col in loc and loc[col] not in (None, ""):
-            try:
-                resources[code] = int(float(loc[col]))
-            except (TypeError, ValueError):
-                resources[code] = 0
+            resources[code] = _resource_count(loc[col])
         elif code not in resources:
             resources[code] = 0
         else:
-            try:
-                resources[code] = int(resources[code])
-            except (TypeError, ValueError):
-                resources[code] = 0
+            resources[code] = _resource_count(resources[code])
         loc[count_column(code)] = resources[code]
     loc["resources"] = resources
     return resources

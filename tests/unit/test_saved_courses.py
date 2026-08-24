@@ -482,3 +482,93 @@ def test_build_race_exports_uses_saved_course_zone(tmp_path, monkeypatch):
     assert charlotte[0].get("zone") == "9"
     course_after = json.loads(course_path.read_text(encoding="utf-8"))
     assert course_after["locations"][0].get("zone") == "9"
+
+def test_build_race_exports_uses_saved_course_buffer_and_resources(
+    tmp_path, monkeypatch
+):
+    """Stale package buffer/resources must not override the course snapshot."""
+    import csv
+
+    _patch_roots(tmp_path, monkeypatch)
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    gpx_name = "36_trail.gpx"
+    (org_dir / gpx_name).write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "36",
+                        "file": gpx_name,
+                        "seg_label": "Trail",
+                        "start_label": "Start",
+                        "end_label": "End",
+                        "locations": [
+                            {
+                                "loc_label": "Trail at Charlotte",
+                                "loc_type": "course",
+                                "lat": 45.954885,
+                                "lon": -66.636135,
+                                "placement": "along",
+                                "zone": "9",
+                                "buffer": 15,
+                                "location_key": "N2RKT",
+                                "resources": {
+                                    "yssr": {"count": 2, "label": "YSSR"}
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    save_org_course(
+        name="Full Trail",
+        distance="full",
+        recipe=["36"],
+        course_id="04",
+    )
+
+    result = create_config_package(
+        "Race build ops",
+        "",
+        event_day="sun",
+        package_events=["full"],
+    )
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "recipes": {"full": []},
+            "flow_overrides": [],
+        },
+    )
+    set_package_course_assignments(config_id, {"full": "04"})
+    build_package_race_exports(config_id)
+
+    package_path = resolve_config_package_path(config_id)
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text(encoding="utf-8"))
+    stale = course["locations"][0]
+    stale["buffer"] = 99
+    stale["resources"] = {"yssr": {"count": 8, "label": "YSSR"}}
+    course_path.write_text(json.dumps(course, indent=2), encoding="utf-8")
+
+    build_package_race_exports(config_id)
+
+    course_after = json.loads(course_path.read_text(encoding="utf-8"))
+    loc = course_after["locations"][0]
+    assert loc.get("buffer") == 15
+    yssr = (loc.get("resources") or {}).get("yssr")
+    assert (yssr.get("count") if isinstance(yssr, dict) else yssr) == 2
+    rows = list(csv.DictReader((package_path / "passes.csv").open(encoding="utf-8")))
+    charlotte = [r for r in rows if r.get("loc_label") == "Trail at Charlotte"]
+    assert len(charlotte) == 1
+    assert charlotte[0].get("buffer") == "15"
+

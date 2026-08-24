@@ -97,11 +97,10 @@ _LEG_OWNED_ZONE_FIELD = "zone"
 _LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS + (_LEG_OWNED_ZONE_FIELD,)
 
 # Assigned-course race builds use saved course leg snapshots as source of truth
-# for labels/types/placement/zone; only remaining operational fields stay on the
-# package row.
+# for labels/types/placement/zone/buffer/resources. Remaining operational
+# fields may stay on the package row.
 _RACE_EXPORT_PRESERVE_FIELDS = (
     "notes",
-    "buffer",
     "interval",
     "equipment",
     "contact",
@@ -111,7 +110,6 @@ _RACE_EXPORT_PRESERVE_FIELDS = (
     "loc_id",
     "day",
     "onepage",
-    "resources",
 )
 
 _BLANK_LOCATION_DAYS = frozenset({"", "nan", "none", "null"})
@@ -1198,10 +1196,10 @@ def merge_leg_locations_into_course(
     segment whose ``leg_id`` matches the leg.
 
     ``leg_manifest`` overrides the org/package library (e.g. merged saved-course
-    snapshots during Build race exports). ``preserve_from_course`` controls which
+    snapshots during Build race exports).     ``preserve_from_course`` controls which
     fields are kept from existing course rows; race builds use
     ``_RACE_EXPORT_PRESERVE_FIELDS`` so saved course snapshots win for
-    type/label/zone.
+    type/label/zone/buffer/resources.
     """
     from app.core.config_package.leg_library_resolver import (
         recipe_leg_ids_from_package,
@@ -1304,6 +1302,11 @@ def merge_leg_locations_into_course(
             zone_val = loc.get(_LEG_OWNED_ZONE_FIELD)
             if zone_val not in (None, ""):
                 row[_LEG_OWNED_ZONE_FIELD] = zone_val
+            buf = loc.get("buffer")
+            if buf not in (None, ""):
+                row["buffer"] = buf
+            if isinstance(loc.get("resources"), dict):
+                row["resources"] = loc["resources"]
             if not row["pass_key"]:
                 ensure_location_key(row, used_loc_keys)
                 row["pass_key"] = row.get("location_key") or ""
@@ -1605,20 +1608,22 @@ def sync_leg_metadata_if_applied(config_id: str) -> bool:
 
 def sync_leg_location_metadata_from_course(config_id: str) -> bool:
     """
-    Push leg-sourced label/placement edits from course.json into the segment library.
+    Push location edits from package course.json into a package-local leg library.
 
-    Course tab is master for loc_label and related fields edited there; the manifest
-    is updated so Legs tab and subsequent merges stay consistent.
+    Org-sourced packages never write back to Build → Legs. Location authoring
+    for those packages belongs on the org library; re-save a Course snapshot
+    and Build race exports to pick up Legs changes.
     """
     from app.core.config_package.leg_library_resolver import (
         LEG_SOURCE_ORG,
         resolve_leg_library,
     )
-    from app.core.config_package.org_leg_library import save_org_leg_manifest
 
     cid = validate_config_id(config_id)
-    course = load_config_course(cid)
     _lib_dir, manifest, leg_source, _pkg_manifest = resolve_leg_library(cid)
+    if leg_source == LEG_SOURCE_ORG:
+        return False
+    course = load_config_course(cid)
     legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
     leg_index: Dict[str, int] = {}
     for i, entry in enumerate(legs):
@@ -1679,10 +1684,7 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
 
     if changed:
         set_manifest_legs(manifest, legs)
-        if leg_source == LEG_SOURCE_ORG:
-            save_org_leg_manifest(manifest)
-        else:
-            save_package_segment_manifest(cid, manifest)
+        save_package_segment_manifest(cid, manifest)
     return changed
 
 

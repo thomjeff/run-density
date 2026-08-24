@@ -935,9 +935,9 @@ def build_package_race_exports(config_id: str) -> Dict[str, Any]:
     save_package_segment_manifest(cid, pkg_seg)
 
     # Merge locations from assigned-course snapshots (not live org legs).
-    # Zone comes from the snapshot (org Legs); do not keep stale package zone.
-    # Package course.json may still have stale traffic types; do not preserve
-    # those over the saved course leg snapshot.
+    # Zone, buffer, and resources come from the snapshot (org Legs / Courses);
+    # do not keep stale package copies. Package course.json may still have
+    # stale traffic types; do not preserve those over the saved course snapshot.
     try:
         from app.core.config_package.legs import (
             _RACE_EXPORT_PRESERVE_FIELDS,

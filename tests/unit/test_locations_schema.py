@@ -45,6 +45,18 @@ def test_normalize_location_migrates_description_and_resources():
     assert out["resources"]["vol"] == 1
 
 
+def test_normalize_location_accepts_nested_resource_count():
+    loc = {
+        "id": 3,
+        "loc_label": "Water",
+        "loc_type": "water",
+        "resources": {"yssr": {"count": 2, "label": "YSSR"}},
+    }
+    out = normalize_location_record(loc, ["yssr"], index=1)
+    assert out["resources"]["yssr"] == 2
+    assert out["yssr_count"] == 2
+
+
 def test_build_locations_csv_full_schema():
     course = {
         "locations": [
