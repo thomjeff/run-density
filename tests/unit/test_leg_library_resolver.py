@@ -1,5 +1,7 @@
 """Tests for org-primary leg library resolution (Issue #780)."""
 
+import json
+
 import pytest
 import yaml
 
@@ -11,8 +13,14 @@ from app.core.config_package.leg_library_resolver import (
     recipe_leg_ids_from_package,
     resolve_leg_library,
 )
-from app.core.config_package.legs import merge_leg_locations_into_course
-from app.core.config_package.org_leg_library import update_org_leg
+from app.core.config_package.legs import (
+    merge_leg_locations_into_course,
+    sync_leg_location_metadata_from_course,
+)
+from app.core.config_package.org_leg_library import (
+    list_org_legs,
+    update_org_leg,
+)
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
     get_package_segment_library_state,
@@ -349,8 +357,10 @@ def test_export_org_primary_writes_flow_and_gpx(tmp_path, monkeypatch):
     assert {g["event_id"] for g in applied.get("gpx_files") or []} == {"full", "half"}
 
 
-def test_update_org_leg_location_syncs_into_applied_packages(tmp_path, monkeypatch):
-    """A leg pin move on the Legs tab must land in course.json without a re-apply."""
+def test_update_org_leg_location_does_not_sync_into_applied_packages(
+    tmp_path, monkeypatch
+):
+    """Issue #904: Legs location edits stay on org legs until Course snapshot / re-apply."""
     _patch_roots(tmp_path, monkeypatch)
     _seed_org_leg(tmp_path)
 
@@ -398,8 +408,13 @@ def test_update_org_leg_location_syncs_into_applied_packages(tmp_path, monkeypat
     water = next(
         loc for loc in course["locations"] if loc.get("loc_type") == "water"
     )
-    assert water["lat"] == pytest.approx(45.9655)
-    assert water["lon"] == pytest.approx(-66.6355)
+    assert water["lat"] == pytest.approx(45.961)
+    assert water["lon"] == pytest.approx(-66.642)
+
+    org_leg = next(leg for leg in list_org_legs() if str(leg.get("id")) == "05")
+    org_water = org_leg["locations"][0]
+    assert org_water["lat"] == pytest.approx(45.9655)
+    assert org_water["lon"] == pytest.approx(-66.6355)
 
     untouched_course = load_config_course(untouched["config_id"])
     assert not untouched_course.get("locations")
@@ -470,3 +485,58 @@ def test_reapply_rewrites_event_kms_when_recipe_gains_a_finish_leg(tmp_path, mon
     assert segs[0]["full_to_km"] == pytest.approx(first_to)
     assert segs[1]["full_from_km"] == pytest.approx(first_to)
     assert segs[1]["full_to_km"] > first_to
+
+
+def test_org_package_course_save_does_not_write_back_to_legs(
+    tmp_path, monkeypatch
+):
+    """Package course.json edits must not mutate the org leg library."""
+    _patch_roots(tmp_path, monkeypatch)
+    _seed_org_leg(
+        tmp_path,
+        legs=[
+            {
+                "leg_id": "05",
+                "label": "Org trail",
+                "loc_label": "Water",
+                "loc_type": "water",
+                "buffer": 30,
+                "zone": "A1",
+                "resources": {"yssr": {"count": 2, "label": "YSSR"}},
+            }
+        ],
+    )
+
+    result = create_config_package("Pkg", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05"]},
+            "flow_overrides": [],
+        },
+    )
+    apply_package_recipes(config_id, export_csv=False)
+
+    course = load_config_course(config_id)
+    loc = course["locations"][0]
+    loc["loc_label"] = "Edited in package"
+    loc["buffer"] = 99
+    loc["zone"] = "Z9"
+    loc["resources"] = {"yssr": {"count": 8, "label": "YSSR"}}
+    course_path = tmp_path / "config" / config_id / "course.json"
+    course_path.write_text(json.dumps(course, indent=2), encoding="utf-8")
+
+    assert sync_leg_location_metadata_from_course(config_id) is False
+
+    org_manifest = yaml.safe_load(
+        (tmp_path / "org" / "legs" / "manifest.yaml").read_text(encoding="utf-8")
+    )
+    org_loc = org_manifest["legs"][0]["locations"][0]
+    assert org_loc["loc_label"] == "Water"
+    assert org_loc["buffer"] == 30
+    assert org_loc["zone"] == "A1"
+    assert org_loc["resources"]["yssr"]["count"] == 2

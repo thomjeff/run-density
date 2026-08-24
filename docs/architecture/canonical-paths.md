@@ -12,7 +12,8 @@ This page answers: *what is the supported path today?* Names like `new_*` or `le
 ## 1. Analysis (v2) — canonical
 
 ```text
-UI Build (Package → Run analysis)
+UI Plan (Overview → New analysis) or Build-assembled package exports
+  then POST /api/config/packages/{id}/run-analysis
   or POST /runflow/v2/analyze
         │
         ▼

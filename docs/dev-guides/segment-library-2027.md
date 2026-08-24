@@ -70,13 +70,14 @@ Two copies of leg data exist: the leg manifest (authoring) and the package `cour
 
 | Direction | Mechanism | Triggers |
 |-----------|-----------|----------|
-| Leg → course | `merge_leg_locations_into_course()` + `sync_leg_metadata_into_course()` (`legs.py`) | Apply recipes; any package-leg update; **any org-leg update** fans out via `sync_org_leg_changes_into_packages()` (`org_leg_library.py`) to every org-sourced package with applied recipes |
-| Course → leg | `sync_leg_location_metadata_from_course()` | Locations grid (operations editor) saves |
+| Leg → course | `merge_leg_locations_into_course()` + `sync_leg_metadata_into_course()` (`legs.py`) | Apply recipes; any package-leg update; org-leg **route metadata** fans out via `sync_org_leg_changes_into_packages()`. Location ops stay on org legs until Course snapshot / re-apply (#904) |
+| Course → leg | `sync_leg_location_metadata_from_course()` | **Package-local legs only** (`leg_source: package`). Org-sourced packages never write `course.json` location edits back to Build → Legs |
 
 **Field ownership** during leg → course merge:
 
 - **Leg-owned:** `lat`, `lon`, `placement` (`_LEG_OWNED_PLACEMENT_FIELDS`) — pin moves on the Legs tab always win; stale course copies never override them.
-- **Course-owned (preserved):** crew-facing `id` (`loc_id`), resources, zone, notes, buffer, interval, contact, proxy settings, etc. (`_LEG_LOC_PRESERVE_FIELDS` minus placement). Identity is matched by `location_key` / `leg_loc_key`.
+- **Snapshot-owned on race export:** zone, buffer, resources, label, type (Issue #836 plus org one-way authoring). Stale package `course.json` copies do not win.
+- **Package-preserved on race export:** crew-facing `id` (`loc_id`), notes, interval, equipment, contact, proxy settings, day, onepage. Identity is matched by `location_key` / `leg_loc_key`.
 
 **Server-owned recipe kms:** `_preserve_recipe_segment_kms()` (`storage.py::save_config_course`) prevents stale client saves from overwriting recipe-applied per-event `from_km`/`to_km` and the `segment_library_applied` flag. Match is `seg_id` plus the same `leg_id` / occurrence — a recipe reorder that reuses S-numbers on different legs does not inherit the old row's km. `apply_package_recipes` saves with `preserve_recipe_kms=False` so a re-apply always writes freshly measured km. Those kms are measured along the stitched event polyline (`_build_event_occurrence_km` / `concat_recipe_coordinates`), rounded to 3 decimals (1 m), so they match GPX slicing in location reports (#786).
 

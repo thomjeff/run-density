@@ -115,14 +115,15 @@ def test_runners_hub_panel_exists():
     assert "compatible_datasets" in js or "runner-datasets" in js
 
 
-def test_package_header_owns_readiness_and_run_analysis():
+def test_package_header_owns_readiness_not_run_analysis():
     header = RACE_CONFIG.read_text(encoding="utf-8")
     assign = (
         REPO_ROOT / "frontend" / "templates" / "partials" / "course_mapping_workspace.html"
     ).read_text(encoding="utf-8")
     header_card = header.split('id="config-package-details-card"', 1)[1]
     header_card = header_card.split('id="race-config-tab-workspace"', 1)[0]
-    assert 'id="btn-run-package-analysis"' in header_card
+    assert 'id="btn-run-package-analysis"' not in header_card
+    assert 'id="package-run-analysis-hint"' in header_card
     assert 'id="package-readiness-checklist"' in header_card
     assert "EVENT DAY" in header_card
     assert header_card.find("EVENT DAY") < header_card.find('id="package-readiness-checklist"')

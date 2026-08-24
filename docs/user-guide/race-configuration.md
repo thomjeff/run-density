@@ -145,7 +145,7 @@ If the **same leg appears twice in one recipe** (e.g. a single bidirectional con
 
 ## Locations on legs
 
-Place pins on **Legs** with **Add Locations** (select a leg first). Location types:
+Place pins on **Legs** with **Add Locations** (select a leg first). Use **Edit Locations** on the **All leg locations** card for bulk ops (zone, buffer, resources, notes, one-pager). Location types:
 
 | Type | Snaps to route? | Typical use |
 |------|------------------|-------------|
@@ -156,7 +156,9 @@ Place pins on **Legs** with **Add Locations** (select a leg first). Location typ
 | **traffic** | No | Traffic control points |
 | **extract** | No | Extraction points |
 
-**Legs own pin positions.** Dragging a pin on Legs is saved on the org leg. When you save a Course, locations on those legs are snapshotted into the course folder.
+**Legs own pin positions.** Dragging a pin on Legs is saved on the org leg. **Edit Locations** on the All leg locations card bulk-edits ops fields onto those org rows. When you save a Course, locations on those legs are snapshotted into the course folder.
+
+**Package combined-course tables are read-only.** Edit on Legs, re-save the Course snapshot, then **Build race exports**. Org-sourced packages never write location edits back to Legs.
 
 ---
 
@@ -193,11 +195,9 @@ Copy or symlink runner CSVs into the course folder (or use a package build for m
 
 ## Package: Assign courses + Build race exports
 
-1. Open a race configuration. **Analysis readiness** and **Run analysis** live in the package header (after Event day / Events), so they stay visible on Courses, Junctions, and Runners.
+1. Open a race configuration. **Analysis readiness** stays in the package header. **Run analysis** is on **Plan → Overview** (choose this package, then set start times).
 2. On the **Courses** tab, for each package event (Full / Half / 10K), select one global course.
 3. **Save assignments**, then **Build race exports**.
-
-That merges the assigned course leg snapshots and recipes into package-root files ready for multi-distance analysis:
 
 That merges the assigned course leg snapshots and recipes into package-root files ready for multi-distance analysis:
 
@@ -210,7 +210,7 @@ That merges the assigned course leg snapshots and recipes into package-root file
 
 Analyze with `data_dir`: `runflow/config/{config_id}`.
 
-> **Legacy:** **Edit event recipes** remains under Advanced on the package. Recipes that define a new course belong on **Build → Courses** (New course). Opening the package Courses tab does not pop the Event recipes modal.
+> **Legacy:** Event recipes belong on **Build → Courses** (New course), not on the package.
 
 ---
 
@@ -265,6 +265,9 @@ Requires `openpyxl` (`pip install openpyxl` or use the project `requirements.txt
 
 **"Editing a leg changed my race analysis."**
 Org leg edits affect the live library. Already-saved Courses keep their snapshotted legs until you save a new course (or rebuild after re-assigning an updated course).
+
+**"If I edit locations in a package, does that update Legs?"**
+Package combined-course locations are read-only. Edit on **Build → Legs** (**Edit Locations**), re-save the Course, then **Build race exports**.
 
 **"I need two different 10K routes."**
 Save two courses with distance `10k` and different names/recipes. Assign the one you want on the package Courses tab.

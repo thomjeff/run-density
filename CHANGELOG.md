@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Build owns location edits; Plan owns start times (#904)
+- **Build → Legs** has **Edit Locations** (the former package Location operations grid); Save writes org legs only
+- Package **Locations** / **Segments** combined-course tables are inspect-only (click to highlight the preview)
+- **Manage resources** stays on Legs; it is removed from the package Locations card
+- **Run analysis** / start times move to **Plan → Overview** (New analysis: pick package, set guns)
+- Package header keeps analysis readiness and points authors to Plan; org leg location edits no longer auto-merge into package `course.json`
+
+### Location authoring one-way (org Legs)
+- Saving a package course no longer writes location edits back to **Build → Legs**; zone, buffer, and resource counts on race export come from the Course snapshot
+
 ### Reopen board UX (#900)
 - Execute nav item and page title are **Reopen**; Pause / Jump and the “Clock suggests order” hint are removed
 - Location strips show Zone first (`Z3 · YSSR 2`); a global Zone filter applies to all three columns

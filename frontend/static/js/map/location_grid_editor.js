@@ -75,7 +75,9 @@
 
     function resourceCount(loc, code) {
         if (loc.resources && loc.resources[code] != null) {
-            var n = parseInt(loc.resources[code], 10);
+            var raw = loc.resources[code];
+            if (raw && typeof raw === 'object' && raw.count != null) raw = raw.count;
+            var n = parseInt(raw, 10);
             return isNaN(n) ? 0 : Math.max(0, n);
         }
         var c = loc[code + '_count'];
@@ -88,7 +90,11 @@
         var n = parseInt(raw, 10);
         if (isNaN(n) || n < 0) n = 0;
         if (!loc.resources) loc.resources = {};
-        loc.resources[code] = n;
+        if (loc.resources[code] && typeof loc.resources[code] === 'object') {
+            loc.resources[code] = Object.assign({}, loc.resources[code], { count: n });
+        } else {
+            loc.resources[code] = n;
+        }
         loc[code + '_count'] = n;
     }
 
@@ -139,7 +145,9 @@
             var label = (loc.loc_label || '').trim() || 'Row ' + (i + 1);
             var seg = (loc.seg_id || '').trim();
             var proxy = loc.proxy_loc_id;
-            var hasProxy = proxy != null && proxy !== '' && String(proxy).trim() !== '';
+            var proxyKey = loc.proxy_leg_loc_key != null ? String(loc.proxy_leg_loc_key).trim() : '';
+            var hasProxy =
+                (proxy != null && proxy !== '' && String(proxy).trim() !== '') || !!proxyKey;
             if (hasProxy && seg) {
                 errors.push(label + ': use proxy timing or Seg ID, not both (Issue #751)');
             }
@@ -253,6 +261,12 @@
     }
 
     function buildProxySelect(loc, rowIndex, editable) {
+        if (deps && typeof deps.buildProxySelect === 'function') {
+            return deps.buildProxySelect(loc, rowIndex, editable, function () {
+                markDirty();
+                renderGridBody();
+            });
+        }
         var sel = document.createElement('select');
         sel.className = 'location-grid-detail-input';
         sel.disabled = !editable;
@@ -638,7 +652,7 @@
         var title = $('location-grid-title');
         if (title) {
             title.textContent =
-                'Location operations · ' + workingLocations.length + ' locations';
+                'Edit Locations · ' + workingLocations.length + ' locations';
         }
     }
 
@@ -867,12 +881,12 @@
 
     function open() {
         if (!deps || !deps.canEdit || !deps.canEdit()) {
-            alert('Load a config package course with locations to use the location operations editor.');
+            alert('Open Build → Legs to edit locations.');
             return;
         }
         var locs = deps.getLocations ? deps.getLocations() : [];
         if (!locs.length) {
-            alert('No locations to edit. Save event recipes first.');
+            alert('No locations match the current Legs filters.');
             return;
         }
         workingLocations = deepCloneLocations(locs);
@@ -886,7 +900,11 @@
         showModal($('location-grid-modal'));
     }
 
+    var uiBound = false;
+
     function bindUi() {
+        if (uiBound) return;
+        uiBound = true;
         var openBtn = $('btn-edit-locations-grid');
         if (openBtn) openBtn.addEventListener('click', open);
 
