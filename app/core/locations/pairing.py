@@ -228,12 +228,14 @@ def consolidate_location_rows(
             "peak_end": g.get("peak_end"),
             "by_event": g.get("by_event") or _merge_by_event_from_passes(passes),
             "flag": g.get("flag"),
-            "onepage": g.get("onepage"),
+            "onepage": g.get("onepage") if g.get("onepage") not in (None, "") else "n",
             "notes": g.get("notes"),
             "proxy_pass_id": proxy_pass_id,
             "proxy_loc_id": proxy_loc_id,
         }
         for k, v in g.items():
+            if k == "pass_count":
+                continue
             if k.endswith("_count") or k.endswith("_mins"):
                 row[k] = v
         out.append(row)
@@ -286,11 +288,11 @@ def _singleton_group(
         "peak_end": row.get("peak_end"),
         "by_event": _merge_by_event_from_passes([row]),
         "flag": row.get("flag"),
-        "onepage": row.get("onepage"),
+        "onepage": row.get("onepage") if row.get("onepage") not in (None, "") else "n",
         "notes": row.get("notes"),
         "proxy_pass_id": row.get("proxy_pass_id"),
         "proxy_loc_id": row.get("proxy_loc_id"),
-        **{k: row[k] for k in row if k.endswith("_count") or k.endswith("_mins")},
+        **{k: row[k] for k in row if k != "pass_count" and (k.endswith("_count") or k.endswith("_mins"))},
     }
 
 
@@ -321,6 +323,8 @@ def _paired_group(key: str, group: List[Dict[str, Any]]) -> Dict[str, Any]:
     merged_counts: Dict[str, Any] = {}
     for r in ordered:
         for k, v in r.items():
+            if k == "pass_count":
+                continue
             if k.endswith("_count") or k.endswith("_mins"):
                 try:
                     num = float(v) if v is not None and str(v) not in ("", "nan") else 0
@@ -358,7 +362,7 @@ def _paired_group(key: str, group: List[Dict[str, Any]]) -> Dict[str, Any]:
         ),
         "onepage": "y"
         if any(str(r.get("onepage", "")).strip().lower() == "y" for r in ordered)
-        else primary.get("onepage"),
+        else (primary.get("onepage") if primary.get("onepage") not in (None, "") else "n"),
         "notes": primary.get("notes")
         or next((r.get("notes") for r in ordered if r.get("notes")), ""),
         "proxy_pass_id": proxy_pass_id,

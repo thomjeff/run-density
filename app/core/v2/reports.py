@@ -4,12 +4,11 @@ Runflow v2 Reports Module
 Generates day-partitioned reports (Density.md, Flow.csv, Locations.csv)
 organized in runflow/analysis/{run_id}/{day}/reports/ structure.
 
-Also writes a run-level ``Locations.csv`` (all days) to ``runflow/analysis/{run_id}/Locations.csv``. Issue #749.
-
 Phase 6: Reports & Artifacts (Issue #500)
 
 Issue #600: Flow.md generation deprecated (only Flow.csv is used)
 Issue #682: Updated to use runflow/analysis/{run_id} structure
+Issue #903: Locations.csv / Passes.csv live only under ``{day}/reports/``
 """
 
 from typing import Dict, List, Any, Optional, Sequence
@@ -19,89 +18,8 @@ import logging
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import DayTimeline
 from app.core.v2.performance import log_span
-from app.utils.run_id import get_runflow_root, DAY_ORDER
 
 logger = logging.getLogger(__name__)
-
-
-def write_combined_locations_csv(run_dir: Path) -> Optional[Path]:
-    """
-    Issue #749: Merge ``{day}/reports/Locations.csv`` into ``run_dir/Locations.csv``.
-
-    Days follow chronological ``DAY_ORDER`` (fri→mon). Rows sort by day then ``loc_id``.
-    Per-day files missing or unreadable are skipped.
-
-    Args:
-        run_dir: Run root directory (``runflow/analysis/{run_id}``).
-
-    Returns:
-        Path to combined CSV, or None if no per-day reports existed.
-    """
-    return _write_combined_day_report_csv(
-        run_dir, filename="Locations.csv", sort_col="loc_id"
-    )
-
-
-def write_combined_passes_csv(run_dir: Path) -> Optional[Path]:
-    """Merge ``{day}/reports/Passes.csv`` into ``run_dir/Passes.csv``."""
-    return _write_combined_day_report_csv(
-        run_dir, filename="Passes.csv", sort_col="pass_id"
-    )
-
-
-def _write_combined_day_report_csv(
-    run_dir: Path, *, filename: str, sort_col: str
-) -> Optional[Path]:
-    import pandas as pd
-
-    frames: List[pd.DataFrame] = []
-    for day_code in DAY_ORDER:
-        path = run_dir / day_code / "reports" / filename
-        if not path.exists():
-            continue
-        try:
-            df = pd.read_csv(path)
-        except Exception as e:
-            logger.warning("Could not read %s: %s", path, e)
-            continue
-        if df.empty:
-            continue
-        df = _normalize_locations_report_day_column(df, day_code)
-        frames.append(df)
-
-    if not frames:
-        return None
-
-    combined = pd.concat(frames, ignore_index=True)
-    combined["_sort_day"] = combined["day"].astype(str).str.lower().map(
-        lambda d: DAY_ORDER.index(d) if d in DAY_ORDER else len(DAY_ORDER)
-    )
-    if sort_col in combined.columns:
-        combined["_sort_id"] = pd.to_numeric(combined[sort_col], errors="coerce")
-    else:
-        combined["_sort_id"] = pd.to_numeric(combined.get("loc_id"), errors="coerce")
-    combined = combined.sort_values(
-        by=["_sort_day", "_sort_id"], ascending=[True, True], na_position="last"
-    )
-    combined = combined.drop(columns=["_sort_day", "_sort_id"])
-    out_path = run_dir / filename
-    combined.to_csv(out_path, index=False)
-    logger.info("Wrote combined %s: %s (%s rows)", filename, out_path, len(combined))
-    return out_path
-
-
-def _normalize_locations_report_day_column(df: Any, day_code: str) -> Any:
-    """Ensure ``day`` is present and placed immediately after ``loc_label``."""
-    out = df.copy()
-    if "day" in out.columns:
-        out = out.drop(columns=["day"])
-    if "loc_label" in out.columns:
-        col_list = list(out.columns)
-        pos = col_list.index("loc_label") + 1
-        out.insert(pos, "day", day_code)
-    else:
-        out["day"] = day_code
-    return out
 
 
 def get_day_output_path(
@@ -177,9 +95,9 @@ def generate_reports_per_day(
         
         Issue #682: Updated to use runflow/analysis/{run_id} structure
         }
-        Also writes ``runflow/analysis/{run_id}/Locations.csv`` when any per-day
-        locations report exists (Issue #749). Note: Issue #600 - Flow.md generation
-        deprecated (only Flow.csv used)
+        Locations.csv / Passes.csv are written only under ``{day}/reports/``
+        (Issue #903). Note: Issue #600 - Flow.md generation deprecated
+        (only Flow.csv used)
     """
     # Issue #616: File paths should be provided from analysis.json in v2 pipeline
     # These defaults should not be hit in production, but kept for backward compatibility
@@ -376,14 +294,6 @@ def generate_reports_per_day(
             f"in {reports_path}"
         )
     
-    # Issue #749: Merge per-day Locations.csv into run-level Locations.csv
-    try:
-        from app.utils.run_id import get_run_directory
-        write_combined_locations_csv(get_run_directory(run_id))
-        write_combined_passes_csv(get_run_directory(run_id))
-    except Exception as e:
-        logger.warning("Issue #749: Combined Locations.csv not written: %s", e)
-    
     return report_paths_by_day
 
 
@@ -419,7 +329,6 @@ def generate_density_report_v2(
         from pathlib import Path as PathType
         from app.density_report import generate_density_report_markdown
         from app.core.v2.bins import filter_segments_by_events
-        from app.utils.run_id import get_runflow_root
         from app.utils.metadata import get_app_version
         
         # Get bins directory for this day

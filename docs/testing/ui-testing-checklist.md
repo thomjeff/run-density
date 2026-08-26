@@ -46,7 +46,9 @@ This document provides a systematic approach to testing local Docker deployments
 **URL:** `/overview?run_id={uuid}`
 
 **Verification Steps:**
-- [ ] **New analysis** card: package dropdown + **Run analysis…** (disabled until the package is analysis-ready)
+- [ ] **New analysis** button (not a package-dropdown tile) opens a popup listing packages by name and ID
+- [ ] Continue on a ready package opens start times; a not-ready package cannot launch
+- [ ] Open a ready package on Build → Packages: **Run analysis** skips the picker and opens the same start-times popup
 - [ ] Analysis Inputs and Analysis Outputs render for the selected run
 - [ ] Package name on Analysis Inputs links to Build → that package
 - [ ] **Exports** shows **Reports (.zip)** and **Data Files (.zip)** (no “Download” prefix)
@@ -241,6 +243,12 @@ A deployment is considered successful when:
 ---
 
 ## Issue-Specific Testing Notes
+
+### Build → Legs package filter (#902)
+- [ ] **All packages**: full org library (same as before the filter)
+- [ ] Select a package with assigned courses: table, map, and All leg locations show only recipe legs
+- [ ] Package with no assigned courses: empty state, not the full library
+- [ ] Location **Move** dropdown still lists every org leg
 
 ### General Testing Approach
 - Focus testing on areas most likely affected by code changes

@@ -109,3 +109,27 @@
         </div>
     </div>
 </div>
+<div id="package-picker-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="package-picker-title">
+        <div class="course-location-modal-header">
+            <h4 id="package-picker-title" class="course-derived-heading" style="margin: 0;">New analysis</h4>
+            <button type="button" id="package-picker-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="course-location-modal-body">
+            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
+                Choose a package by <strong>name</strong> and <strong>ID</strong>, then set start times.
+            </p>
+            <label for="package-picker-select" class="course-derived-empty" style="display: block; margin-bottom: 0.35rem;">Package</label>
+            <select id="package-picker-select" class="form-select" style="width: 100%;">
+                <option value="">Loading packages…</option>
+            </select>
+            <p id="package-picker-id" class="course-derived-empty" style="margin: 0.5rem 0 0 0;"></p>
+            <p id="package-picker-error" class="course-derived-empty" style="display: none; color: #c0392b; margin: 0.75rem 0 0 0;"></p>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="package-picker-continue" class="course-btn primary" disabled>Continue</button>
+            <button type="button" id="package-picker-cancel" class="course-btn">Cancel</button>
+        </div>
+    </div>
+</div>

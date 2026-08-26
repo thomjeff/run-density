@@ -2,12 +2,27 @@
 
 ## [Unreleased]
 
+### New analysis button + launch from Build (#906)
+- Plan Overview **New analysis** is a header button (no persistent package-dropdown card)
+- The button opens a package picker that shows **name and ID**; Continue opens the existing start-times modal
+- Build package header **Run analysis** is restored; it skips the picker and opens start times for the open package when analysis-ready
+
+### Locations.csv / Passes.csv export cleanup (#903)
+- One `pass_count` column (with `pass_*`); `onepage` is always `y` or `n`
+- Timing columns are `loc_start`, `loc_end`, `first_runner`, `last_runner`, `peak_*`
+- After resource mins: `flag`, `onepage`, then `pass_key`, `pass_ids`, `pass_count`
+- Combined run-root `analysis/{run_id}/Locations.csv` and `Passes.csv` are no longer written; day-scoped `{day}/reports/` remains canonical
+
+### Build → Legs package filter (#902)
+- Organization leg library can filter to legs used by a package’s assigned-course recipes
+- Default remains **All packages**; empty assignment shows an empty state; move-to-leg still lists the full org library
+
 ### Build owns location edits; Plan owns start times (#904)
 - **Build → Legs** has **Edit Locations** (the former package Location operations grid); Save writes org legs only
 - Package **Locations** / **Segments** combined-course tables are inspect-only (click to highlight the preview)
 - **Manage resources** stays on Legs; it is removed from the package Locations card
-- **Run analysis** / start times move to **Plan → Overview** (New analysis: pick package, set guns)
-- Package header keeps analysis readiness and points authors to Plan; org leg location edits no longer auto-merge into package `course.json`
+- Plan owns start times; launch is **New analysis** on Overview or **Run analysis** on a ready Build package (#906)
+- Package header keeps analysis readiness; org leg location edits no longer auto-merge into package `course.json`
 
 ### Location authoring one-way (org Legs)
 - Saving a package course no longer writes location edits back to **Build → Legs**; zone, buffer, and resource counts on race export come from the Course snapshot

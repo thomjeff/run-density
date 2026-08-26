@@ -87,8 +87,8 @@ Wired unconditionally from `frontend/templates/base.html` (`html.rf-tabler`).
 - Runs catalog is history-only
 - Build hub page still has Legs / Courses / Runners / Packages panels; top nav mirrors hub views
 - **Build → Runners** is the org runner-dataset library (`runflow/org/runners/{dataset_id}/`). Datasets are immutable; a Package assigns a compatible dataset and freeze-copies required `{event}_runners.csv` files (Issue #879)
-- Package header owns **Analysis readiness**; **Run analysis** / start times are on **Plan → Overview** (Issue #904). Assign courses keeps **Build race exports**
-- **Build → Legs** **Edit Locations** is the bulk ops editor; package combined-course tables are inspect-only
+- Package header owns **Analysis readiness**; **Run analysis** on the open package (and **New analysis** on Plan Overview) opens the start-times popup (Issues #904 / #906). Assign courses keeps **Build race exports**
+- **Build → Legs** can filter the org library to a package’s assigned-course recipes (Issue #902); **Edit Locations** is the bulk ops editor; package combined-course tables are inspect-only
 - Historical multi-day analysis trees are not browsed in product chrome; archive offline if needed
 
 ### Attribution & license

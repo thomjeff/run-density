@@ -82,6 +82,8 @@ Pan and zoom to filter the legs table below the map. Select a leg in the table t
 
 Legs live in `runflow/org/legs/`, outside any single package.
 
+Use the **Package** dropdown to temporarily show only org legs used by a selected race package (union of assigned-course recipes). **All packages** is the default and shows the full library. This is a view filter, not a second copy of legs. The location **Move** dropdown still lists every org leg.
+
 | Button | What it does |
 |--------|--------------|
 | **Import legs…** | Import third-party GPX files (e.g. from a route planner) as new legs |
@@ -195,7 +197,7 @@ Copy or symlink runner CSVs into the course folder (or use a package build for m
 
 ## Package: Assign courses + Build race exports
 
-1. Open a race configuration. **Analysis readiness** stays in the package header. **Run analysis** is on **Plan → Overview** (choose this package, then set start times).
+1. Open a race configuration. **Analysis readiness** stays in the package header. When the package is ready, **Run analysis** opens the start-times popup for this package (same flow as **Plan → Overview → New analysis**).
 2. On the **Courses** tab, for each package event (Full / Half / 10K), select one global course.
 3. **Save assignments**, then **Build race exports**.
 

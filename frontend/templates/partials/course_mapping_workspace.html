@@ -118,6 +118,10 @@
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" title="Draw a new leg on the map by clicking along roads and trails">Draw leg on map</button>
                 <button type="button" id="btn-manage-resources-legs" class="course-btn" title="Add or remove schedulable resources (FPF, YSSR, Officials, …)">Manage resources…</button>
+                <label class="course-label" for="legs-hub-package-filter" style="margin: 0 0 0 0.35rem;">Package</label>
+                <select id="legs-hub-package-filter" class="course-btn" title="Show only org legs used by a package’s assigned courses">
+                    <option value="">All packages</option>
+                </select>
                 </div>
             </div>
             <p class="card-help course-derived-empty" id="course-legs-help" title="Shared organization leg library">
@@ -149,6 +153,7 @@
                 </div>
             </div>
             <p id="course-legs-empty" class="course-derived-empty">No legs yet. Use <strong>Import GPX</strong> to add one or more route files.</p>
+            <p id="course-legs-package-empty" class="course-derived-empty" style="display: none;">This package has no assigned courses yet. Assign courses on <strong>Build → Packages</strong>, or choose <strong>All packages</strong>.</p>
         </section>
         <section class="content-card course-derived-section" id="leg-locations-browser-card" style="display: none;">
             <div class="card-header">

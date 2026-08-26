@@ -26,6 +26,7 @@ from app.io.loader import load_locations, load_runners, load_segments
 from app.core.gpx.processor import load_all_courses, GPXCourse
 from app.core.trajectory.crossing import arrival_at_km
 from app.core.locations.report_json import authored_proxy_pass_id
+from app.core.locations.schema import _yn
 from app.utils.constants import (
     LOCATION_SNAP_THRESHOLD_M,
     LOCATION_SEGMENT_CLAMP_M,
@@ -41,6 +42,101 @@ logger = logging.getLogger(__name__)
 # Coordinate transformers
 WGS84_TO_UTM = Transformer.from_crs("EPSG:4326", "EPSG:32619", always_xy=True)
 UTM_TO_WGS84 = Transformer.from_crs("EPSG:32619", "EPSG:4326", always_xy=True)
+
+_RESOURCE_SKIP_COUNT_COLS = {"pass_count"}
+
+
+def order_locations_csv_columns(columns):
+    """Issue #903: operational fields first; flag/onepage then pass_* after resources."""
+    cols = list(columns)
+    resource = sorted(
+        c
+        for c in cols
+        if (c.endswith("_count") or c.endswith("_mins")) and c not in _RESOURCE_SKIP_COUNT_COLS
+    )
+    preferred = [
+        "loc_id",
+        "loc_label",
+        "day",
+        "loc_type",
+        "lat",
+        "lon",
+        "zone",
+        "loc_start",
+        "loc_end",
+        "first_runner",
+        "last_runner",
+        "peak_start",
+        "peak_end",
+        "by_event",
+        "notes",
+        "proxy_pass_id",
+        "proxy_loc_id",
+    ]
+    tail = ["flag", "onepage", "pass_key", "pass_ids", "pass_count"]
+    ordered = []
+    seen = set()
+    for col in preferred + resource + tail:
+        if col in cols and col not in seen:
+            ordered.append(col)
+            seen.add(col)
+    leftover = [c for c in cols if c not in seen]
+    return ordered + leftover
+
+
+def order_passes_csv_columns(columns):
+    """Issue #903: Passes.csv uses the same timing column order as Locations.csv."""
+    cols = list(columns)
+    count_fields = sorted(
+        c for c in cols if c.endswith("_count") and c not in _RESOURCE_SKIP_COUNT_COLS
+    )
+    mins_fields = sorted(c for c in cols if c.endswith("_mins"))
+    preferred = [
+        "pass_id",
+        "loc_id",
+        "pass_key",
+        "pass",
+        "same_pass_as",
+        "loc_label",
+        "day",
+        "loc_type",
+        "loc_direction",
+        "lat",
+        "lon",
+        "zone",
+        "buffer",
+        "interval",
+        "loc_start",
+        "loc_end",
+        "duration",
+        "first_runner",
+        "last_runner",
+        "peak_start",
+        "peak_end",
+        "by_event",
+        "timing_source",
+        "proxy_pass_id",
+        "proxy_loc_id",
+        "location_key",
+        "same_location_as",
+    ]
+    tail = [
+        "notes",
+        "flag",
+        "onepage",
+        "flagged_seg_id",
+        "flag_severity",
+        "flag_worst_los",
+        "flag_note",
+    ]
+    ordered = []
+    seen = set()
+    for col in preferred + count_fields + mins_fields + tail:
+        if col in cols and col not in seen:
+            ordered.append(col)
+            seen.add(col)
+    leftover = [c for c in cols if c not in seen]
+    return ordered + leftover
 
 
 def round_to_interval(value_minutes: float, interval_minutes: float) -> float:
@@ -1036,6 +1132,7 @@ def generate_location_report(
             "proxy_loc_id": None,
             "notes": location.get("notes", ""),
             "flag": False,
+            "onepage": _yn(location.get("onepage"), "n"),
             "flagged_seg_id": None,
             "flag_severity": None,
             "flag_worst_los": None,
@@ -1397,7 +1494,11 @@ def generate_location_report(
     
     # Detect all *_count columns from the first location (all locations should have same columns)
     if report_rows and len(locations_df) > 0:
-        count_columns = [col for col in locations_df.columns if col.endswith("_count")]
+        count_columns = [
+            col
+            for col in locations_df.columns
+            if col.endswith("_count") and col not in _RESOURCE_SKIP_COUNT_COLS
+        ]
         
         # Add *_count and *_mins fields to each report_row
         for report_row in report_rows:
@@ -1444,29 +1545,7 @@ def generate_location_report(
 
     report_df = pd.DataFrame(report_rows)
 
-    base_fields = [
-        "pass_id", "loc_id", "pass_key", "pass", "same_pass_as",
-        "loc_label", "day",
-        "loc_type", "loc_direction",
-        "lat", "lon", "zone",
-        "buffer", "interval",
-        "first_runner", "peak_start", "peak_end", "last_runner",
-        "by_event",
-        "loc_start", "loc_end", "duration",
-        "timing_source",
-        "proxy_pass_id",
-        "proxy_loc_id",
-        # legacy aliases kept at end of base for importers mid-cutover
-        "location_key", "same_location_as",
-    ]
-
-    count_fields = sorted([col for col in report_df.columns if col.endswith("_count")])
-    mins_fields = sorted([col for col in report_df.columns if col.endswith("_mins")])
-
-    expected_columns = base_fields + count_fields + mins_fields + [
-        "notes", "flag", "flagged_seg_id", "flag_severity", "flag_worst_los", "flag_note"
-    ]
-
+    expected_columns = order_passes_csv_columns(report_df.columns)
     final_columns = [col for col in expected_columns if col in report_df.columns]
     remaining_cols = [col for col in report_df.columns if col not in final_columns]
     final_columns = final_columns + remaining_cols
@@ -1493,16 +1572,8 @@ def generate_location_report(
     for rec in location_rows:
         rec["by_event"] = serialize_by_event(rec.get("by_event"))
     locations_df_out = pd.DataFrame(location_rows)
-    loc_base = [
-        "loc_id", "pass_key", "pass_ids", "pass_count", "loc_label", "day",
-        "loc_type", "lat", "lon", "zone",
-        "first_runner", "last_runner", "loc_start", "loc_end",
-        "peak_start", "peak_end", "by_event", "flag", "onepage", "notes",
-        "proxy_pass_id", "proxy_loc_id",
-    ]
-    loc_counts = sorted([c for c in locations_df_out.columns if c.endswith("_count") or c.endswith("_mins")])
-    loc_cols = [c for c in loc_base + loc_counts if c in locations_df_out.columns]
-    loc_cols += [c for c in locations_df_out.columns if c not in loc_cols]
+    loc_cols = order_locations_csv_columns(locations_df_out.columns)
+    loc_cols = [c for c in loc_cols if c in locations_df_out.columns]
     locations_df_out = locations_df_out[loc_cols]
 
     full_path, relative_path = get_report_paths("Locations", "csv", output_dir)

@@ -298,7 +298,8 @@
                     <input type="text" id="course-map-name" class="config-package-input" placeholder="Package name" maxlength="120" />
                     <div class="context-actions" id="race-config-context-actions">
                         <div id="race-config-workspace-actions"></div>
-                        <span id="package-run-analysis-hint" class="course-derived-empty" style="margin: 0; font-size: 0.85rem;">Run analysis from <strong>Plan → Overview</strong> (choose this package, then set start times).</span>
+                        <button type="button" id="btn-run-package-analysis" class="course-btn primary" disabled title="Set start times and run analysis for this package">Run analysis</button>
+                        <span id="package-run-analysis-status" class="course-derived-empty" style="margin: 0; font-size: 0.85rem;"></span>
                     </div>
                 </div>
                 <div class="context-field">
@@ -353,6 +354,7 @@
         </div>
     </div>
 </div>
+{% include "partials/run_analysis_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
@@ -372,10 +374,11 @@
 <script src="/static/js/table_actions.js?v=799e"></script>
 <script src="/static/js/map/location_grid_editor.js?v=904a"></script>
 <script src="/static/js/map/course_mapping.js?v=904"></script>
-<script src="/static/js/map/segment_recipes.js?v=904"></script>
-<script src="/static/js/map/saved_courses.js?v=904"></script>
+<script src="/static/js/map/segment_recipes.js?v=906"></script>
+<script src="/static/js/map/saved_courses.js?v=906"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
 <script src="/static/js/runner_datasets.js?v=878-metrics"></script>
 <script src="/static/js/map/junctions_authoring.js?v=819x"></script>
-<script src="/static/js/race_configuration.js?v=904a"></script>
+<script src="/static/js/plan_run_analysis.js?v=906"></script>
+<script src="/static/js/race_configuration.js?v=906"></script>
 {% endblock %}

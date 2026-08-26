@@ -758,7 +758,7 @@
                 dirEl.style.display = 'block';
                 dirEl.title = 'Package folder: runflow/config/' + configId();
                 dirEl.textContent =
-                    'After Build race exports, run analysis from Plan → Overview (choose this package, then set start times).';
+                    'After Build race exports, use Run analysis on this package (or Plan → Overview) to set start times.';
             }
             refreshPackageReadiness();
             refreshPackageLatestRuns();
@@ -990,7 +990,7 @@
             .then(function (payload) {
                 if (!payload.ok) throw new Error(payload.data.detail || 'Build failed');
                 var warnings = payload.data.stitch_warnings || [];
-                var msg = 'Race exports built. Run analysis from Plan → Overview when readiness is complete.';
+                var msg = 'Race exports built. Use Run analysis when readiness is complete.';
                 if (warnings.length) msg += ' Warnings: ' + warnings.join(' · ');
                 setAssignStatus(msg, warnings.length > 0);
                 syncRunAnalysisButton(payload.data.readiness || null);
@@ -1051,5 +1051,6 @@
         refresh: refreshHubCourses,
         refreshAssign: refreshAssignForm,
         refreshReadiness: refreshPackageReadiness,
+        configId: configId,
     };
 })();
