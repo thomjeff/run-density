@@ -60,13 +60,18 @@ def test_plan_overview_owns_run_analysis():
     race = (TEMPLATES / "pages" / "race_configuration.html").read_text(encoding="utf-8")
     plan_js = (JS / "plan_run_analysis.js").read_text(encoding="utf-8")
     assert 'id="rf-plan-new-analysis"' in overview
-    assert 'id="rf-plan-package-select"' in overview
-    assert 'id="rf-plan-run-analysis"' in overview
+    assert 'id="rf-plan-package-select"' not in overview
     assert "plan_run_analysis.js" in overview
     assert "run_analysis_modal.html" in overview
-    assert 'id="btn-run-package-analysis"' not in race
+    assert 'id="package-picker-modal"' in (
+        TEMPLATES / "partials" / "run_analysis_modal.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="btn-run-package-analysis"' in race
+    assert "run_analysis_modal.html" in race
     assert "/run-analysis" in plan_js
     assert "/analyze-setup" in plan_js
+    assert "openPackagePicker" in plan_js
+    assert "openRunAnalysisForPackage" in plan_js
     saved = (JS / "map" / "saved_courses.js").read_text(encoding="utf-8")
     assert "function openRunAnalysisModal" not in saved
     assert "function runPackageAnalysis" not in saved

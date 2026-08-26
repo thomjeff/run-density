@@ -424,7 +424,7 @@ runner_id,event,pace,distance,start_offset,day
 **Analysis reports**:
 - **`locations_report.json`**: computed location-centric rows for the UI (`GET /api/locations`). Includes `loc_end`, resource counts, and Build proxy ids (`proxy_pass_id` = timing-source pass, `proxy_loc_id` = human Location id of that pass). Issues #894 / #895.
 - **`Passes.csv`**: one row per `pass_id` (bottom-up; agencies). Includes `loc_id`, `pass_key`, `pass`, `same_pass_as`, `proxy_pass_id`, `proxy_loc_id`.
-- **`Locations.csv`**: one row per human `loc_id` (export mirror of the JSON). Combined window = earliest first / latest last; `pass_ids` lists member passes; `pass_key` joins back to Passes.csv.
+- **`Locations.csv`**: one row per human `loc_id` (export mirror of the JSON). Combined window = earliest first / latest last; `pass_ids` lists member passes; `pass_key` joins back to Passes.csv. Column order (Issue #903): operational fields, then resource `*_count`/`*_mins`, then `flag` / `onepage`, then `pass_key` / `pass_ids` / `pass_count`. `onepage` is always `y` or `n`. Written only under `{day}/reports/` (no run-root combined copy).
 
 **Issue #810 — paired reverse legs:** when two pass rows share a `pass_key`, they are passes at the same Location (outbound vs return). Volunteer UI and Locations.csv show one Location. Import timed staffing on **`pass_id`**.
 
@@ -561,8 +561,8 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 
 **Artifact Sources:**
 - `{day}/computation/locations_report.json` → Computed location table (API SSOT; Issues #894 / #895). Includes `proxy_loc_id` / `proxy_pass_id` for Build-authored timing links.
-- `{day}/reports/Locations.csv` → Day-scoped location report **export** (includes `day` column after `loc_label`; Issue #749)
-- `Locations.csv` (run root, next to day folders) → Combined file for all days in chronological order (Issue #749)
+- `{day}/reports/Locations.csv` → Day-scoped location report **export** (Issue #903; no run-root combined file)
+- `{day}/reports/Passes.csv` → Day-scoped pass-level export (Issue #903)
 - `computation/locations_results.json` → `resources_available` array and `onepage` (Issue #745)
 
 **UI Elements → Data Mapping:**

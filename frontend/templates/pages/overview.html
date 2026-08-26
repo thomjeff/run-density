@@ -3,33 +3,24 @@
 {% block title %}Overview{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Overview</h2>
-    <p id="rf-overview-lead" class="rf-overview-lead">
-        Summary of the selected analysis run — inputs, key metrics, and exports before Density and Flow.
-    </p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+    <div>
+        <h2>Overview</h2>
+        <p id="rf-overview-lead" class="rf-overview-lead">
+            Summary of the selected analysis run — inputs, key metrics, and exports before Density and Flow.
+        </p>
+    </div>
+    <div>
+        <button type="button" id="rf-plan-new-analysis" class="btn btn-primary">New analysis</button>
+        <p id="rf-plan-analysis-status" class="rf-overview-lead" style="margin-top: 0.5rem;"></p>
+    </div>
 </div>
 
 {% include "partials/run_context.html" %}
 
-<div id="rf-plan-new-analysis" class="card" style="margin-bottom: 1.25rem;">
-    <h3 style="margin-bottom: 0.5rem;">New analysis</h3>
-    <p class="rf-overview-lead" style="margin-bottom: 0.75rem;">
-        Choose a package, set start times, and run. Edit locations on <strong>Build → Legs</strong>; assemble courses on <strong>Build → Packages</strong>.
-    </p>
-    <div class="rf-plan-new-analysis-row">
-        <label for="rf-plan-package-select" class="rf-overview-lead" style="margin: 0;">Package</label>
-        <select id="rf-plan-package-select" class="form-select" style="max-width: 28rem;">
-            <option value="">Loading packages…</option>
-        </select>
-        <button type="button" id="rf-plan-run-analysis" class="btn btn-primary" disabled>Run analysis…</button>
-    </div>
-    <p id="rf-plan-analysis-status" class="rf-overview-lead" style="margin-top: 0.75rem;"></p>
-</div>
-
 <div id="rf-overview-empty" class="card" style="display: none;">
     <p><strong>No analysis run selected.</strong></p>
-    <p>Choose a run from the <strong>Runs</strong> menu, start a <strong>New analysis</strong> above, or open the full catalog.</p>
+    <p>Choose a run from the <strong>Runs</strong> menu, start a <strong>New analysis</strong>, or open the full catalog.</p>
     <p>
         <a id="rf-overview-choose" class="btn btn-primary" href="/dashboard">View all runs</a>
     </p>
@@ -133,7 +124,7 @@
 {% block extra_scripts %}
 <script src="/static/js/run_overview.js?v=904"></script>
 <script src="/static/js/run_overview_progress.js?v=868"></script>
-<script src="/static/js/plan_run_analysis.js?v=904"></script>
+<script src="/static/js/plan_run_analysis.js?v=906"></script>
 <script>
 (function () {
     var tabler = document.documentElement.classList.contains('rf-tabler');

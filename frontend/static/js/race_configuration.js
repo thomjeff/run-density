@@ -200,6 +200,8 @@
             'location-grid-bulk-modal',
             'location-grid-unsaved-modal',
             'org-leg-library-modal',
+            'run-analysis-modal',
+            'package-picker-modal',
         ].forEach(function (id) {
             const el = document.getElementById(id);
             if (el && el.parentElement !== document.body) {

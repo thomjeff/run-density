@@ -52,6 +52,10 @@
     var legSplitSourceId = null;
     var legBoundsCache = {};
     var legsTableBoundsFilter = null;
+    var packageFilterConfigId = '';
+    var packageFilterLabel = '';
+    var packageFilterLegIds = null;
+    var legsHubPackageFilterBound = false;
     var coursePreviewBoundsFilter = null;
     /** Background layer showing every leg route on the legs map. */
     var allLegRoutesLayer = null;
@@ -157,6 +161,129 @@
             hubLegs.style.display !== 'none' &&
             legsPanel.offsetParent !== null
         );
+    }
+
+    function getPackageFilteredLegs() {
+        var all = (libraryState && libraryState.legs) || [];
+        if (!packageFilterLegIds) return all;
+        return all.filter(function (leg) {
+            return packageFilterLegIds[String(leg.id || '').trim()];
+        });
+    }
+
+    function collectRecipeLegIds(payload) {
+        var ids = {};
+        var assigned = payload && payload.assigned_courses;
+        var hasAssigned = assigned && Object.keys(assigned).some(function (k) {
+            return assigned[k];
+        });
+        if (hasAssigned && payload.resolved) {
+            Object.keys(payload.resolved).forEach(function (dist) {
+                var course = payload.resolved[dist];
+                ((course && course.recipe) || []).forEach(function (id) {
+                    var lid = String(id || '').trim();
+                    if (lid) ids[lid] = true;
+                });
+            });
+            return ids;
+        }
+        return null;
+    }
+
+    function applyPackageLegFilter(legIds, label) {
+        packageFilterLegIds = legIds;
+        packageFilterLabel = label || '';
+        if (selectedLegId && packageFilterLegIds && !packageFilterLegIds[String(selectedLegId)]) {
+            selectedLegId = null;
+            clearLegMap();
+        }
+        syncLegsTableBoundsFilterItems();
+        renderLegLocationsBrowser();
+        syncAllLegRoutesHighlight();
+        if (window.locationGridEditor && window.locationGridEditor.updateOpenButtonVisibility) {
+            var locs = collectFilteredLegLocationsForGrid();
+            window.locationGridEditor.updateOpenButtonVisibility(isOrgLegsHubMode() && locs.length > 0);
+        }
+    }
+
+    function loadPackageFilterLegIds(configId) {
+        if (!configId) {
+            applyPackageLegFilter(null, '');
+            return Promise.resolve();
+        }
+        return fetch(
+            '/api/config/packages/' + encodeURIComponent(configId) + '/assigned-courses',
+            { credentials: 'same-origin' }
+        )
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { ok: r.ok, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.ok) throw new Error('Failed to load assigned courses');
+                var ids = collectRecipeLegIds(payload.data);
+                if (ids) {
+                    applyPackageLegFilter(ids, packageFilterLabel);
+                    return;
+                }
+                return fetch(
+                    '/api/config/packages/' + encodeURIComponent(configId) + '/segment-library',
+                    { credentials: 'same-origin' }
+                ).then(function (r) {
+                    return r.json();
+                }).then(function (lib) {
+                    var fallback = {};
+                    var recipes = (lib && lib.recipes) || {};
+                    Object.keys(recipes).forEach(function (ev) {
+                        (recipes[ev] || []).forEach(function (id) {
+                            var lid = String(id || '').trim();
+                            if (lid) fallback[lid] = true;
+                        });
+                    });
+                    applyPackageLegFilter(fallback, packageFilterLabel);
+                });
+            })
+            .catch(function () {
+                applyPackageLegFilter({}, packageFilterLabel);
+            });
+    }
+
+    function populateLegsHubPackageFilter() {
+        var sel = document.getElementById('legs-hub-package-filter');
+        if (!sel || !isOrgLegsHubMode()) return;
+        fetch('/api/config/packages', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var keep = sel.value;
+                sel.innerHTML = '';
+                var all = document.createElement('option');
+                all.value = '';
+                all.textContent = 'All packages';
+                sel.appendChild(all);
+                (data.packages || []).forEach(function (pkg) {
+                    var opt = document.createElement('option');
+                    opt.value = pkg.config_id;
+                    opt.textContent = pkg.label || pkg.config_id;
+                    sel.appendChild(opt);
+                });
+                if (keep && sel.querySelector('option[value="' + keep + '"]')) {
+                    sel.value = keep;
+                }
+            })
+            .catch(function () { /* keep All packages */ });
+    }
+
+    function bindLegsHubPackageFilter() {
+        var sel = document.getElementById('legs-hub-package-filter');
+        if (!sel || legsHubPackageFilterBound) return;
+        legsHubPackageFilterBound = true;
+        sel.addEventListener('change', function () {
+            packageFilterConfigId = sel.value || '';
+            var opt = sel.options[sel.selectedIndex];
+            packageFilterLabel = opt && opt.value ? String(opt.textContent || '') : '';
+            loadPackageFilterLegIds(packageFilterConfigId);
+        });
     }
 
     function apiBase() {
@@ -773,6 +900,9 @@
             var label = String(row.loc.loc_label || '').toLowerCase();
             if (label.indexOf(filters.query) < 0) return false;
         }
+        if (packageFilterLegIds && !packageFilterLegIds[String(row.legId || '').trim()]) {
+            return false;
+        }
         return true;
     }
 
@@ -1162,8 +1292,21 @@
     function updateLegsMapBoundsStatus(visible, total) {
         var el = document.getElementById('leg-map-bounds-status');
         if (!el) return;
-        if (!total) {
+        var all = ((libraryState && libraryState.legs) || []).length;
+        if (!all) {
             el.textContent = '';
+            return;
+        }
+        if (packageFilterLegIds && packageFilterLabel) {
+            var pkgCount = getPackageFilteredLegs().length;
+            if (visible < pkgCount) {
+                el.textContent =
+                    'Showing ' + visible + ' of ' + pkgCount + ' legs in map view · ' +
+                    pkgCount + ' of ' + all + ' for ' + packageFilterLabel;
+            } else {
+                el.textContent =
+                    'Showing ' + pkgCount + ' of ' + all + ' legs for ' + packageFilterLabel;
+            }
             return;
         }
         if (visible >= total) {
@@ -1234,7 +1377,7 @@
     function syncLegsTableBoundsFilterItems() {
         initLegsTableBoundsFilter();
         if (!legsTableBoundsFilter) return;
-        legsTableBoundsFilter.setAllItems((libraryState && libraryState.legs) || []);
+        legsTableBoundsFilter.setAllItems(getPackageFilteredLegs());
     }
 
     function attachLegsTableBoundsFilter() {
@@ -1249,7 +1392,7 @@
 
     function fitLegMapToAllLegs() {
         var map = window.courseMappingMap;
-        var legs = (libraryState && libraryState.legs) || [];
+        var legs = getPackageFilteredLegs();
         if (!map || !legs.length || selectedLegId) return;
         var points = [];
         legs.forEach(function (leg) {
@@ -1826,6 +1969,9 @@
             var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
             var props = feature.properties || {};
             var legId = props.leg_id;
+            if (packageFilterLegIds && (!legId || !packageFilterLegIds[String(legId)])) {
+                return;
+            }
             if (legId) {
                 try {
                     legBoundsCache[legId] = L.latLngBounds(latlngs);
@@ -5175,9 +5321,11 @@
         var tbody = document.getElementById('course-legs-tbody');
         var wrap = document.getElementById('course-legs-table-wrap');
         var empty = document.getElementById('course-legs-empty');
+        var pkgEmpty = document.getElementById('course-legs-package-empty');
         if (!tbody) return;
         var allLegs = (libraryState && libraryState.legs) || [];
-        var legs = legsSubset || allLegs;
+        var legs = legsSubset || getPackageFilteredLegs();
+        if (pkgEmpty) pkgEmpty.style.display = 'none';
         if (!allLegs.length) {
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
@@ -5186,9 +5334,11 @@
             return;
         }
         if (!legs.length) {
-            if (wrap) wrap.style.display = 'block';
+            if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'none';
+            if (pkgEmpty) pkgEmpty.style.display = 'block';
             tbody.innerHTML = '';
+            updateLegsMapBoundsStatus(0, getPackageFilteredLegs().length);
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -6492,6 +6642,8 @@
             initOrgLegHubResources();
             bindLegLocationsBrowserUi();
             initLegLocationGridEditor();
+            bindLegsHubPackageFilter();
+            populateLegsHubPackageFilter();
             if (window.configPackageCourse && window.configPackageCourse.removeLocationPins) {
                 window.configPackageCourse.removeLocationPins();
             }

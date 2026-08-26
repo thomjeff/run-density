@@ -34,21 +34,29 @@
     }
 
     function setStatus(msg, isError) {
-        var el = document.getElementById('rf-plan-analysis-status');
+        var el = document.getElementById('rf-plan-analysis-status') ||
+            document.getElementById('package-run-analysis-status');
         if (!el) return;
         el.textContent = msg || '';
         el.style.color = isError ? '#d63939' : '#667382';
-        if (msg && msg.indexOf('<') >= 0) {
-            el.innerHTML = msg;
-            el.style.color = isError ? '#d63939' : '#667382';
+    }
+
+    function showModal(id, show) {
+        var modal = document.getElementById(id);
+        if (!modal) return;
+        if (show && modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
         }
+        modal.hidden = !show;
+        modal.setAttribute('aria-hidden', show ? 'false' : 'true');
     }
 
     function showRunAnalysisModal(show) {
-        var modal = document.getElementById('run-analysis-modal');
-        if (!modal) return;
-        modal.hidden = !show;
-        modal.setAttribute('aria-hidden', show ? 'false' : 'true');
+        showModal('run-analysis-modal', show);
+    }
+
+    function showPackagePicker(show) {
+        showModal('package-picker-modal', show);
     }
 
     function setRunAnalysisModalError(msg) {
@@ -145,25 +153,57 @@
         return '/api/config/packages/' + encodeURIComponent(id);
     }
 
-    function syncRunButton() {
-        var btn = document.getElementById('rf-plan-run-analysis');
-        var sel = document.getElementById('rf-plan-package-select');
+    function syncPickerContinue() {
+        var btn = document.getElementById('package-picker-continue');
+        var sel = document.getElementById('package-picker-select');
+        var idEl = document.getElementById('package-picker-id');
         if (!btn || !sel) return;
         var opt = sel.options[sel.selectedIndex];
         var ready = !!(opt && opt.value && opt.dataset.ready === '1');
         btn.disabled = !ready;
+        if (idEl) {
+            idEl.textContent = opt && opt.value ? 'ID: ' + opt.value : '';
+        }
         if (!sel.value) {
             btn.title = 'Choose a package';
         } else if (!ready) {
             btn.title = 'Package is not analysis-ready — assign courses, Build race exports, and runners on Build → Packages';
         } else {
-            btn.title = 'Enter start times for each event and start analysis';
+            btn.title = 'Enter start times for each event';
         }
     }
 
-    function loadPackages() {
-        var sel = document.getElementById('rf-plan-package-select');
+    function populatePackagePicker(packages, preferredId) {
+        var sel = document.getElementById('package-picker-select');
         if (!sel) return;
+        sel.innerHTML = '';
+        var blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = packages.length ? 'Select a package…' : 'No packages yet';
+        sel.appendChild(blank);
+        packages.forEach(function (pkg) {
+            var opt = document.createElement('option');
+            opt.value = pkg.config_id;
+            var ready = !!(pkg.readiness && pkg.readiness.analyze_ready);
+            opt.dataset.ready = ready ? '1' : '0';
+            opt.dataset.label = pkg.label || pkg.config_id;
+            opt.textContent =
+                (pkg.label || pkg.config_id) +
+                '  ·  ' +
+                pkg.config_id +
+                (ready ? '' : '  (not ready)');
+            sel.appendChild(opt);
+        });
+        if (preferredId && sel.querySelector('option[value="' + preferredId + '"]')) {
+            sel.value = preferredId;
+        }
+        selectedPackageId = sel.value;
+        var opt = sel.options[sel.selectedIndex];
+        selectedPackageLabel = opt ? (opt.dataset.label || '') : '';
+        syncPickerContinue();
+    }
+
+    function loadPackagesThen(cb) {
         fetch('/api/config/packages', { credentials: 'same-origin' })
             .then(function (r) {
                 return r.json().then(function (d) {
@@ -172,43 +212,29 @@
             })
             .then(function (payload) {
                 if (!payload.ok) throw new Error('Failed to list packages');
-                var packages = payload.data.packages || [];
-                sel.innerHTML = '';
-                var blank = document.createElement('option');
-                blank.value = '';
-                blank.textContent = packages.length ? 'Select a package…' : 'No packages yet';
-                sel.appendChild(blank);
-                packages.forEach(function (pkg) {
-                    var opt = document.createElement('option');
-                    opt.value = pkg.config_id;
-                    var ready = !!(pkg.readiness && pkg.readiness.analyze_ready);
-                    opt.dataset.ready = ready ? '1' : '0';
-                    opt.textContent =
-                        (pkg.label || pkg.config_id) + (ready ? '' : ' (not ready)');
-                    sel.appendChild(opt);
-                });
-                var params = new URLSearchParams(window.location.search);
-                var fromUrl = (params.get('config_id') || '').trim();
-                var stored = '';
-                try {
-                    stored = (sessionStorage.getItem('rf_plan_package_id') || '').trim();
-                } catch (e) { /* ignore */ }
-                var pick = fromUrl || stored;
-                if (pick && sel.querySelector('option[value="' + pick + '"]')) {
-                    sel.value = pick;
-                }
-                selectedPackageId = sel.value;
-                syncRunButton();
+                cb(payload.data.packages || []);
             })
             .catch(function (err) {
-                sel.innerHTML = '';
-                var opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = 'Could not load packages';
-                sel.appendChild(opt);
                 setStatus(err.message || String(err), true);
-                syncRunButton();
             });
+    }
+
+    function openPackagePicker() {
+        var err = document.getElementById('package-picker-error');
+        if (err) {
+            err.style.display = 'none';
+            err.textContent = '';
+        }
+        loadPackagesThen(function (packages) {
+            var stored = '';
+            try {
+                stored = (sessionStorage.getItem('rf_plan_package_id') || '').trim();
+            } catch (e) { /* ignore */ }
+            var params = new URLSearchParams(window.location.search);
+            var pick = (params.get('config_id') || '').trim() || stored;
+            populatePackagePicker(packages, pick);
+            showPackagePicker(true);
+        });
     }
 
     function openRunAnalysisModal() {
@@ -318,26 +344,75 @@
             });
     }
 
+    function openRunAnalysisForPackage(configId, label) {
+        selectedPackageId = String(configId || '').trim();
+        selectedPackageLabel = label || selectedPackageId;
+        try {
+            if (selectedPackageId) {
+                sessionStorage.setItem('rf_plan_package_id', selectedPackageId);
+            }
+        } catch (e) { /* ignore */ }
+        openRunAnalysisModal();
+    }
+
     function bindUi() {
-        if (!document.getElementById('rf-plan-new-analysis')) return;
-        var sel = document.getElementById('rf-plan-package-select');
-        if (sel) {
-            sel.addEventListener('change', function () {
-                selectedPackageId = sel.value;
-                var opt = sel.options[sel.selectedIndex];
-                selectedPackageLabel = opt ? String(opt.textContent || '').replace(/ \(not ready\)$/, '') : '';
+        if (!document.getElementById('run-analysis-modal')) return;
+        var newBtn = document.getElementById('rf-plan-new-analysis');
+        if (newBtn) {
+            newBtn.addEventListener('click', openPackagePicker);
+        }
+        var pickerSel = document.getElementById('package-picker-select');
+        if (pickerSel) {
+            pickerSel.addEventListener('change', function () {
+                selectedPackageId = pickerSel.value;
+                var opt = pickerSel.options[pickerSel.selectedIndex];
+                selectedPackageLabel = opt ? (opt.dataset.label || '') : '';
                 try {
                     if (selectedPackageId) {
                         sessionStorage.setItem('rf_plan_package_id', selectedPackageId);
                     }
                 } catch (e) { /* ignore */ }
-                syncRunButton();
-                setStatus('');
+                syncPickerContinue();
             });
         }
-        var runBtn = document.getElementById('rf-plan-run-analysis');
-        if (runBtn) {
-            runBtn.addEventListener('click', openRunAnalysisModal);
+        var pickerContinue = document.getElementById('package-picker-continue');
+        if (pickerContinue) {
+            pickerContinue.addEventListener('click', function () {
+                showPackagePicker(false);
+                openRunAnalysisModal();
+            });
+        }
+        ['package-picker-close', 'package-picker-cancel'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('click', function () {
+                    showPackagePicker(false);
+                });
+            }
+        });
+        var pickerBackdrop = document.querySelector(
+            '#package-picker-modal .course-location-modal-backdrop'
+        );
+        if (pickerBackdrop) {
+            pickerBackdrop.addEventListener('click', function () {
+                showPackagePicker(false);
+            });
+        }
+        var pkgBtn = document.getElementById('btn-run-package-analysis');
+        if (pkgBtn) {
+            pkgBtn.addEventListener('click', function () {
+                var id = '';
+                if (window.SavedCoursesPanel && typeof window.SavedCoursesPanel.configId === 'function') {
+                    id = window.SavedCoursesPanel.configId();
+                }
+                if (!id) {
+                    var params = new URLSearchParams(window.location.search);
+                    id = (params.get('config_id') || '').trim();
+                }
+                var nameEl = document.getElementById('course-map-name-text');
+                var label = nameEl ? String(nameEl.textContent || '').trim() : id;
+                openRunAnalysisForPackage(id, label);
+            });
         }
         var runSubmit = document.getElementById('btn-run-analysis-submit');
         if (runSubmit) {
@@ -361,8 +436,12 @@
                 runAnalysisSetup = null;
             });
         }
-        loadPackages();
     }
 
     document.addEventListener('DOMContentLoaded', bindUi);
+
+    window.PlanRunAnalysis = {
+        openForPackage: openRunAnalysisForPackage,
+        openPicker: openPackagePicker,
+    };
 })();
