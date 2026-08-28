@@ -807,13 +807,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!locationEditorMap) {
             locationEditorMap = L.map(el, {
                 scrollWheelZoom: false,
-                zoomControl: true,
-                attributionControl: false
+                zoomControl: true
             });
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                subdomains: ['a', 'b', 'c', 'd'],
-                maxZoom: 19
-            }).addTo(locationEditorMap);
+            window.createCartoLightLayer().addTo(locationEditorMap);
             locationEditorMapMarker = L.marker([lat, lon]).addTo(locationEditorMap);
             locationEditorMap.setView([lat, lon], 16);
             setTimeout(function () {
@@ -4131,10 +4127,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const map = initMap('course-mapping-map', { zoomPosition: 'topleft' });
 
         // Add Satellite tile layer (Issue #732: Street ↔ Satellite)
-        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: '© Esri',
-            maxZoom: 19
-        });
+        const satelliteLayer = window.createEsriSatelliteLayer();
         if (!map._layers) map._layers = {};
         map._layers.satellite = satelliteLayer;
 

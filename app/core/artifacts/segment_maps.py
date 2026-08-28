@@ -18,13 +18,12 @@ from PIL import Image, ImageDraw, ImageFont
 from pyproj import Transformer
 
 from app.common.config import load_reporting
-from app.utils.constants import LOCATION_MAP_TILE_SUBDOMAINS, LOCATION_MAP_TILE_URL
+from app.utils.carto_basemaps import CARTO_TILE_SUBDOMAINS, carto_light_tile_url
 
 logger = logging.getLogger(__name__)
 
 _TILE_SIZE = 256
-_TILE_SUBDOMAINS = LOCATION_MAP_TILE_SUBDOMAINS
-_TILE_URL = LOCATION_MAP_TILE_URL
+_TILE_SUBDOMAINS = CARTO_TILE_SUBDOMAINS
 
 _MAP_SIZE = (900, 520)
 _MAP_PADDING_PX = 36
@@ -252,7 +251,7 @@ def _fetch_tile(zoom: int, x: int, y: int) -> Optional[Image.Image]:
     if y < 0 or y >= max_tile:
         return None
     subdomain = _TILE_SUBDOMAINS[(x_wrapped + y) % len(_TILE_SUBDOMAINS)]
-    url = _TILE_URL.format(s=subdomain, z=zoom, x=x_wrapped, y=y)
+    url = carto_light_tile_url().format(s=subdomain, z=zoom, x=x_wrapped, y=y)
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()

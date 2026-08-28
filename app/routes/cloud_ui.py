@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.templating import Jinja2Templates
 
 from app.common.config import load_reporting
+from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.auth import (
     validate_password,
     create_session_response,
@@ -27,6 +28,7 @@ from app.utils.run_id import get_available_days, get_run_directory
 logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory="frontend/templates")
+register_jinja_map_tiles(templates)
 
 router = APIRouter()
 _PUBLIC_LOCSHEET_HEADERS = {"X-Robots-Tag": "noindex, nofollow"}

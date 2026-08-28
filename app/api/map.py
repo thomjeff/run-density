@@ -725,12 +725,13 @@ async def get_map_config():
     to avoid hardcoded values in JavaScript.
     """
     try:
+        from app.utils.carto_basemaps import frontend_tile_config
         from app.utils.constants import (
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
-            MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
             MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
         )
-        
+
+        tiles = frontend_tile_config()
         # Issue #512: startTimes removed from config - must come from request
         return JSONResponse(content={
             "ok": True,
@@ -738,9 +739,13 @@ async def get_map_config():
                 # Issue #616: File paths come from analysis.json (no hardcoded defaults)
                 "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
                 "mapZoom": MAP_DEFAULT_ZOOM,
-                "tileUrl": MAP_TILE_URL,
-                "tileAttribution": MAP_TILE_ATTRIBUTION,
-                "maxZoom": MAP_MAX_ZOOM,
+                "tileUrl": tiles["voyagerUrl"],
+                "tileAttribution": tiles["attribution"],
+                "maxZoom": tiles["maxZoom"],
+                "voyagerUrl": tiles["voyagerUrl"],
+                "lightUrl": tiles["lightUrl"],
+                "darkUrl": tiles["darkUrl"],
+                "subdomains": tiles["subdomains"],
                 "densityThresholds": MAP_DENSITY_THRESHOLDS,
                 "zoneColors": MAP_ZONE_COLORS
             }

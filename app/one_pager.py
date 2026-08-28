@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from app.utils.constants import LOCATION_MAP_TILE_URL
+from app.utils.carto_basemaps import carto_light_tile_url
 
 logger = logging.getLogger(__name__)
 
@@ -375,7 +375,7 @@ def _render_onepager_html(
 
     events_list = ", ".join(events) if events else "NA"
 
-    tile_url = json.dumps(LOCATION_MAP_TILE_URL)
+    tile_url = json.dumps(carto_light_tile_url())
     if map_lat is not None and map_lon is not None:
         map_block = (
             '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">'
@@ -384,7 +384,7 @@ def _render_onepager_html(
             "<script>(function(){"
             f"var lat={json.dumps(map_lat)}, lon={json.dumps(map_lon)}, url={tile_url};"
             "var map=L.map('loc-map').setView([lat,lon],16);"
-            "L.tileLayer(url,{attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);"
+            "L.tileLayer(url,{attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>, &copy; <a href=\"https://carto.com/attributions\">CARTO</a>',subdomains:'abcd',maxZoom:20}).addTo(map);"
             "L.marker([lat,lon]).addTo(map);"
             "})();</script>"
         )

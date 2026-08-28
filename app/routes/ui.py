@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 from app.common.config import load_reporting, los_reference_rows
+from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize templates
 templates = Jinja2Templates(directory="frontend/templates")
+register_jinja_map_tiles(templates)
 
 # Create router
 router = APIRouter()

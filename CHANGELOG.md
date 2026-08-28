@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### CARTO basemap API key (#908)
+- Street maps (Build location pins, Plan Density/Locations/Progression, Execute popup) append `CARTO_BASEMAP_KEY` so CARTO raster tiles are not watermarked at street zoom
+- Key is read from env only; do not commit it
+
 ### New analysis button + launch from Build (#906)
 - Plan Overview **New analysis** is a header button (no persistent package-dropdown card)
 - The button opens a package picker that shows **name and ID**; Continue opens the existing start-times modal

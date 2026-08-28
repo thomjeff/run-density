@@ -13,7 +13,8 @@ from app.one_pager import generate_location_onepagers
 from app.utils.loc_sheets_list import zip_loc_sheet_html
 
 
-def test_generate_writes_html_not_pdf(tmp_path: Path) -> None:
+def test_generate_writes_html_not_pdf(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CARTO_BASEMAP_KEY", "test-key-issue-908")
     loc = {
         "loc_id": 12,
         "pass_id": 12,
@@ -62,6 +63,8 @@ def test_generate_writes_html_not_pdf(tmp_path: Path) -> None:
     assert "Churchill" in text
     assert "leaflet" in text.lower()
     assert "data:image/png" not in text
+    assert "key=" in text
+    assert "basemaps.cartocdn.com" in text
 
 
 def test_zip_loc_sheet_html_uses_existing_files(tmp_path: Path) -> None:

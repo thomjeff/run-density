@@ -540,10 +540,7 @@
                     [lat, lon],
                     16
                 );
-                window.L.tileLayer(
-                    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-                    { maxZoom: 19 }
-                ).addTo(mapInstance);
+                window.createCartoVoyagerLayer().addTo(mapInstance);
             }
             if (!mapInstance) return;
             window.L.circleMarker([lat, lon], {

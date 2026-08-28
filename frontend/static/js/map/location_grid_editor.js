@@ -214,10 +214,7 @@
             keyboard: false,
             touchZoom: false
         });
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-            subdomains: ['a', 'b', 'c', 'd'],
-            maxZoom: 19
-        }).addTo(map);
+        window.createCartoLightLayer().addTo(map);
         L.circleMarker([lat, lon], {
             radius: 5,
             color: '#2563eb',

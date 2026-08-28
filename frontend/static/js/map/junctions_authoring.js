@@ -89,10 +89,7 @@
         const el = document.getElementById('junctions-map');
         if (!el || typeof L === 'undefined') return null;
         state.map = L.map(el, { zoomControl: true }).setView([45.95, -66.64], 14);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap, © CARTO',
-            maxZoom: 19,
-        }).addTo(state.map);
+        window.createCartoVoyagerLayer().addTo(state.map);
         state.segLayer = L.layerGroup().addTo(state.map);
         state.highlightLayer = L.layerGroup().addTo(state.map);
         state.endpointLayer = L.layerGroup().addTo(state.map);
