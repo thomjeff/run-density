@@ -188,10 +188,7 @@
             [45.95, -66.64],
             13
         );
-        L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            { attribution: '© OpenStreetMap contributors, © CARTO', maxZoom: 19 }
-        ).addTo(orgCoursePreviewMap);
+        window.createCartoVoyagerLayer().addTo(orgCoursePreviewMap);
         return orgCoursePreviewMap;
     }
 

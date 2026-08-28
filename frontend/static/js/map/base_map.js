@@ -1,10 +1,54 @@
 /**
  * Base Leaflet map initialization and utilities
  * Shared by segments, density heatmaps, and flow visualizations
- * 
+ *
  * @file base_map.js
  * @description Common Leaflet setup for all map components
  */
+
+function getMapTileConfig() {
+    const cfg = window.RUNFLOW_MAP_TILES;
+    if (!cfg || !cfg.voyagerUrl || !cfg.lightUrl) {
+        throw new Error(
+            "CARTO_BASEMAP_KEY is required for street maps (Issue #908). Set it in dev.env / cloud.env."
+        );
+    }
+    return cfg;
+}
+
+function cartoLayerOptions(cfg) {
+    return {
+        attribution: cfg.attribution,
+        subdomains: cfg.subdomains || "abcd",
+        maxZoom: cfg.maxZoom || 20,
+    };
+}
+
+function createCartoVoyagerLayer() {
+    const cfg = getMapTileConfig();
+    return L.tileLayer(cfg.voyagerUrl, cartoLayerOptions(cfg));
+}
+
+function createCartoLightLayer() {
+    const cfg = getMapTileConfig();
+    return L.tileLayer(cfg.lightUrl, cartoLayerOptions(cfg));
+}
+
+function createCartoDarkLayer() {
+    const cfg = getMapTileConfig();
+    return L.tileLayer(cfg.darkUrl, cartoLayerOptions(cfg));
+}
+
+function createEsriSatelliteLayer() {
+    const cfg = window.RUNFLOW_MAP_TILES || {};
+    return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+            attribution: "© Esri",
+            maxZoom: cfg.maxZoom || 20,
+        }
+    );
+}
 
 /**
  * Initialize a Leaflet map with standard configuration
@@ -46,31 +90,12 @@ function initMap(containerId, options) {
     // Store reference to prevent double initialization
     window.existingMap = map;
     
-    // Primary tile layer - Carto Voyager (richer street detail, similar to route-planning maps)
-    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors, © CARTO',
-        maxZoom: 19
-    });
+    const cartoLayer = createCartoVoyagerLayer();
+    const cartoDarkLayer = createCartoDarkLayer();
+    const satelliteLayer = createEsriSatelliteLayer();
     
-    // Fallback tile layer - Carto Dark (for contrast)
-    const cartoDarkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors, © CARTO',
-        maxZoom: 19
-    });
-
-    // Satellite imagery (Build + Results Street/Satellite toggle)
-    const satelliteLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-            attribution: '© Esri',
-            maxZoom: 19
-        }
-    );
-    
-    // Add primary layer (light, minimal styling)
     cartoLayer.addTo(map);
     
-    // Store layer references for potential switching
     map._layers = {
         carto: cartoLayer,
         cartoDark: cartoDarkLayer,
@@ -121,16 +146,10 @@ function enableBasemapToggle(map, options) {
 
     if (!map._layers) map._layers = {};
     if (!map._layers.satellite) {
-        map._layers.satellite = L.tileLayer(
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            { attribution: '© Esri', maxZoom: 19 }
-        );
+        map._layers.satellite = createEsriSatelliteLayer();
     }
     if (!map._layers.carto) {
-        map._layers.carto = L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            { attribution: '© OpenStreetMap contributors, © CARTO', maxZoom: 19 }
-        );
+        map._layers.carto = createCartoVoyagerLayer();
     }
 
     L.DomEvent.disableClickPropagation(toggleEl);
@@ -180,7 +199,11 @@ function createEmptyStateControl(message = 'No data available') {
     return emptyControl;
 }
 
-// Export functions for use in other modules
+window.getMapTileConfig = getMapTileConfig;
+window.createCartoVoyagerLayer = createCartoVoyagerLayer;
+window.createCartoLightLayer = createCartoLightLayer;
+window.createCartoDarkLayer = createCartoDarkLayer;
+window.createEsriSatelliteLayer = createEsriSatelliteLayer;
 window.initMap = initMap;
 window.switchTileLayer = switchTileLayer;
 window.enableBasemapToggle = enableBasemapToggle;

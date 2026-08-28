@@ -125,12 +125,12 @@ HOTSPOT_SEGMENTS = get_hotspot_segments()
 MAP_CENTER_LAT, MAP_CENTER_LON = get_map_center()
 MAP_DEFAULT_ZOOM = 14
 
-# Map tile provider
+# Map tile provider (OSM leftover; live street maps use CARTO via carto_basemaps.py, Issue #908)
 MAP_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 MAP_TILE_ATTRIBUTION = "&copy; OpenStreetMap contributors"
 MAP_MAX_ZOOM = 20
 
-# Issue #702: One-pager map snapshot configuration (match Leaflet Carto Light)
+# Issue #702 / #908: one-pager and segment PNG snapshots use Carto Light + CARTO_BASEMAP_KEY
 LOCATION_MAP_RADIUS_M = 400
 LOCATION_MAP_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
 LOCATION_MAP_TILE_SUBDOMAINS = ["a", "b", "c", "d"]

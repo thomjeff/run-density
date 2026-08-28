@@ -13,6 +13,10 @@
     {% block extra_styles %}{% endblock %}
     
     {% block extra_head %}{% endblock %}
+    {# Issue #908: keyed CARTO raster URLs from env; never commit the key #}
+    <script>
+    window.RUNFLOW_MAP_TILES = {% if runflow_map_tiles_json is defined %}{{ runflow_map_tiles_json() | safe }}{% else %}null{% endif %};
+    </script>
 </head>
 <body class="layout-fluid">
     <div class="page">

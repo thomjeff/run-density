@@ -5534,10 +5534,7 @@
         var el = document.getElementById('course-preview-map');
         if (!el || typeof L === 'undefined') return null;
         coursePreviewMap = L.map('course-preview-map', { zoomControl: true }).setView([45.95, -66.64], 13);
-        L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            { attribution: '© OpenStreetMap contributors, © CARTO', maxZoom: 19 }
-        ).addTo(coursePreviewMap);
+        window.createCartoVoyagerLayer().addTo(coursePreviewMap);
         return coursePreviewMap;
     }
 
