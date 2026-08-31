@@ -76,7 +76,8 @@
 
 .rf-execute-toolbar #rf-execute-zone,
 .rf-execute-toolbar #rf-execute-search,
-.rf-execute-toolbar #rf-execute-export {
+.rf-execute-toolbar #rf-execute-export,
+.rf-execute-toolbar #rf-execute-map-open {
     box-sizing: border-box;
     height: var(--rf-ex-control-h);
     min-height: var(--rf-ex-control-h);
@@ -105,8 +106,15 @@
     padding-right: 0.65rem;
 }
 
-.rf-execute-toolbar #rf-execute-export {
+.rf-execute-toolbar-end {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rf-execute-toolbar #rf-execute-export,
+.rf-execute-toolbar #rf-execute-map-open {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -212,6 +220,7 @@
 
 .rf-execute-col-body {
     padding: 0;
+    min-height: calc(10 * 48px);
 }
 
 .rf-execute-empty {
@@ -484,7 +493,7 @@
 .rf-execute-map-panel {
     position: relative;
     z-index: 1;
-    width: min(44rem, 100%);
+    width: min(56rem, 100%);
     background: #fff;
     border: 1px solid #e6e7e9;
     border-radius: 4px;
@@ -511,12 +520,64 @@
 }
 
 .rf-execute-map {
-    height: 22rem;
+    height: 28rem;
     border: 1px solid #e6e7e9;
     border-radius: 4px;
     overflow: hidden;
     isolation: isolate;
     z-index: 0;
+}
+
+.rf-ex-map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.15rem;
+    margin: 0 0 0.65rem;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+    color: #4b5563;
+}
+
+.rf-ex-map-legend[hidden] {
+    display: none;
+}
+
+.rf-ex-map-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.rf-ex-map-swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #c5cdd6;
+}
+
+.rf-ex-map-swatch.is-closed {
+    background: var(--rf-ex-closed);
+}
+
+.rf-ex-map-swatch.is-next {
+    background: var(--rf-ex-next);
+}
+
+.rf-ex-map-swatch.is-done {
+    background: var(--rf-ex-done);
+}
+
+.rf-ex-map-popup-id {
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+}
+
+.rf-ex-map-popup-meta {
+    color: #667382;
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
 }
 
 .rf-ex-name button.rf-ex-map-link {

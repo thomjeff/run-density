@@ -93,8 +93,15 @@ def test_execute_board_has_three_columns(base_source: str):
     assert "BOARD_REFRESH_MS = 5 * 60 * 1000" in js
     assert "Show more" in js
     assert "Show earlier" in js
+    assert "Show less" in js
+    assert "data-toggle-col" in js
+    assert "reopen_next: false" in js
+    assert "STATUS_COLORS" in js
+    assert "paintStatusMap" in js
     assert "zoneOptionLabel" in js
     assert '"Zone "' in js
+    assert 'id="rf-execute-map-open"' in execute
+    assert "rf-ex-map-legend" in execute
     # Map stays off the main Execute screen; strip links are JS-built
     assert 'href="/locations"' not in execute
 

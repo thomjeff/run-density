@@ -142,7 +142,7 @@ The following diagram illustrates the data flow from artifacts through API endpo
    - `{day}/computation/locations_report.json` → Planned locations (read-only; `loc_end`, resources, `proxy_loc_id`)
    - `{day}/execution/state.json` → Operator clock, reopened rows, activity log
 2. **API:** `GET /api/execute/board`, `PUT /api/execute/clock`, `POST /api/execute/reopen`
-3. **UI:** Execute → Reopen board (no map on the main screen)
+3. **UI:** Execute → Reopen board (no map on the main screen; toolbar Map opens a view-only status popup)
 4. **Tests:** column windowing, gun-shift overlay, reopen persistence, duplicate 409
 
 **Example 6: Overview ZIP exports (Issue #891)**
@@ -584,10 +584,11 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - `{day}/execution/state.json` → operator clock, `reopened_at`, activity (Issue #893)
 
 **UI Elements → Data Mapping:**
-- **Closed / Reopen next / Reopened** → board columns; Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
+- **Closed / Reopen next / Reopened** → board columns; each previews 10 (Show more / Show earlier / Show less); Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
 - **Zone** → Plan `zone` on each strip (`Z3 · YSSR 2`); toolbar filter options are `All Zones` / `Zone 1` and apply to all columns
 - **Strip time** → display `loc_end` (gun-shift overlay; never overwrite Plan)
 - **Linked locations** → reverse-index of `proxy_loc_id`
+- **Map** → toolbar popup of all filtered locations as `lat`/`lon` pins colored by column status (view-only; Reopen stays on the lists)
 - **Export CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
 
 ### Overview Exports
