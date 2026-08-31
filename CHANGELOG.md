@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Reopen equal lists and status map
+- Closed, Reopen next, and Reopened each preview 10 locations (**Show more** / **Show earlier**), with **Show less** to collapse; header counts stay full totals
+- Columns share a 10-row min-height so the board stays even when a list is short
+- Toolbar **Map** opens a view-only status popup (Closed gray / Reopen next blue / Reopened green); strip pins open the same map focused on that location; Reopen stays on the lists
+
 ### CARTO basemap API key (#908)
 - Street maps (Build location pins, Plan Density/Locations/Progression, Execute popup) append `CARTO_BASEMAP_KEY` so CARTO raster tiles are not watermarked at street zoom
 - Key is read from env only; do not commit it

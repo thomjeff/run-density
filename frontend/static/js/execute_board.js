@@ -7,14 +7,23 @@
     var filterText = "";
     var zoneFilter = "";
     var mapInstance = null;
+    var mapFocusLocId = null;
     var lastRefreshAt = 0;
-    var closedExpanded = false;
-    var reopenedExpanded = false;
+    var expanded = {
+        closed: false,
+        reopen_next: false,
+        reopened: false,
+    };
     var pendingReopenId = null;
     var reopenError = null;
     var unpausing = false;
     var COLUMN_PREVIEW = 10;
     var BOARD_REFRESH_MS = 5 * 60 * 1000;
+    var STATUS_COLORS = {
+        closed: "#4b5563",
+        reopen_next: "#1d4ed8",
+        reopened: "#047857",
+    };
 
     var ICON_PIN =
         '<svg class="rf-ex-icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -32,6 +41,10 @@
         '<svg class="rf-ex-icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">' +
         '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
         'd="M6 9l6 6 6-6"/></svg>';
+    var ICON_LESS =
+        '<svg class="rf-ex-icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+        'd="M6 15l6-6 6 6"/></svg>';
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -192,30 +205,36 @@
         );
     }
 
+    function resetColumnExpand() {
+        expanded.closed = false;
+        expanded.reopen_next = false;
+        expanded.reopened = false;
+    }
+
+    function moreLabel(id, isExpanded) {
+        if (isExpanded) return "Show less";
+        if (id === "reopened") return "Show earlier";
+        return "Show more";
+    }
+
     function renderColumn(id, title, rows) {
         var visible = rows.filter(stripMatches);
         var shown = visible;
         var more = "";
         var collapseSearch = !filterText;
-        if (id === "closed" && collapseSearch && !closedExpanded) {
-            shown = visible.slice(0, COLUMN_PREVIEW);
-            var hiddenClosed = visible.length - shown.length;
-            if (hiddenClosed > 0) {
-                more =
-                    '<button type="button" class="rf-ex-more" data-expand-closed="1">' +
-                    ICON_MORE +
-                    " Show more</button>";
-            }
-        }
-        if (id === "reopened" && collapseSearch && !reopenedExpanded) {
-            shown = visible.slice(0, COLUMN_PREVIEW);
-            var hiddenDone = visible.length - shown.length;
-            if (hiddenDone > 0) {
-                more =
-                    '<button type="button" class="rf-ex-more" data-expand-reopened="1">' +
-                    ICON_MORE +
-                    " Show earlier</button>";
-            }
+        var isExpanded = !!expanded[id];
+        if (collapseSearch && visible.length > COLUMN_PREVIEW) {
+            if (!isExpanded) shown = visible.slice(0, COLUMN_PREVIEW);
+            more =
+                '<button type="button" class="rf-ex-more" data-toggle-col="' +
+                esc(id) +
+                '" aria-expanded="' +
+                (isExpanded ? "true" : "false") +
+                '">' +
+                (isExpanded ? ICON_LESS : ICON_MORE) +
+                " " +
+                moreLabel(id, isExpanded) +
+                "</button>";
         }
         var body = shown.length
             ? shown
@@ -291,6 +310,7 @@
         qs("#rf-execute-workspace").hidden = false;
         qs("#rf-execute-empty").hidden = true;
         qs("#rf-execute-error").hidden = true;
+        if (mapModalOpen()) paintStatusMap(mapFocusLocId);
     }
 
     function allStrips() {
@@ -341,6 +361,7 @@
     }
 
     function showEmpty() {
+        closeMapModal();
         qs("#rf-execute-workspace").hidden = true;
         qs("#rf-execute-error").hidden = true;
         qs("#rf-execute-empty").hidden = false;
@@ -349,6 +370,7 @@
     }
 
     function showError(message) {
+        closeMapModal();
         qs("#rf-execute-workspace").hidden = true;
         qs("#rf-execute-empty").hidden = true;
         var box = qs("#rf-execute-error");
@@ -410,6 +432,7 @@
                     showError(pack.data.detail || "Could not load Reopen.");
                     return;
                 }
+                resetColumnExpand();
                 applyBoard(pack.data);
             })
             .catch(function () {
@@ -498,9 +521,141 @@
             });
     }
 
+    function mapModalOpen() {
+        var el = qs("#rf-execute-map-modal");
+        return !!(el && !el.hidden);
+    }
+
+    function stripLatLon(strip) {
+        var lat = Number(strip && strip.lat);
+        var lon = Number(strip && strip.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return [lat, lon];
+    }
+
+    function statusColor(status) {
+        return STATUS_COLORS[status] || STATUS_COLORS.closed;
+    }
+
+    function statusTitle(status) {
+        if (status === "reopen_next") return "Reopen next";
+        if (status === "reopened") return "Reopened";
+        return "Closed";
+    }
+
+    function markerPopupHtml(strip) {
+        var status = strip.status || "closed";
+        var timeLine =
+            status === "reopened"
+                ? "Actual " + (strip.reopened_at || "—")
+                : "est. " + (strip.loc_end || "—");
+        var meta = metaLine(strip);
+        return (
+            '<div class="rf-ex-map-popup">' +
+            '<div class="rf-ex-map-popup-id">' +
+            esc(strip.loc_id) +
+            " · " +
+            esc(strip.loc_label) +
+            "</div>" +
+            "<div>" +
+            esc(statusTitle(status)) +
+            " · " +
+            esc(timeLine) +
+            "</div>" +
+            (meta ? '<div class="rf-ex-map-popup-meta">' + meta + "</div>" : "") +
+            "</div>"
+        );
+    }
+
+    function filteredPins() {
+        return allStrips()
+            .filter(stripMatches)
+            .map(function (strip) {
+                var latlng = stripLatLon(strip);
+                if (!latlng) return null;
+                return { strip: strip, latlng: latlng };
+            })
+            .filter(Boolean);
+    }
+
+    function ensureMapInstance(fallbackLatLng) {
+        if (mapInstance) return mapInstance;
+        if (typeof window.initMap === "function") {
+            mapInstance = window.initMap("rf-execute-map", {
+                zoomPosition: "topleft",
+            });
+            return mapInstance;
+        }
+        if (window.L) {
+            mapInstance = window.L.map("rf-execute-map").setView(
+                fallbackLatLng || [45.95, -66.64],
+                14
+            );
+            if (typeof window.createCartoVoyagerLayer === "function") {
+                window.createCartoVoyagerLayer().addTo(mapInstance);
+            }
+        }
+        return mapInstance;
+    }
+
+    function paintStatusMap(focusId) {
+        var pins = filteredPins();
+        var empty = qs("#rf-execute-map-empty");
+        var mapEl = qs("#rf-execute-map");
+        var legend = qs("#rf-execute-map-legend");
+        var hasPins = pins.length > 0;
+        if (empty) empty.hidden = hasPins;
+        if (mapEl) mapEl.hidden = !hasPins;
+        if (legend) legend.hidden = !hasPins;
+        if (!hasPins) {
+            if (mapInstance) {
+                mapInstance.remove();
+                mapInstance = null;
+                window.existingMap = null;
+            }
+            return;
+        }
+        var map = ensureMapInstance(pins[0].latlng);
+        if (!map || !window.L) return;
+        if (map._rfStatusLayer) {
+            map.removeLayer(map._rfStatusLayer);
+            map._rfStatusLayer = null;
+        }
+        var group = window.L.featureGroup();
+        var focusMarker = null;
+        pins.forEach(function (pin) {
+            var status = pin.strip.status || "closed";
+            var locId = Number(pin.strip.loc_id);
+            var focused = focusId != null && locId === Number(focusId);
+            var marker = window.L.circleMarker(pin.latlng, {
+                radius: focused ? 12 : 8,
+                color: focused ? "#182433" : "#ffffff",
+                weight: focused ? 3 : 2,
+                fillColor: statusColor(status),
+                fillOpacity: 0.9,
+                opacity: 1,
+            });
+            marker.bindPopup(markerPopupHtml(pin.strip), { maxWidth: 280 });
+            marker.addTo(group);
+            if (focused) focusMarker = marker;
+        });
+        group.addTo(map);
+        map._rfStatusLayer = group;
+        map.invalidateSize();
+        if (focusMarker) {
+            map.setView(focusMarker.getLatLng(), 16);
+            focusMarker.openPopup();
+        } else if (pins.length === 1) {
+            map.setView(pins[0].latlng, 14);
+        } else if (group.getLayers().length) {
+            map.fitBounds(group.getBounds().pad(0.15));
+        }
+    }
+
     function closeMapModal() {
         var modalEl = qs("#rf-execute-map-modal");
         if (modalEl) modalEl.hidden = true;
+        mapFocusLocId = null;
         if (mapInstance) {
             mapInstance.remove();
             mapInstance = null;
@@ -509,49 +664,18 @@
     }
 
     function openMapModal(locId) {
-        var strip = findStrip(locId);
+        mapFocusLocId = locId == null || locId === "" ? null : Number(locId);
+        var strip = mapFocusLocId != null ? findStrip(mapFocusLocId) : null;
         var title = qs("#rf-execute-map-title");
-        var empty = qs("#rf-execute-map-empty");
-        var mapEl = qs("#rf-execute-map");
+        if (title) {
+            title.textContent = strip
+                ? strip.loc_id + " · " + strip.loc_label
+                : "Reopen map";
+        }
         var modalEl = qs("#rf-execute-map-modal");
-        var label = strip
-            ? strip.loc_id + " · " + strip.loc_label
-            : "Location";
-        if (title) title.textContent = label;
-        var lat = strip && Number(strip.lat);
-        var lon = strip && Number(strip.lon);
-        var hasFix = Number.isFinite(lat) && Number.isFinite(lon);
-        if (empty) empty.hidden = hasFix;
-        if (mapEl) mapEl.hidden = !hasFix;
         if (modalEl) modalEl.hidden = false;
-        if (!hasFix) return;
         setTimeout(function () {
-            if (mapInstance) {
-                mapInstance.remove();
-                mapInstance = null;
-                window.existingMap = null;
-            }
-            if (typeof window.initMap === "function") {
-                mapInstance = window.initMap("rf-execute-map", {
-                    zoomPosition: "topleft",
-                });
-            } else if (window.L) {
-                mapInstance = window.L.map("rf-execute-map").setView(
-                    [lat, lon],
-                    16
-                );
-                window.createCartoVoyagerLayer().addTo(mapInstance);
-            }
-            if (!mapInstance) return;
-            window.L.circleMarker([lat, lon], {
-                radius: 10,
-                color: "#206bc4",
-                fillColor: "#206bc4",
-                fillOpacity: 0.9,
-                weight: 2,
-            }).addTo(mapInstance);
-            mapInstance.setView([lat, lon], 16);
-            mapInstance.invalidateSize();
+            paintStatusMap(mapFocusLocId);
         }, 50);
     }
 
@@ -561,16 +685,19 @@
             closeMapModal();
             return;
         }
-        if (ev.target.closest("[data-expand-closed]")) {
+        if (ev.target.closest("#rf-execute-map-open")) {
             ev.preventDefault();
-            closedExpanded = true;
-            render();
+            openMapModal(null);
             return;
         }
-        if (ev.target.closest("[data-expand-reopened]")) {
+        var toggle = ev.target.closest("[data-toggle-col]");
+        if (toggle) {
             ev.preventDefault();
-            reopenedExpanded = true;
-            render();
+            var col = toggle.getAttribute("data-toggle-col");
+            if (Object.prototype.hasOwnProperty.call(expanded, col)) {
+                expanded[col] = !expanded[col];
+                render();
+            }
             return;
         }
         var mapLink = ev.target.closest("[data-map-loc]");
@@ -640,8 +767,7 @@
         if (zoneSel) {
             zoneSel.addEventListener("change", function (ev) {
                 zoneFilter = String(ev.target.value || "");
-                closedExpanded = false;
-                reopenedExpanded = false;
+                resetColumnExpand();
                 if (board) render();
             });
         }

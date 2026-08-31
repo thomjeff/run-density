@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=905">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=909">
 {% endblock %}
 
 {% block content %}
@@ -45,7 +45,10 @@
                 </select>
                 <input type="search" id="rf-execute-search" class="form-control form-control-sm" placeholder="Search locations..." aria-label="Search locations">
             </div>
-            <a id="rf-execute-export" class="btn btn-sm rf-execute-export" href="#" hidden>Export CSV</a>
+            <div class="rf-execute-toolbar-end">
+                <button type="button" class="btn btn-sm" id="rf-execute-map-open">Map</button>
+                <a id="rf-execute-export" class="btn btn-sm rf-execute-export" href="#" hidden>Export CSV</a>
+            </div>
         </div>
 
         <div id="rf-execute-guns" class="rf-execute-guns" hidden></div>
@@ -79,10 +82,15 @@
         <div class="rf-execute-map-backdrop" data-map-close="1"></div>
         <div class="rf-execute-map-panel" role="dialog" aria-modal="true" aria-labelledby="rf-execute-map-title">
             <div class="rf-execute-map-header">
-                <h3 class="rf-execute-map-title" id="rf-execute-map-title">Location</h3>
+                <h3 class="rf-execute-map-title" id="rf-execute-map-title">Reopen map</h3>
                 <button type="button" class="btn btn-sm" id="rf-execute-map-close" data-map-close="1">Close</button>
             </div>
             <div class="rf-execute-map-body">
+                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location status">
+                    <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
+                    <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
+                    <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
+                </ul>
                 <div id="rf-execute-map" class="rf-execute-map"></div>
                 <p id="rf-execute-map-empty" class="text-secondary small mb-0" hidden>No map coordinates for this location.</p>
             </div>
@@ -94,5 +102,5 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
-<script src="/static/js/execute_board.js?v=908"></script>
+<script src="/static/js/execute_board.js?v=909"></script>
 {% endblock %}
