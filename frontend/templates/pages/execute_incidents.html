@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Incidents{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=911e">
+{% endblock %}
+
+{% block content %}
+<div class="rf-hs-page">
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:baseline;gap:0.75rem;">
+        <h2 id="rf-hs-title">Incidents</h2>
+        <span id="rf-hs-sub" class="rf-hs-meta"></span>
+    </div>
+
+    <div id="rf-hs-empty" class="rf-hs-empty" hidden>
+        <h3>Select a run</h3>
+        <p>Incidents uses the Plan analysis already selected. Pick a run from <strong>Runs</strong>.</p>
+    </div>
+
+    <div id="rf-hs-error" class="rf-hs-error" hidden></div>
+    <div id="rf-hs-lists" hidden></div>
+    <div id="rf-hs-form" hidden></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/execute_incidents.js?v=911d"></script>
+{% endblock %}

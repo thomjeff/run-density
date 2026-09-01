@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Execute Participants and Incidents (#911)
+- Execute nav is **Reopen · Participants · Incidents** on the selected Plan run
+- Participants is a paginated start table (search bib/name, multi-condition filter, No bib) with row details and Incident
+- Incidents is the Active / Closed queue plus the 2026 paper form (timestamped notes, outcome includes DNF) in `{day}/execution/incidents.json`
+
 ### Reopen equal lists and status map
 - Closed, Reopen next, and Reopened each preview 10 locations (**Show more** / **Show earlier**), with **Show less** to collapse; header counts stay full totals
 - Columns share a 10-row min-height so the board stays even when a list is short
