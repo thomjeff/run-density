@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Participants{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=912n">
+{% endblock %}
+
+{% block content %}
+<div class="rf-hs-page">
+    <div class="page-header">
+        <h2>Participants</h2>
+    </div>
+
+    <div id="rf-hs-empty" class="rf-hs-empty" hidden>
+        <h3>Select a run</h3>
+        <p>Participants uses the Plan analysis already selected. Pick a run from <strong>Runs</strong>.</p>
+    </div>
+
+    <div id="rf-hs-workspace" hidden>
+        <p id="rf-hs-error" class="rf-hs-error" hidden></p>
+        <div class="rf-hs-table-card">
+            <div class="rf-hs-toolbar">
+                <div class="rf-hs-search">
+                    <span class="rf-hs-search-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    </span>
+                    <input type="search" id="rf-hs-q" placeholder="Search bib or name" aria-label="Search bib or name" autocomplete="off">
+                    <button type="button" id="rf-hs-q-clear" class="rf-hs-search-clear" hidden aria-label="Clear search">×</button>
+                </div>
+                <div class="rf-hs-filter">
+                    <button type="button" class="rf-hs-filter-btn" id="rf-hs-cond-btn" aria-expanded="false" aria-haspopup="true">Conditions</button>
+                    <div id="rf-hs-cond-menu" class="rf-hs-filter-menu" hidden></div>
+                </div>
+                <button type="button" class="rf-hs-filter-btn" id="rf-hs-nobib" aria-pressed="false">Show participants without a bib</button>
+                <button type="button" class="rf-hs-clear" id="rf-hs-clear" hidden>Clear</button>
+                <div class="rf-hs-toolbar-end">
+                    <span id="rf-hs-status" class="rf-hs-meta"></span>
+                    <input type="file" id="rf-hs-file" accept=".csv,text/csv" hidden>
+                    <button type="button" class="btn btn-sm" id="rf-hs-import">Import CSV</button>
+                </div>
+            </div>
+            <div id="rf-hs-chips" class="rf-hs-chips" hidden></div>
+            <div id="rf-hs-results"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/execute_participants.js?v=911g"></script>
+{% endblock %}

@@ -104,7 +104,13 @@
                             <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="1">Reopen</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="reopen">Reopen</a>
+                        </li>
+                        <li class="nav-item rf-execute-chrome" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute/participants' %} active{% endif %}" href="/execute/participants" data-rf-execute-view="participants">Participants</a>
+                        </li>
+                        <li class="nav-item rf-execute-chrome" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute/incidents' %} active{% endif %}" href="/execute/incidents" data-rf-execute-view="incidents">Incidents</a>
                         </li>
                         {% endif %}
                     </ul>
@@ -339,6 +345,17 @@
             document.querySelectorAll(".rf-execute-chrome").forEach(function (el) {
                 el.hidden = !isExecute;
             });
+            if (isExecute) {
+                const path = window.location.pathname;
+                document.querySelectorAll("[data-rf-execute-view]").forEach(function (a) {
+                    const view = a.getAttribute("data-rf-execute-view");
+                    let active = false;
+                    if (view === "participants") active = path === "/execute/participants";
+                    else if (view === "incidents") active = path === "/execute/incidents";
+                    else active = path === "/execute";
+                    a.classList.toggle("active", active);
+                });
+            }
             const label = document.getElementById("rf-workspace-label");
             if (label) label.textContent = workspaceLabel(target);
             document.querySelectorAll(".rf-workspace-pick").forEach(function (a) {
@@ -609,7 +626,10 @@
                     const day = days.length ? String(days[0]).toLowerCase() : null;
                     if (day) localStorage.setItem("selected_day", day);
                     if (stayOnExecute) {
-                        const dest = "/execute?run_id=" + encodeURIComponent(runId);
+                        const pagePath = window.location.pathname.indexOf("/execute") === 0
+                            ? window.location.pathname
+                            : "/execute";
+                        const dest = pagePath + "?run_id=" + encodeURIComponent(runId);
                         setStoredWorkspace("execute");
                         rememberWorkspaceRoute("execute", dest);
                         window.location.href = dest;
@@ -622,7 +642,10 @@
                 })
                 .catch(function () {
                     if (stayOnExecute) {
-                        const dest = "/execute?run_id=" + encodeURIComponent(runId);
+                        const pagePath = window.location.pathname.indexOf("/execute") === 0
+                            ? window.location.pathname
+                            : "/execute";
+                        const dest = pagePath + "?run_id=" + encodeURIComponent(runId);
                         setStoredWorkspace("execute");
                         rememberWorkspaceRoute("execute", dest);
                         window.location.href = dest;
@@ -640,7 +663,10 @@
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
                 if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
                 if (a.getAttribute("data-rf-execute-view")) {
+                    const view = a.getAttribute("data-rf-execute-view");
                     let href = "/execute";
+                    if (view === "participants") href = "/execute/participants";
+                    if (view === "incidents") href = "/execute/incidents";
                     if (runId) href = setQueryParam(href, "run_id", runId);
                     a.setAttribute("href", href);
                     return;

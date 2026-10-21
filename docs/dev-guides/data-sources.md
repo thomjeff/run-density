@@ -578,10 +578,21 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - `GET /api/execute/reopen.csv` — on-demand reopen variance CSV (Issue #898)
 - `PUT /api/execute/clock` — accept/override guns, pause, jump to now
 - `POST /api/execute/reopen` — confirm primary + selected linked locations
+- `GET /api/execute/participants` — start-row lookup (`q`, `field`, `condition`)
+- `POST /api/execute/participants/import` — Race Roster CSV → `participants.json`
+- `GET /api/execute/incidents` — Active / Closed lists (`updated_at_label` on rows)
+- `POST /api/execute/incidents` — create from `reg_id`
+- `GET|PUT /api/execute/incidents/{incident_id}` — case fields (v2: description, reported_by, assigned_to, location_loc_id)
+- `POST /api/execute/incidents/{incident_id}/notes` — append-only user note
+- `POST /api/execute/incidents/{incident_id}/transfer` — care-agency handoff + `transfer` note
+- `POST /api/execute/incidents/{incident_id}/close` — close
+- `GET /api/execute/locations` — slim Plan location catalog for Incidents typeahead (`loc_id`, `loc_label`, `zone`)
 
 **Artifact Sources:**
 - `{day}/computation/locations_report.json` → read-only planned `loc_end`, resources, proxies
 - `{day}/execution/state.json` → operator clock, `reopened_at`, activity (Issue #893)
+- `{day}/execution/participants.json` → imported roster (Issue #911; local Execute only, not Overview ZIP)
+- `{day}/execution/incidents.json` → incident cases (Issues #911 / #912; schema_version 2)
 
 **UI Elements → Data Mapping:**
 - **Closed / Reopen next / Reopened** → board columns; each previews 10 (Show more / Show earlier / Show less); Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
@@ -590,6 +601,8 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - **Linked locations** → reverse-index of `proxy_loc_id`
 - **Map** → toolbar popup of all filtered locations as `lat`/`lon` pins colored by column status (view-only; Reopen stays on the lists)
 - **Export CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
+- **Participants** → `/execute/participants` paginated start table (search bib/name, multi-condition filter, No bib)
+- **Incidents** → `/execute/incidents` two-pane queue + case (EOC scribe; Assigned to is the care agency and a later change is a transfer; DNF is an outcome)
 
 ### Overview Exports
 
@@ -827,7 +840,7 @@ All artifacts are organized under `runflow/analysis/<run_id>/<day>/`:
 │   ├── bins/ (bins.parquet)
 │   ├── audit/ (audit_<day>.parquet) - if enabled
 │   ├── computation/ (locations_report.json, locations_results.json)
-│   ├── execution/ (state.json — Issue #893 operator actions)
+│   ├── execution/ (state.json, participants.json, incidents.json)
 │   ├── metadata.json (day-level metadata)
 │   └── ui/
 │       ├── metadata/ (meta.json, schema_density.json, health.json)
