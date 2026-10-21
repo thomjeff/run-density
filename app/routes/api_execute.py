@@ -88,6 +88,7 @@ class IncidentUpdateBody(BaseModel):
     reported_by_name: Optional[str] = None
     reported_by_agency: Optional[str] = None
     assigned_to: Optional[str] = None
+    assigned_note: Optional[str] = None
     called_911: Optional[str] = None
     called_911_at: Optional[str] = None
     outcome: Optional[str] = None
@@ -388,8 +389,21 @@ def _incident_view(
         payload["family_name"] = (
             payload.get("family_name") or row.get("family_name") or ""
         )
+        payload["age"] = payload.get("age") or row.get("age") or ""
+        payload["sex"] = payload.get("sex") or row.get("sex") or ""
+        payload["medical_disclosed"] = row.get("medical_disclosed") or ""
+        payload["medical_conditions"] = list(
+            row.get("medical_conditions") or []
+        )
+        payload["medical_note"] = row.get("medical_note") or ""
+        payload["medical_avoid"] = row.get("medical_avoid") or ""
     else:
         payload["display_bib"] = str(incident.get("bib") or "").strip()
+        payload.setdefault("medical_conditions", [])
+        payload.setdefault("medical_note", "")
+    life = hs_incidents.lifecycle(incident)
+    payload["lifecycle"] = life
+    payload["lifecycle_display"] = life.get("display") or life.get("label")
     return payload
 
 

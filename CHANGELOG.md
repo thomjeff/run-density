@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Execute Incidents reporting, lifecycle, and closure care (#914)
+- Reported problem is a multi-select of observations, including **Other** and explicit **Not yet known** (`not_yet_known`). Empty means nothing recorded and may be saved; empty is not converted to Not yet known
+- User-facing lifecycle is **Open / Assigned / Closed**, derived from `incident_status` and the on-course care agency. Queue groups stay Active / Closed
+- **911 called?** stays on the live case with Not yet recorded / No / Yes. Yes shows a red **911 called** text badge on the header and queue tile without replacing lifecycle
+- Care provided moves into Close case, with suggestions from the selected problems, **More care options**, and optional unknown/no-care choices. Agency names are not care actions
+- Reported-problem and care catalogs have **not been reviewed by first-aid agencies**
+- `{day}/execution/incidents.json` schema_version 3; current test incidents may be deleted
+- Identity tile shows roster disclosed conditions and notes under age / sex / event
+- Close case puts **Closed by** and **Roles/Organization** above the Close case button, after care provided
+- First care-agency assignment writes an Activity line (`Assigned SKI.`) the same way a handoff does, with optional details stored separately from the headline
+- Activity rows with extra or long notes open a details popup; print still shows the full text
+
 ### Execute Incidents case management (#912)
 - Incidents is a two-pane EOC scribe screen: Active/Closed queue on the left, selected case on the right
 - Cases use stacked tiles: identity, **Incident Details**, Activity, Outcome; identity stays read-only

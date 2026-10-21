@@ -1,4 +1,9 @@
-"""Incident store for Execute Health & Safety (Issues #911 / #912)."""
+"""Incident store for Execute Health & Safety (Issues #911 / #912 / #914).
+
+Reported-problem and care catalogs have not been reviewed by first-aid
+agencies (#914). They are reports of what the EOC was told, not diagnoses
+or treatment orders.
+"""
 
 from __future__ import annotations
 
@@ -12,9 +17,20 @@ from app.core.locations.report_json import (
     parse_optional_id,
 )
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 INCIDENTS_FILENAME = "incidents.json"
 NOTE_KINDS = frozenset({"system", "user", "transfer"})
+NOT_YET_KNOWN = "not_yet_known"
+EXCLUSIVE_CARE = frozenset(
+    {"no_care_as_reported", "care_details_not_known"}
+)
+SHARED_CARE = (
+    "assessed_by_agency",
+    "observation",
+    "other_care",
+    "no_care_as_reported",
+    "care_details_not_known",
+)
 
 FM_EVENTS = (
     ("5k_elite", "5K Elite"),
@@ -25,20 +41,104 @@ FM_EVENTS = (
     ("full", "Full"),
 )
 INCIDENT_TYPES = (
-    ("blister_skin", "Blister / skin"),
-    ("heat_dehydration", "Heat / dehydration"),
-    ("musculoskeletal", "Musculoskeletal"),
-    ("respiratory", "Respiratory"),
-    ("cardiac", "Cardiac"),
+    ("fall_collision_injury", "Fall / collision / injury"),
+    ("blister_chafing_skin", "Blister / chafing / skin problem"),
+    ("muscle_joint_cramp", "Muscle / joint pain or cramp"),
+    ("dizziness_fainting_collapse", "Dizziness / fainting / collapse"),
+    ("exhaustion", "Exhaustion / unable to continue"),
+    ("heat_concern", "Feeling overheated / heat concern"),
+    ("cold_exposure", "Feeling cold / cold exposure"),
+    ("breathing_difficulty", "Breathing difficulty"),
+    ("chest_pain_heart", "Chest pain / heart-related concern"),
+    ("nausea_stomach", "Nausea / vomiting / stomach complaint"),
+    ("confusion_altered", "Confusion / altered responsiveness"),
     ("other", "Other"),
+    (NOT_YET_KNOWN, "Not yet known"),
 )
 CARE_TYPES = (
-    ("first_aid", "Care given"),
-    ("fluids", "Fluids"),
-    ("ice", "Ice"),
-    ("sja", "SJA attended"),
-    ("other", "Other"),
+    ("wound_cleaned", "Wound cleaned"),
+    ("dressing_bandage", "Dressing / bandage applied"),
+    ("bleeding_control", "Bleeding control"),
+    ("injury_support", "Injury support / immobilization"),
+    ("blister_skin_care", "Blister / skin care"),
+    ("dressing_covering", "Dressing / protective covering applied"),
+    ("rest_recovery", "Rest / recovery support"),
+    ("ice_cold_pack", "Ice / cold pack applied"),
+    ("assisted_to_rest", "Assisted to rest"),
+    ("observation", "Observation / monitoring"),
+    ("assessed_by_agency", "Assessed by care agency"),
+    ("fluids_provided", "Fluids provided"),
+    ("moved_shade", "Moved to shade / cooler area"),
+    ("cooling_measures", "Cooling measures"),
+    ("moved_shelter", "Moved to shelter"),
+    ("blanket_warming", "Blanket / warming measures"),
+    ("oxygen_reported", "Oxygen reported"),
+    ("cpr_reported", "CPR reported"),
+    ("aed_use_reported", "AED use reported"),
+    ("other_care", "Other care reported"),
+    ("no_care_as_reported", "No care provided — as reported"),
+    ("care_details_not_known", "Care details not known"),
 )
+CARE_SUGGESTIONS = {
+    "fall_collision_injury": (
+        "wound_cleaned",
+        "dressing_bandage",
+        "bleeding_control",
+        "injury_support",
+    ),
+    "blister_chafing_skin": (
+        "blister_skin_care",
+        "dressing_covering",
+    ),
+    "muscle_joint_cramp": (
+        "rest_recovery",
+        "ice_cold_pack",
+        "injury_support",
+    ),
+    "dizziness_fainting_collapse": (
+        "assisted_to_rest",
+        "observation",
+        "assessed_by_agency",
+    ),
+    "exhaustion": (
+        "rest_recovery",
+        "fluids_provided",
+        "observation",
+    ),
+    "heat_concern": (
+        "moved_shade",
+        "cooling_measures",
+        "fluids_provided",
+        "observation",
+    ),
+    "cold_exposure": (
+        "moved_shelter",
+        "blanket_warming",
+        "observation",
+    ),
+    "breathing_difficulty": (
+        "assessed_by_agency",
+        "observation",
+        "oxygen_reported",
+    ),
+    "chest_pain_heart": (
+        "assessed_by_agency",
+        "observation",
+        "cpr_reported",
+        "aed_use_reported",
+        "oxygen_reported",
+    ),
+    "nausea_stomach": (
+        "rest_recovery",
+        "assessed_by_agency",
+        "observation",
+    ),
+    "confusion_altered": (
+        "assessed_by_agency",
+        "observation",
+        "assisted_to_rest",
+    ),
+}
 AGENCIES = (
     ("sja", "SJA"),
     ("ski", "SKI"),
@@ -103,7 +203,7 @@ def incidents_relpath(day: str) -> str:
     return f"{day}/execution/{INCIDENTS_FILENAME}"
 
 
-def catalog() -> Dict[str, List[Dict[str, str]]]:
+def catalog() -> Dict[str, Any]:
     def _pairs(items: Sequence[tuple[str, str]]) -> List[Dict[str, str]]:
         return [{"id": key, "label": label} for key, label in items]
 
@@ -111,10 +211,20 @@ def catalog() -> Dict[str, List[Dict[str, str]]]:
         "fm_event": _pairs(FM_EVENTS),
         "incident_types": _pairs(INCIDENT_TYPES),
         "care_types": _pairs(CARE_TYPES),
+        "care_suggestions": {
+            key: list(ids) for key, ids in CARE_SUGGESTIONS.items()
+        },
+        "shared_care_types": list(SHARED_CARE),
+        "exclusive_incident_types": [NOT_YET_KNOWN],
+        "exclusive_care_types": sorted(EXCLUSIVE_CARE),
         "agencies": _pairs(AGENCIES),
         "reporter_agencies": _pairs(REPORTER_AGENCIES),
         "transferred_to": _pairs(AGENCIES),
         "outcomes": _pairs(OUTCOMES),
+        "catalog_review": (
+            "Reported-problem and care catalogs have not been reviewed "
+            "by first-aid agencies."
+        ),
     }
 
 
@@ -147,6 +257,53 @@ def empty_store(*, run_id: str, day: str) -> Dict[str, Any]:
 
 def new_incident_id() -> str:
     return "inc_" + uuid.uuid4().hex[:12]
+
+
+def clean_incident_types(raw: Any) -> List[str]:
+    cleaned = _clean_list(raw, CATALOG_KEYS["incident_types"])
+    has_specific = any(key != NOT_YET_KNOWN for key in cleaned)
+    if NOT_YET_KNOWN in cleaned and has_specific:
+        return [key for key in cleaned if key != NOT_YET_KNOWN]
+    return cleaned
+
+
+def clean_care_types(raw: Any) -> List[str]:
+    cleaned = _clean_list(raw, CATALOG_KEYS["care_types"])
+    exclusive = [key for key in cleaned if key in EXCLUSIVE_CARE]
+    actual = [key for key in cleaned if key not in EXCLUSIVE_CARE]
+    if actual:
+        return actual
+    if len(exclusive) > 1:
+        return [exclusive[-1]]
+    return exclusive
+
+
+def suggested_care_ids(problem_ids: Sequence[Any]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
+    for problem in problem_ids or []:
+        for care_id in CARE_SUGGESTIONS.get(str(problem), ()):
+            if care_id in seen:
+                continue
+            seen.add(care_id)
+            out.append(care_id)
+    return out
+
+
+def lifecycle(incident: Mapping[str, Any]) -> Dict[str, str]:
+    if is_closed(incident):
+        return {"id": "closed", "label": "Closed", "display": "Closed"}
+    agency = _clean_agency(incident.get("assigned_to"))
+    if agency:
+        label = agency_label(agency)
+        return {
+            "id": "assigned",
+            "label": "Assigned",
+            "agency": agency,
+            "agency_label": label,
+            "display": "Assigned · " + label,
+        }
+    return {"id": "open", "label": "Open", "display": "Open"}
 
 
 def _clean_list(raw: Any, allowed: frozenset[str]) -> List[str]:
@@ -241,21 +398,26 @@ def type_care_change_note(
     *,
     old_other: str = "",
     new_other: str = "",
+    old_care_note: str = "",
+    new_care_note: str = "",
 ) -> str:
     parts: List[str] = []
     type_added, type_removed = _catalog_diff(old_types, new_types, INCIDENT_TYPES)
     care_added, care_removed = _catalog_diff(old_care, new_care, CARE_TYPES)
     if type_added:
-        parts.append("Type added: " + ", ".join(type_added) + ".")
+        parts.append("Problem added: " + ", ".join(type_added) + ".")
     if type_removed:
-        parts.append("Type removed: " + ", ".join(type_removed) + ".")
+        parts.append("Problem removed: " + ", ".join(type_removed) + ".")
     other_text = str(new_other or "").strip()
     if other_text and other_text != str(old_other or "").strip():
-        parts.append("Type other: " + other_text + ".")
+        parts.append("Other reported problem: " + other_text + ".")
     if care_added:
         parts.append("Care added: " + ", ".join(care_added) + ".")
     if care_removed:
         parts.append("Care removed: " + ", ".join(care_removed) + ".")
+    care_other = str(new_care_note or "").strip()
+    if care_other and care_other != str(old_care_note or "").strip():
+        parts.append("Other care reported: " + care_other + ".")
     return " ".join(parts)
 
 
@@ -357,6 +519,7 @@ def apply_fields(
     old_types = list(incident.get("incident_types") or [])
     old_care = list(incident.get("care_types") or [])
     old_other = str(incident.get("incident_type_other") or "").strip()
+    old_care_note = str(incident.get("care_note") or "").strip()
     changed = False
     text_fields = (
         "bib",
@@ -400,29 +563,47 @@ def apply_fields(
         new_assigned = _clean_agency(payload.get("assigned_to"))
         if new_assigned != old_assigned:
             changed = True
+            extra = str(
+                payload.get("assigned_note")
+                or payload.get("transfer_note")
+                or ""
+            ).strip()
             if old_assigned and new_assigned:
-                transfer_care(incident, new_assigned)
+                transfer_care(incident, new_assigned, extra)
             elif old_assigned and not new_assigned:
                 incident["assigned_to"] = ""
                 append_note(
                     incident,
                     "Transferred " + agency_label(old_assigned) + " → Unassigned.",
                     kind="transfer",
+                    detail=extra,
                 )
             else:
-                incident["assigned_to"] = new_assigned
-    list_fields = (
-        ("fm_event", CATALOG_KEYS["fm_event"]),
-        ("incident_types", CATALOG_KEYS["incident_types"]),
-        ("care_types", CATALOG_KEYS["care_types"]),
-        ("transferred_to", CATALOG_KEYS["transferred_to"]),
-    )
-    for field, allowed in list_fields:
-        if field in payload:
-            cleaned = _clean_list(payload.get(field), allowed)
-            if list(incident.get(field) or []) != cleaned:
-                incident[field] = cleaned
-                changed = True
+                assign_care(incident, new_assigned, extra)
+    if "fm_event" in payload:
+        cleaned_events = _clean_list(
+            payload.get("fm_event"), CATALOG_KEYS["fm_event"]
+        )
+        if list(incident.get("fm_event") or []) != cleaned_events:
+            incident["fm_event"] = cleaned_events
+            changed = True
+    if "incident_types" in payload:
+        cleaned_types = clean_incident_types(payload.get("incident_types"))
+        if list(incident.get("incident_types") or []) != cleaned_types:
+            incident["incident_types"] = cleaned_types
+            changed = True
+    if "care_types" in payload:
+        cleaned_care = clean_care_types(payload.get("care_types"))
+        if list(incident.get("care_types") or []) != cleaned_care:
+            incident["care_types"] = cleaned_care
+            changed = True
+    if "transferred_to" in payload:
+        cleaned_xfer = _clean_list(
+            payload.get("transferred_to"), CATALOG_KEYS["transferred_to"]
+        )
+        if list(incident.get("transferred_to") or []) != cleaned_xfer:
+            incident["transferred_to"] = cleaned_xfer
+            changed = True
     if "care_transferred" in payload:
         new_xfer = _clean_yes_no(payload.get("care_transferred"))
         if incident.get("care_transferred") != new_xfer:
@@ -462,6 +643,8 @@ def apply_fields(
         incident.get("care_types") or [],
         old_other=old_other,
         new_other=str(incident.get("incident_type_other") or "").strip(),
+        old_care_note=old_care_note,
+        new_care_note=str(incident.get("care_note") or "").strip(),
     )
     if care_note:
         append_note(incident, care_note, kind="system")
@@ -473,6 +656,7 @@ def append_note(
     text: str,
     *,
     kind: str = "user",
+    detail: str = "",
 ) -> Dict[str, Any]:
     body = str(text or "").strip()
     if not body:
@@ -481,17 +665,41 @@ def append_note(
     kind_key = str(kind or "user").strip().lower()
     if kind_key not in NOTE_KINDS:
         kind_key = "user"
+    entry: Dict[str, Any] = {
+        "text": body,
+        "kind": kind_key,
+        "saved_at": stamp["saved_at"],
+        "saved_at_label": stamp["saved_at_label"],
+    }
+    extra = str(detail or "").strip()
+    if extra:
+        entry["detail"] = extra
     notes = list(incident.get("notes") or [])
-    notes.append(
-        {
-            "text": body,
-            "kind": kind_key,
-            "saved_at": stamp["saved_at"],
-            "saved_at_label": stamp["saved_at_label"],
-        }
-    )
+    notes.append(entry)
     incident["notes"] = notes
     _touch(incident, stamp)
+    return incident
+
+
+def assign_care(
+    incident: Dict[str, Any],
+    to_agency: str,
+    text: str = "",
+) -> Dict[str, Any]:
+    require_open(incident)
+    to_key = _clean_agency(to_agency)
+    if not to_key:
+        raise ValueError("Unknown care agency.")
+    if _clean_agency(incident.get("assigned_to")):
+        return transfer_care(incident, to_agency, text)
+    extra = str(text or "").strip()
+    incident["assigned_to"] = to_key
+    append_note(
+        incident,
+        "Assigned " + agency_label(to_key) + ".",
+        kind="transfer",
+        detail=extra,
+    )
     return incident
 
 
@@ -515,10 +723,8 @@ def transfer_care(
         + agency_label(to_key)
         + "."
     )
-    if extra:
-        note = note + " " + extra
     incident["assigned_to"] = to_key
-    append_note(incident, note, kind="transfer")
+    append_note(incident, note, kind="transfer", detail=extra)
     return incident
 
 

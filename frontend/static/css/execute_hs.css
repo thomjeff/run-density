@@ -614,6 +614,20 @@ label.rf-hs-label {
     line-height: 1.2;
 }
 
+.rf-hs-idbar-health {
+    margin-top: 0.35rem;
+}
+
+.rf-hs-idbar-health .rf-hs-chip-row {
+    margin-bottom: 0.2rem;
+}
+
+.rf-hs-idbar-note {
+    color: #3b4a5a;
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
 .rf-hs-board {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -748,6 +762,56 @@ label.rf-hs-label {
 
 .rf-hs-note-head {
     margin-bottom: 0.15rem;
+}
+
+.rf-hs-note.is-openable {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0.55rem 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid #eef1f4;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+.rf-hs-note.is-openable:hover {
+    background: #f8fafc;
+}
+
+.rf-hs-note-line {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.rf-hs-note-more {
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.rf-hs-note-print,
+#hs-activity-detail[hidden] {
+    display: none;
+}
+
+#hs-activity-headline,
+#hs-activity-detail {
+    margin: 0.35rem 0 0;
+    max-width: 100%;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .rf-hs-actions {
@@ -902,8 +966,13 @@ label.rf-hs-label {
 }
 
 .rf-hs-modal-card {
+    box-sizing: border-box;
     width: min(28rem, calc(100% - 2rem));
+    max-width: calc(100% - 2rem);
+    min-width: 0;
+    max-height: min(32rem, calc(100% - 2rem));
     padding: 1rem 1.1rem 1.05rem;
+    overflow: auto;
     background: #fff;
     border-radius: 6px;
     box-shadow: 0 12px 32px rgba(24, 36, 51, 0.2);
@@ -936,7 +1005,6 @@ label.rf-hs-label {
 .rf-hs-status {
     display: inline-flex;
     align-items: center;
-    margin-left: auto;
     padding: 0.18rem 0.55rem;
     border-radius: 999px;
     font-size: 0.72rem;
@@ -945,14 +1013,50 @@ label.rf-hs-label {
     white-space: nowrap;
 }
 
-.rf-hs-status.is-active {
+.rf-hs-status.is-active,
+.rf-hs-status.is-open {
     background: #e8f1ff;
     color: #1d4ed8;
+}
+
+.rf-hs-status.is-assigned {
+    background: #ecfdf3;
+    color: #047857;
 }
 
 .rf-hs-status.is-closed {
     background: #eef1f4;
     color: #4b5563;
+}
+
+.rf-hs-idbar-badges,
+.rf-hs-strip-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.rf-hs-idbar-badges {
+    margin-left: auto;
+}
+
+.rf-hs-911-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid #b91c1c;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.rf-hs-911-live {
+    margin-top: 0.75rem;
 }
 
 .rf-hs-case-foot {
@@ -1118,8 +1222,21 @@ label.rf-hs-label {
     .rf-hs-xfer-panel,
     .rf-hs-typeahead-menu,
     .rf-hs-case-foot,
-    .rf-hs-modal {
+    .rf-hs-modal,
+    .rf-hs-note-more {
         display: none !important;
+    }
+
+    .rf-hs-note-print {
+        display: block !important;
+        margin-top: 0.25rem;
+        white-space: pre-wrap;
+    }
+
+    .rf-hs-note-line {
+        display: block;
+        -webkit-line-clamp: unset;
+        overflow: visible;
     }
 
     .rf-hs-split {
