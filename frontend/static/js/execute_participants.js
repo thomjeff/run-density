@@ -4,6 +4,13 @@
 
     var PAGE_SIZES = [25, 50, 100];
     var pageSize = 25;
+    var INCIDENT_ICON =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
+        '<polyline points="14 2 14 8 20 8"/>' +
+        '<line x1="12" y1="18" x2="12" y2="12"/>' +
+        '<line x1="9" y1="15" x2="15" y2="15"/>' +
+        "</svg>";
     var allRows = [];
     var conditionLabels = [];
     var selectedConditions = {};
@@ -15,6 +22,7 @@
     var sortKey = "bib";
     var sortDir = "asc";
     var searchTimer = null;
+    var activeByReg = {};
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -42,6 +50,14 @@
         var url = path + "?run_id=" + encodeURIComponent(runId());
         var day = dayCode();
         if (day) url += "&day=" + encodeURIComponent(day);
+        return url;
+    }
+
+    function incidentsHref(incidentId) {
+        var url = "/execute/incidents?run_id=" + encodeURIComponent(runId());
+        var day = dayCode();
+        if (day) url += "&day=" + encodeURIComponent(day);
+        if (incidentId) url += "&incident_id=" + encodeURIComponent(incidentId);
         return url;
     }
 
@@ -293,7 +309,21 @@
     function detailHtml(row) {
         var warn = String(row.bib || "").trim()
             ? ""
-            : '<p class="rf-hs-warn">Race Roster has no bib for this start. Type the number on the shirt when you open an incident.</p>';
+            : '<p class="rf-hs-warn">Race Roster has no bib for this start. Type the number on the shirt when you start a case.</p>';
+        var active = activeByReg[String(row.reg_id)];
+        var caseActions =
+            '<div class="rf-hs-detail-actions">' +
+            '<button type="button" class="btn btn-sm" data-create="' +
+            esc(row.reg_id) +
+            '">' +
+            (active ? "Start another case" : "Start case") +
+            "</button>" +
+            (active
+                ? ' <a class="btn btn-sm" href="' +
+                  esc(incidentsHref(active.incident_id)) +
+                  '">View active case</a>'
+                : "") +
+            "</div>";
         return (
             '<tr class="rf-hs-detail"><td colspan="7">' +
             warn +
@@ -315,7 +345,9 @@
             "</div>" +
             '<div class="rf-hs-meta" style="margin-top:0.25rem;">Avoid giving or doing: ' +
             esc(row.medical_avoid || "—") +
-            "</div></div></div></td></tr>"
+            "</div></div></div>" +
+            caseActions +
+            "</td></tr>"
         );
     }
 
@@ -398,9 +430,27 @@
                     "<td>" +
                     condCell(row) +
                     "</td>" +
-                    '<td class="rf-hs-td-action"><button type="button" class="btn btn-sm" data-create="' +
-                    esc(row.reg_id) +
-                    '">Incident</button></td></tr>';
+                    '<td class="course-map-action-cell">' +
+                    (function () {
+                        var active = activeByReg[String(row.reg_id)];
+                        if (active) {
+                            return (
+                                '<a class="course-map-action-btn" href="' +
+                                esc(incidentsHref(active.incident_id)) +
+                                '" title="View active case" aria-label="View active case">' +
+                                INCIDENT_ICON +
+                                "</a>"
+                            );
+                        }
+                        return (
+                            '<button type="button" class="course-map-action-btn" data-create="' +
+                            esc(row.reg_id) +
+                            '" title="Start case" aria-label="Start case">' +
+                            INCIDENT_ICON +
+                            "</button>"
+                        );
+                    })() +
+                    "</td></tr>";
                 return open ? main + detailHtml(row) : main;
             })
             .join("");
@@ -422,7 +472,7 @@
             '<th data-sort="age">Age' +
             sortMark("age") +
             "</th>" +
-            "<th>Conditions</th><th></th></tr></thead>" +
+            "<th>Conditions</th><th class=\"course-map-action-cell\">Actions</th></tr></thead>" +
             "<tbody>" +
             body +
             "</tbody></table></div>" +
@@ -450,6 +500,25 @@
         renderTable();
     }
 
+    function loadActiveCases() {
+        return fetch(apiUrl("/api/execute/incidents"), {
+            credentials: "same-origin",
+        })
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (body) {
+                activeByReg = {};
+                ((body && body.active) || []).forEach(function (row) {
+                    var reg = String(row.reg_id || "");
+                    if (reg && !activeByReg[reg]) activeByReg[reg] = row;
+                });
+            })
+            .catch(function () {
+                activeByReg = {};
+            });
+    }
+
     function loadRoster() {
         showError("");
         return fetch(apiUrl("/api/execute/participants"), {
@@ -465,6 +534,9 @@
                 allRows = body.participants || [];
                 conditionLabels = body.conditions || [];
                 page = 1;
+                return loadActiveCases();
+            })
+            .then(function () {
                 renderTable();
             })
             .catch(function (err) {
@@ -606,6 +678,14 @@
             renderTable();
         });
         qs("#rf-hs-results").addEventListener("click", function (ev) {
+            var viewCase = ev.target.closest("a[href]");
+            if (
+                viewCase &&
+                viewCase.closest(".course-map-action-cell, .rf-hs-detail-actions")
+            ) {
+                ev.stopPropagation();
+                return;
+            }
             var create = ev.target.closest("[data-create]");
             if (create) {
                 ev.preventDefault();

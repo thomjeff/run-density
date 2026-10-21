@@ -75,13 +75,19 @@ class IncidentUpdateBody(BaseModel):
     sub_event: Optional[str] = None
     fm_event: Optional[List[str]] = None
     location_text: Optional[str] = None
+    location_loc_id: Optional[str] = None
+    description: Optional[str] = None
     incident_types: Optional[List[str]] = None
     incident_type_note: Optional[str] = None
+    incident_type_other: Optional[str] = None
     care_types: Optional[List[str]] = None
     care_note: Optional[str] = None
     care_transferred: Optional[str] = None
     care_transferred_at: Optional[str] = None
     transferred_to: Optional[List[str]] = None
+    reported_by_name: Optional[str] = None
+    reported_by_agency: Optional[str] = None
+    assigned_to: Optional[str] = None
     called_911: Optional[str] = None
     called_911_at: Optional[str] = None
     outcome: Optional[str] = None
@@ -91,6 +97,11 @@ class IncidentUpdateBody(BaseModel):
 
 class IncidentNoteBody(BaseModel):
     text: str
+
+
+class IncidentTransferBody(BaseModel):
+    to_agency: str
+    text: Optional[str] = None
 
 
 def _require_run_id(run_id: Optional[str]) -> str:
@@ -491,12 +502,23 @@ async def get_execute_incidents(
     items = [
         _incident_view(item, roster) for item in store.get("incidents") or []
     ]
+    def _when(item: Mapping[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = item.get(key)
+            if value:
+                return str(value)
+        return ""
+
     active = [
         item for item in items if item.get("incident_status") == "active"
     ]
     closed = [
         item for item in items if item.get("incident_status") == "closed"
     ]
+    closed.sort(
+        key=lambda item: _when(item, "closed_at", "updated_at", "opened_at"),
+        reverse=True,
+    )
     return JSONResponse(
         content={
             "ok": True,
@@ -630,9 +652,10 @@ async def put_execute_incident(
             status_code=404,
             detail=f"Unknown incident_id {incident_id}.",
         ) from exc
-    hs_incidents.apply_fields(
-        incident, body.model_dump(exclude_none=True)
-    )
+    try:
+        hs_incidents.apply_fields(incident, body.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     hs_incidents.persist_store(storage, selected_day, store)
     return JSONResponse(
         content={
@@ -668,6 +691,7 @@ async def post_execute_incident_note(
             detail=f"Unknown incident_id {incident_id}.",
         ) from exc
     try:
+        hs_incidents.require_open(incident)
         hs_incidents.append_note(incident, body.text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -676,6 +700,64 @@ async def post_execute_incident_note(
         content={
             "ok": True,
             "incident": _incident_view(incident, roster),
+        }
+    )
+
+
+@router.post("/api/execute/incidents/{incident_id}/transfer")
+async def post_execute_incident_transfer(
+    request: Request,
+    incident_id: str,
+    body: IncidentTransferBody,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+) -> JSONResponse:
+    _guard_session(request)
+    rid = _require_run_id(run_id)
+    selected_day = _resolve_execute_day(rid, day)
+    storage = create_runflow_storage(rid)
+    roster = _roster_by_reg(
+        hs_participants.load_store(storage, run_id=rid, day=selected_day)
+    )
+    store = hs_incidents.load_store(
+        storage, run_id=rid, day=selected_day
+    )
+    try:
+        incident = hs_incidents.find_incident(store, incident_id)
+    except hs_incidents.IncidentNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown incident_id {incident_id}.",
+        ) from exc
+    try:
+        hs_incidents.transfer_care(incident, body.to_agency, body.text or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    hs_incidents.persist_store(storage, selected_day, store)
+    return JSONResponse(
+        content={
+            "ok": True,
+            "incident": _incident_view(incident, roster),
+        }
+    )
+
+
+@router.get("/api/execute/locations")
+async def get_execute_incident_locations(
+    request: Request,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+) -> JSONResponse:
+    _guard_session(request)
+    rid = _require_run_id(run_id)
+    selected_day = _resolve_execute_day(rid, day)
+    storage = create_runflow_storage(rid)
+    return JSONResponse(
+        content={
+            "ok": True,
+            "run_id": rid,
+            "day": selected_day,
+            "locations": hs_incidents.location_catalog(storage, selected_day),
         }
     )
 

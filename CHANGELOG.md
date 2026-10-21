@@ -2,10 +2,36 @@
 
 ## [Unreleased]
 
+### Execute Incidents case management (#912)
+- Incidents is a two-pane EOC scribe screen: Active/Closed queue on the left, selected case on the right
+- Cases use stacked tiles: identity, **Incident Details**, Activity, Outcome; identity stays read-only
+- Incident Details holds description, location typeahead, type, care provided, and 911
+- **Assigned to** is the on-course care agency; changing a set value records a transfer in Activity
+- Reporter agency is a fixed list (Race Crew, Volunteer, Spectator, Participant, Ski, SJA, AWP, FPF, FFD, ANB)
+- Saving **Reported by** with an agency stamps Activity (`Reported by Jeff · Race Crew.`) and keeps the fields editable
+- Type **Other** reveals a short-description box (`incident_type_other`)
+- Closed cases are read-only (fields, notes, and Save); Print remains
+- **Add note** records the progress note and keeps typed case fields; it does not wait on completed-by. **Save case** is the required-field save and does not consume the note
+- Working layout: queue shows location, care agency, and last update; **Activity** stays beside the case; reporter, location, description, and current care agency sit together; type/care and outcome stay collapsed
+- **Record transfer of care** uses a receiving-agency panel; current agency stays the saved value until Confirm
+- Save status is **Unsaved changes / Saving / Saved / Not saved · Retry**; Save case keeps an unsubmitted progress note as **Note not recorded**
+- Case switch and close prompt **Stay / Discard / Save**; browser reload warns when work is pending; opening a case no longer writes it
+- Type and care add/remove append one Activity summary (`Care added: Fluids, Ice.`); identical saves do not bump last-update
+- Save requires reporter name, reporter role / organization, location, and initial report; **Closed by** is required only to close
+- Queue, case, and Participants copy uses US English (**organization**), keeps the Incidents backend names, and avoids first-aid as a case label
+- Empty Incidents pane explains how to **Start a case** from Participants; the roster action is **Start case** / **View active case**
+- Close case labels blank selectors (**Choose an outcome…**, **Not yet recorded**) and shows what is still needed beside Close
+- Case log uses **Add an update** / **Add to case log**; a saved case with a draft note reads **Case details saved · Note not added**
+- Close saves unsaved case fields (such as completed-by agency) and only prompts when a progress note is still in the box; the prompt names the unsaved fields
+- Outcome agency is the reporter-agency list; DNF helper text is removed; Add note stays off until the progress note has text and keeps that label even when the case is dirty
+- Field saves no longer dump “Updated …” system notes; first description save and 911-yes still stamp the log
+- `{day}/execution/incidents.json` schema_version 2 (`description`, `reported_by_*`, `assigned_to`, `location_loc_id`)
+
 ### Execute Participants and Incidents (#911)
 - Execute nav is **Reopen · Participants · Incidents** on the selected Plan run
 - Participants is a paginated start table (search bib/name, multi-condition filter, No bib) with row details and Incident
 - Incidents is the Active / Closed queue plus the 2026 paper form (timestamped notes, outcome includes DNF) in `{day}/execution/incidents.json`
+- Opening, saving a change, or closing an incident appends a system note to that timeline
 
 ### Reopen equal lists and status map
 - Closed, Reopen next, and Reopened each preview 10 locations (**Show more** / **Show earlier**), with **Show less** to collapse; header counts stay full totals

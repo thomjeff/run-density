@@ -3,7 +3,7 @@
 {% block title %}Incidents{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="/static/css/execute_hs.css?v=911e">
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=912n">
 {% endblock %}
 
 {% block content %}
@@ -19,11 +19,26 @@
     </div>
 
     <div id="rf-hs-error" class="rf-hs-error" hidden></div>
-    <div id="rf-hs-lists" hidden></div>
-    <div id="rf-hs-form" hidden></div>
+    <div id="rf-hs-workspace" hidden>
+        <div class="rf-hs-split">
+            <aside id="rf-hs-queue" class="rf-hs-queue"></aside>
+            <section id="rf-hs-case" class="rf-hs-case"></section>
+        </div>
+    </div>
+    <div id="hs-nav-modal" class="rf-hs-modal" hidden>
+        <div class="rf-hs-modal-card" role="dialog" aria-modal="true" aria-labelledby="hs-nav-title">
+            <h3 id="hs-nav-title">Unsaved work on this case</h3>
+            <p id="hs-nav-detail" class="rf-hs-meta"></p>
+            <div class="rf-hs-xfer-actions">
+                <button type="button" class="btn btn-sm" id="hs-nav-stay">Stay</button>
+                <button type="button" class="btn btn-sm" id="hs-nav-discard">Discard changes</button>
+                <button type="button" class="btn btn-sm btn-primary" id="hs-nav-save">Save case changes &amp; switch</button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/execute_incidents.js?v=911d"></script>
+<script src="/static/js/execute_incidents.js?v=912n"></script>
 {% endblock %}
