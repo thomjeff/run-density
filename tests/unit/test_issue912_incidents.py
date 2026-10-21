@@ -64,9 +64,10 @@ def test_normalize_copies_type_notes_into_description():
 def test_catalog_uses_plain_language_care_and_outcomes():
     care = {item["id"]: item["label"] for item in catalog()["care_types"]}
     outcomes = {item["id"]: item["label"] for item in catalog()["outcomes"]}
-    assert care["first_aid"] == "Care given"
-    assert care["sja"] == "SJA attended"
-    assert "First aid" not in care.values()
+    assert "sja" not in care
+    assert "first_aid" not in care
+    assert care["fluids_provided"] == "Fluids provided"
+    assert care["ice_cold_pack"] == "Ice / cold pack applied"
     assert outcomes["dnf"] == "Did not finish (DNF)"
     assert outcomes["returned_to_course"] == "Returned to race course"
     assert outcomes["anb_to_hospital"] == "Transported to hospital by ANB"
@@ -90,25 +91,24 @@ def test_reporter_agencies_are_alphabetical():
 
 def test_type_care_change_note_names_additions_and_removals():
     note = type_care_change_note(
-        ["blister_skin"],
-        ["heat_dehydration", "other"],
-        ["first_aid"],
-        ["fluids", "ice"],
+        ["blister_chafing_skin"],
+        ["heat_concern", "other"],
+        [],
+        ["fluids_provided", "ice_cold_pack"],
         old_other="",
         new_other="Bee sting",
     )
     assert note == (
-        "Type added: Heat / dehydration, Other. "
-        "Type removed: Blister / skin. "
-        "Type other: Bee sting. "
-        "Care added: Fluids, Ice. "
-        "Care removed: Care given."
+        "Problem added: Feeling overheated / heat concern, Other. "
+        "Problem removed: Blister / chafing / skin problem. "
+        "Other reported problem: Bee sting. "
+        "Care added: Ice / cold pack applied, Fluids provided."
     )
     assert type_care_change_note(
-        ["heat_dehydration"],
-        ["heat_dehydration"],
-        ["fluids"],
-        ["fluids"],
+        ["heat_concern"],
+        ["heat_concern"],
+        ["fluids_provided"],
+        ["fluids_provided"],
     ) == ""
 
 
@@ -120,7 +120,8 @@ def test_transfer_care_appends_handoff_note():
     transfer_care(incident, "sja", "walking, alert")
     assert incident["assigned_to"] == "sja"
     assert incident["notes"][-1]["kind"] == "transfer"
-    assert incident["notes"][-1]["text"] == "Transferred SKI → SJA. walking, alert"
+    assert incident["notes"][-1]["text"] == "Transferred SKI → SJA."
+    assert incident["notes"][-1]["detail"] == "walking, alert"
 
 
 def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch):
@@ -162,6 +163,8 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert incident["updated_at_label"]
     assert incident["description"] == ""
     assert incident["assigned_to"] == ""
+    assert incident["lifecycle"]["id"] == "open"
+    assert incident["incident_types"] == []
 
     listed = client.get(f"/api/execute/incidents?run_id={run_id}&day=sun")
     assert listed.status_code == 200
@@ -202,6 +205,8 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert body["reported_by_name"] == "Jeff"
     assert body["reported_by_agency"] == "race_crew"
     assert body["assigned_to"] == "ski"
+    assert body["lifecycle"]["id"] == "assigned"
+    assert body["lifecycle"]["display"] == "Assigned · SKI"
     texts = [item["text"] for item in body["notes"]]
     kinds = [item["kind"] for item in body["notes"]]
     assert "Opened." in texts
@@ -209,9 +214,11 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert "911 called." in texts
     assert "Reported by Jeff · Race Crew." in texts
     assert "Updated location" not in " ".join(texts)
+    assert "Assigned SKI." in texts
     assert not any(text.startswith("Transferred ") for text in texts)
     assert kinds.count("user") == 1
     assert kinds.count("system") == 3
+    assert kinds.count("transfer") == 1
 
     again_report = client.put(
         f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
@@ -246,7 +253,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert other.json()["incident"]["incident_types"] == ["other"]
     assert other.json()["incident"]["incident_type_other"] == "Bee sting, swelling"
     assert other.json()["incident"]["notes"][-1]["text"] == (
-        "Type added: Other. Type other: Bee sting, swelling."
+        "Problem added: Other. Other reported problem: Bee sting, swelling."
     )
 
     noop_stamp = other.json()["incident"]["updated_at"]
@@ -259,19 +266,23 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     )
     assert noop.json()["incident"]["updated_at"] == noop_stamp
     assert noop.json()["incident"]["notes"][-1]["text"] == (
-        "Type added: Other. Type other: Bee sting, swelling."
+        "Problem added: Other. Other reported problem: Bee sting, swelling."
     )
 
     care = client.put(
         f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
-        json={"care_types": ["fluids", "ice"]},
+        json={"care_types": ["fluids_provided", "ice_cold_pack"]},
     )
-    assert care.json()["incident"]["notes"][-1]["text"] == "Care added: Fluids, Ice."
+    assert care.json()["incident"]["notes"][-1]["text"] == (
+        "Care added: Ice / cold pack applied, Fluids provided."
+    )
     care_removed = client.put(
         f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
-        json={"care_types": ["ice"]},
+        json={"care_types": ["ice_cold_pack"]},
     )
-    assert care_removed.json()["incident"]["notes"][-1]["text"] == "Care removed: Fluids."
+    assert care_removed.json()["incident"]["notes"][-1]["text"] == (
+        "Care removed: Fluids provided."
+    )
 
     changed = client.put(
         f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
@@ -309,7 +320,8 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     xfer_inc = xfer.json()["incident"]
     assert xfer_inc["assigned_to"] == "anb"
     assert xfer_inc["notes"][-1]["kind"] == "transfer"
-    assert xfer_inc["notes"][-1]["text"] == "Transferred SJA → ANB. walking, alert"
+    assert xfer_inc["notes"][-1]["text"] == "Transferred SJA → ANB."
+    assert xfer_inc["notes"][-1]["detail"] == "walking, alert"
 
     stored = json.loads(
         (run_dir / "sun" / "execution" / "incidents.json").read_text(encoding="utf-8")
@@ -320,6 +332,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
         f"/api/execute/incidents/{iid}/close?run_id={run_id}&day=sun"
     )
     assert closed.status_code == 200
+    assert closed.json()["incident"]["lifecycle"]["id"] == "closed"
     blocked = client.put(
         f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
         json={"description": "should not write"},
@@ -408,10 +421,13 @@ def test_pages_have_two_pane_case_shell():
     assert 'id="hs-type-note"' not in js
     assert 'id="hs-desc"' in js
     assert 'id="hs-assigned"' in js
+    assert 'id="hs-assign-note"' in js
+    assert "function showActivityModal" in js
+    assert "function parseActivityNote" in js
     assert 'id="hs-report-agency"' in js
     assert "Incident report" in js
-    assert "Reported issue & care provided" in js
-    assert "Care provided" in js
+    assert "Reported problem" in js
+    assert "Care provided — reported by the care team" in js
     assert "911 called" in js
     assert 'id="hs-type-other"' in js
     assert 'id="hs-xfer-to"' in js
@@ -423,9 +439,10 @@ def test_pages_have_two_pane_case_shell():
     assert "Note not added" in js
     assert "Unsaved changes" in js
     assert "Save case changes &amp; switch" in html
+    assert 'id="hs-activity-modal"' in html
     assert "Discard changes" in html
     assert js.index("Incident report") < js.index(">Case log<")
-    assert js.index("Reported issue & care provided") < js.index("Close case")
+    assert js.index("Reported problem") < js.index("Close case")
     assert "Find bib or name" in js
     assert "Location not recorded" in js
     assert "Care agency not recorded" in js
@@ -440,8 +457,19 @@ def test_pages_have_two_pane_case_shell():
     ]
     assert "Closed by" not in save_fields
     assert "Start a case" in js
+    assert "not_yet_known" in js
+    assert "More care options" in js
+    assert "hs-id-badges" in js
+    assert "rf-hs-911-badge" in js
+    assert "911 called?" in js
     assert "Add to case log" in js
     assert "Closed by (required)" in js
+    assert "Roles/Organization" in js
+    assert "Closing member's team or organization" not in js
+    assert "function healthHtml" in js
+    assert "rf-hs-idbar-health" in js
+    assert js.index('id="hs-care-options"') < js.index('id="hs-by-name"')
+    assert js.index('id="hs-by-agency"') < js.index('id="hs-close"')
     assert "organisation" not in js
     assert "first-aid" not in js.lower().replace("first_aid", "")
     assert "function dirtyFieldLabels" in js

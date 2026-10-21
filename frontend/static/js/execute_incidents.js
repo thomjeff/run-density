@@ -1,4 +1,4 @@
-/* Execute Incidents queue + case (Issue #912). UI → API → JSON only. */
+/* Execute Incidents queue + case (Issues #912 / #914). UI → API → JSON only. */
 (function () {
     "use strict";
 
@@ -17,6 +17,7 @@
         queueQ: "",
         locOpen: false,
         xferOpen: false,
+        moreCare: false,
         savePhase: "saved",
         saving: null,
         noteDrafts: {},
@@ -138,6 +139,69 @@
         return isClosed(incident) ? " disabled" : "";
     }
 
+    function lifecycleOf(row) {
+        var life = row && row.lifecycle;
+        if (life && life.id) return life;
+        if (row && row.incident_status === "closed") {
+            return { id: "closed", label: "Closed", display: "Closed" };
+        }
+        if (row && String(row.assigned_to || "").trim()) {
+            var agency = catalogLabel("agencies", row.assigned_to);
+            return {
+                id: "assigned",
+                label: "Assigned",
+                agency_label: agency,
+                display: "Assigned · " + agency,
+            };
+        }
+        return { id: "open", label: "Open", display: "Open" };
+    }
+
+    function lifecycleDisplay(row) {
+        var life = lifecycleOf(row);
+        return life.display || life.label || "Open";
+    }
+
+    function badgesHtml(row) {
+        var life = lifecycleOf(row);
+        var html =
+            '<span class="rf-hs-status is-' +
+            esc(life.id || "open") +
+            '">' +
+            esc(lifecycleDisplay(row)) +
+            "</span>";
+        if (row && row.called_911 === "yes") {
+            html += '<span class="rf-hs-911-badge">911 called</span>';
+        }
+        return html;
+    }
+
+    function called911Control(incident) {
+        return (
+            '<div class="rf-hs-911-live">' +
+            fieldLabel("hs-911", "911 called?") +
+            '<select id="hs-911" class="form-select form-select-sm" style="max-width:10rem;"' +
+            dis(incident) +
+            ">" +
+            '<option value="">Not yet recorded</option><option value="no"' +
+            (incident.called_911 === "no" ? " selected" : "") +
+            '>No</option><option value="yes"' +
+            (incident.called_911 === "yes" ? " selected" : "") +
+            ">Yes</option></select></div>"
+        );
+    }
+
+    function liveBadgeRow(incident) {
+        var snapshot = {
+            incident_status: incident.incident_status,
+            assigned_to: qs("#hs-assigned")
+                ? val("hs-assigned")
+                : incident.assigned_to,
+            called_911: qs("#hs-911") ? val("hs-911") : incident.called_911,
+        };
+        return badgesHtml(snapshot);
+    }
+
     function fieldLabel(forId, text) {
         return (
             '<label class="rf-hs-label" for="' +
@@ -182,6 +246,166 @@
         );
     }
 
+    function itemById(group, id) {
+        return (catalog[group] || []).find(function (item) {
+            return item.id === id;
+        });
+    }
+
+    function checkLine(name, item, picked, incident) {
+        if (!item) return "";
+        return (
+            "<label><input type=\"checkbox\" name=\"" +
+            esc(name) +
+            "\" value=\"" +
+            esc(item.id) +
+            "\"" +
+            (picked[item.id] ? " checked" : "") +
+            dis(incident) +
+            "> " +
+            esc(item.label) +
+            "</label>"
+        );
+    }
+
+    function currentProblemIds(incident) {
+        if (qs('input[name="incident_types"]')) return selected("incident_types");
+        return (incident && incident.incident_types) || [];
+    }
+
+    function suggestedCareIds(problemIds) {
+        var seen = {};
+        var out = [];
+        var map = catalog.care_suggestions || {};
+        (problemIds || []).forEach(function (pid) {
+            (map[pid] || []).forEach(function (cid) {
+                if (seen[cid]) return;
+                seen[cid] = true;
+                out.push(cid);
+            });
+        });
+        return out;
+    }
+
+    function careOptionsInner(pickedList, incident) {
+        var picked = {};
+        (pickedList || []).forEach(function (id) {
+            picked[id] = true;
+        });
+        var suggested = suggestedCareIds(currentProblemIds(incident));
+        var shared = catalog.shared_care_types || [];
+        var shown = {};
+        var html = "";
+        if (suggested.length) {
+            html +=
+                '<div class="rf-hs-label">Suggested from reported problem</div>' +
+                '<div class="rf-hs-check">';
+            suggested.forEach(function (id) {
+                shown[id] = true;
+                html += checkLine(
+                    "care_types",
+                    itemById("care_types", id),
+                    picked,
+                    incident
+                );
+            });
+            html += "</div>";
+        }
+        html +=
+            '<div class="rf-hs-label" style="margin-top:0.45rem;">Always available</div>' +
+            '<div class="rf-hs-check">';
+        shared.forEach(function (id) {
+            if (shown[id]) return;
+            shown[id] = true;
+            html += checkLine(
+                "care_types",
+                itemById("care_types", id),
+                picked,
+                incident
+            );
+        });
+        Object.keys(picked).forEach(function (id) {
+            if (shown[id] || !itemById("care_types", id)) return;
+            shown[id] = true;
+            html += checkLine(
+                "care_types",
+                itemById("care_types", id),
+                picked,
+                incident
+            );
+        });
+        html += "</div>";
+        var moreItems = (catalog.care_types || []).filter(function (item) {
+            return !shown[item.id];
+        });
+        if (moreItems.length) {
+            html +=
+                '<button type="button" class="btn btn-sm rf-hs-xfer-btn" id="hs-care-more">' +
+                (ui.moreCare ? "Hide extra care options" : "More care options") +
+                "</button>" +
+                '<div id="hs-care-more-list" class="rf-hs-check"' +
+                (ui.moreCare ? "" : " hidden") +
+                ">";
+            moreItems.forEach(function (item) {
+                html += checkLine("care_types", item, picked, incident);
+            });
+            html += "</div>";
+        }
+        html +=
+            '<div id="hs-care-other-wrap" class="rf-hs-other-wrap"' +
+            (picked.other_care ? "" : " hidden") +
+            ">" +
+            fieldLabel("hs-care-note", "Other care reported") +
+            '<input id="hs-care-note" class="form-control form-control-sm" maxlength="160" placeholder="Short description" value="' +
+            esc(
+                qs("#hs-care-note")
+                    ? val("hs-care-note")
+                    : (incident && incident.care_note) || ""
+            ) +
+            '"' +
+            ro(incident) +
+            "></div>";
+        return html;
+    }
+
+    function refreshCareOptions() {
+        var wrap = qs("#hs-care-options");
+        if (!wrap || !current) return;
+        wrap.innerHTML = careOptionsInner(selected("care_types"), current);
+    }
+
+    function applyProblemExclusive(target) {
+        var boxes = document.querySelectorAll('input[name="incident_types"]');
+        if (!target || !boxes.length) return;
+        if (target.value === "not_yet_known" && target.checked) {
+            Array.prototype.forEach.call(boxes, function (el) {
+                if (el.value !== "not_yet_known") el.checked = false;
+            });
+        } else if (target.checked && target.value !== "not_yet_known") {
+            Array.prototype.forEach.call(boxes, function (el) {
+                if (el.value === "not_yet_known") el.checked = false;
+            });
+        }
+    }
+
+    function applyCareExclusive(target) {
+        var exclusive = {};
+        (catalog.exclusive_care_types || []).forEach(function (id) {
+            exclusive[id] = true;
+        });
+        var boxes = document.querySelectorAll('input[name="care_types"]');
+        if (!target || !boxes.length) return;
+        if (target.checked && exclusive[target.value]) {
+            Array.prototype.forEach.call(boxes, function (el) {
+                if (el !== target) el.checked = false;
+            });
+        } else if (target.checked) {
+            Array.prototype.forEach.call(boxes, function (el) {
+                if (exclusive[el.value]) el.checked = false;
+            });
+        }
+    }
+
     function selected(name) {
         return Array.prototype.map.call(
             document.querySelectorAll('input[name="' + name + '"]:checked'),
@@ -207,11 +431,13 @@
             reported_by_name: String(data.reported_by_name || ""),
             reported_by_agency: String(data.reported_by_agency || ""),
             assigned_to: String(data.assigned_to || ""),
+            assigned_note: String(data.assigned_note || ""),
             location_text: String(data.location_text || ""),
             location_loc_id: String(data.location_loc_id || ""),
             incident_types: sortedCopy(data.incident_types),
             incident_type_other: String(data.incident_type_other || ""),
             care_types: sortedCopy(data.care_types),
+            care_note: String(data.care_note || ""),
             called_911: String(data.called_911 || ""),
             outcome: String(data.outcome || ""),
             completed_by_name: String(data.completed_by_name || ""),
@@ -254,16 +480,18 @@
             ["reported_by_name", "Reporter's name"],
             ["reported_by_agency", "Reporter role / organization"],
             ["assigned_to", "Care agency"],
+            ["assigned_note", "Assignment details"],
             ["location_text", "Location"],
             ["location_loc_id", "Location"],
             ["description", "Initial report"],
-            ["incident_types", "Reported issue"],
-            ["incident_type_other", "Other type"],
+            ["incident_types", "Reported problem"],
+            ["incident_type_other", "Other reported problem"],
             ["care_types", "Care provided"],
+            ["care_note", "Other care reported"],
             ["called_911", "911 called"],
             ["outcome", "Outcome"],
             ["completed_by_name", "Closed by"],
-            ["completed_by_agency", "Closing member's team or organization"],
+            ["completed_by_agency", "Roles/Organization"],
         ];
         var out = [];
         var seen = {};
@@ -284,10 +512,6 @@
         ((incident && incident.incident_types) || []).forEach(function (id) {
             bits.push(catalogLabel("incident_types", id));
         });
-        ((incident && incident.care_types) || []).forEach(function (id) {
-            bits.push(catalogLabel("care_types", id));
-        });
-        if (incident && incident.called_911 === "yes") bits.push("911 called");
         return bits.filter(Boolean).join(" · ");
     }
 
@@ -305,7 +529,7 @@
         if (!val("hs-outcome").trim()) missing.push("Outcome");
         if (!val("hs-by-name").trim()) missing.push("Closed by");
         if (!val("hs-by-agency").trim()) {
-            missing.push("Closing member's team or organization");
+            missing.push("Roles/Organization");
         }
         return missing;
     }
@@ -339,10 +563,6 @@
         selected("incident_types").forEach(function (id) {
             bits.push(catalogLabel("incident_types", id));
         });
-        selected("care_types").forEach(function (id) {
-            bits.push(catalogLabel("care_types", id));
-        });
-        if (val("hs-911") === "yes") bits.push("911 called");
         return bits.filter(Boolean).join(" · ");
     }
 
@@ -402,6 +622,8 @@
             summary.textContent = detailsSummary(current);
             summary.hidden = !!ui.tiles.details || !summary.textContent;
         }
+        var badges = qs("#hs-id-badges");
+        if (badges && current) badges.innerHTML = liveBadgeRow(current);
     }
 
     function optionsHtml(items, currentId, emptyLabel) {
@@ -471,6 +693,9 @@
             '<div class="rf-hs-meta">' +
             esc(queueCareLine(row)) +
             (extra ? " · " + extra : "") +
+            "</div>" +
+            '<div class="rf-hs-strip-badges">' +
+            badgesHtml(row) +
             "</div>" +
             '<div class="rf-hs-meta">' +
             esc(when) +
@@ -594,6 +819,23 @@
         );
     }
 
+    function healthHtml(incident) {
+        var conditions = incident.medical_conditions || [];
+        var note = String(incident.medical_note || "").trim();
+        if (!conditions.length && !note) return "";
+        var chips = conditions
+            .map(function (token) {
+                return '<span class="rf-hs-chip">' + esc(token) + "</span>";
+            })
+            .join("");
+        return (
+            '<div class="rf-hs-idbar-health">' +
+            (chips ? '<div class="rf-hs-chip-row">' + chips + "</div>" : "") +
+            (note ? '<div class="rf-hs-idbar-note">' + esc(note) + "</div>" : "") +
+            "</div>"
+        );
+    }
+
     function identityHtml(incident) {
         var bib = String(incident.display_bib || incident.bib || "").trim();
         var bibHtml = bib
@@ -607,7 +849,6 @@
         var warn = bib
             ? ""
             : '<p class="rf-hs-warn" style="margin:0.4rem 0 0;">Race Roster has no bib for this start.</p>';
-        var locked = isClosed(incident);
         return (
             '<div class="rf-hs-card rf-hs-idbar">' +
             bibHtml +
@@ -616,13 +857,12 @@
             "</div><div class=\"rf-hs-meta\">" +
             esc(meta || "—") +
             "</div>" +
+            healthHtml(incident) +
             warn +
             "</div>" +
             '<span id="hs-id-unsaved" class="rf-hs-save-flag" hidden>Unsaved changes</span>' +
-            '<span class="rf-hs-status' +
-            (locked ? " is-closed" : " is-active") +
-            '">' +
-            (locked ? "Closed" : "Active") +
+            '<span id="hs-id-badges" class="rf-hs-idbar-badges">' +
+            badgesHtml(incident) +
             "</span></div>"
         );
     }
@@ -648,6 +888,8 @@
                 "</select>";
             if (!locked) {
                 html +=
+                    fieldLabel("hs-assign-note", "Assignment details (optional)") +
+                    '<input id="hs-assign-note" class="form-control form-control-sm" placeholder="Optional details">' +
                     '<button type="button" class="btn btn-sm rf-hs-xfer-btn" id="hs-assign">Record care agency</button>';
             }
             return html;
@@ -738,30 +980,108 @@
     }
 
     function noteKindLabel(note, incident) {
-        if (note.kind === "transfer") return "Transfer of care";
+        var text = String((note && note.text) || "").trim();
+        if (note.kind === "transfer") {
+            return text.indexOf("Assigned ") === 0
+                ? "Care agency"
+                : "Transfer of care";
+        }
         if (note.kind === "system") return "System";
-        var text = String(note.text || "").trim();
         var desc = String((incident && incident.description) || "").trim();
         if (desc && text === desc) return "Initial report";
         return "Update";
+    }
+
+    function parseActivityNote(note) {
+        var headline = String((note && note.text) || "").trim();
+        var detail = String((note && note.detail) || "").trim();
+        if (!detail && note && note.kind === "transfer") {
+            var splitAt = headline.indexOf(". ");
+            if (splitAt > 0) {
+                detail = headline.slice(splitAt + 2).trim();
+                headline = headline.slice(0, splitAt + 1);
+            }
+        }
+        return { headline: headline, detail: detail };
+    }
+
+    function activityNeedsPopup(note) {
+        var parsed = parseActivityNote(note);
+        return parsed.detail.length > 0 || parsed.headline.length > 88;
+    }
+
+    function hideActivityModal() {
+        var modal = qs("#hs-activity-modal");
+        if (modal) modal.hidden = true;
+    }
+
+    function showActivityModal(note, incident) {
+        var parsed = parseActivityNote(note);
+        var modal = qs("#hs-activity-modal");
+        var title = qs("#hs-activity-title");
+        var when = qs("#hs-activity-when");
+        var headline = qs("#hs-activity-headline");
+        var detail = qs("#hs-activity-detail");
+        if (!modal) return;
+        if (title) title.textContent = noteKindLabel(note, incident);
+        if (when) when.textContent = note.saved_at_label || note.saved_at || "";
+        if (headline) headline.textContent = parsed.headline;
+        if (detail) {
+            detail.textContent = parsed.detail;
+            detail.hidden = !parsed.detail;
+        }
+        modal.hidden = false;
+        var closeBtn = qs("#hs-activity-close");
+        if (closeBtn) closeBtn.focus();
     }
 
     function notesHtml(incident) {
         var notes = (incident.notes || []).slice().reverse();
         if (!notes.length) return '<p class="rf-hs-meta">No notes yet.</p>';
         return notes
-            .map(function (note) {
-                var kind = note.kind === "system" ? " is-system" : note.kind === "transfer" ? " is-transfer" : "";
+            .map(function (note, index) {
+                var parsed = parseActivityNote(note);
+                var kind =
+                    note.kind === "system"
+                        ? " is-system"
+                        : note.kind === "transfer"
+                          ? " is-transfer"
+                          : "";
+                var openable = activityNeedsPopup(note);
+                var tag = openable ? "button" : "div";
+                var extra =
+                    tag === "button"
+                        ? ' type="button" data-activity="' +
+                          index +
+                          '"'
+                        : "";
                 return (
-                    '<div class="rf-hs-note' +
+                    "<" +
+                    tag +
+                    ' class="rf-hs-note' +
                     kind +
-                    '"><div class="rf-hs-note-head"><time>' +
+                    (openable ? " is-openable" : "") +
+                    '"' +
+                    extra +
+                    '><div class="rf-hs-note-head"><time>' +
                     esc(note.saved_at_label || note.saved_at) +
                     "</time> · " +
                     esc(noteKindLabel(note, incident)) +
                     "</div>" +
-                    esc(note.text) +
-                    "</div>"
+                    '<div class="rf-hs-note-line">' +
+                    esc(parsed.headline) +
+                    (openable
+                        ? ' <span class="rf-hs-note-more">Details</span>'
+                        : "") +
+                    "</div>" +
+                    (parsed.detail
+                        ? '<div class="rf-hs-note-print">' +
+                          esc(parsed.detail) +
+                          "</div>"
+                        : "") +
+                    "</" +
+                    tag +
+                    ">"
                 );
             })
             .join("");
@@ -775,6 +1095,7 @@
             ui.tiles.details = false;
             ui.tiles.outcome = false;
             ui.xferOpen = false;
+            ui.moreCare = false;
             ui.savePhase = "saved";
         }
         current = incident || null;
@@ -844,33 +1165,28 @@
             ">" +
             esc(incident.description || "") +
             "</textarea>" +
+            called911Control(incident) +
             tile(
                 "details",
-                "Reported issue & care provided",
-                '<div class="rf-hs-label">Reported issue</div>' +
-                    checks("incident_types", catalog.incident_types, incident.incident_types, incident) +
+                "Reported problem",
+                '<div class="rf-hs-label">Reported problem — select all that apply</div>' +
+                    checks(
+                        "incident_types",
+                        catalog.incident_types,
+                        incident.incident_types,
+                        incident
+                    ) +
                     '<div id="hs-type-other-wrap" class="rf-hs-other-wrap"' +
-                    ((incident.incident_types || []).indexOf("other") === -1 ? " hidden" : "") +
+                    ((incident.incident_types || []).indexOf("other") === -1
+                        ? " hidden"
+                        : "") +
                     ">" +
-                    fieldLabel("hs-type-other", "Other type") +
+                    fieldLabel("hs-type-other", "Other reported problem") +
                     '<input id="hs-type-other" class="form-control form-control-sm" maxlength="120" placeholder="Short description" value="' +
                     esc(incident.incident_type_other || "") +
                     '"' +
                     ro(incident) +
-                    "></div>" +
-                    '<div class="rf-hs-label" style="margin-top:0.55rem;">Care provided</div>' +
-                    checks("care_types", catalog.care_types, incident.care_types, incident) +
-                    '<div style="margin-top:0.55rem;">' +
-                    fieldLabel("hs-911", "911 called") +
-                    "</div>" +
-                    '<select id="hs-911" class="form-select form-select-sm" style="max-width:10rem;"' +
-                    dis(incident) +
-                    ">" +
-                    '<option value="">Not yet recorded</option><option value="no"' +
-                    (incident.called_911 === "no" ? " selected" : "") +
-                    '>No</option><option value="yes"' +
-                    (incident.called_911 === "yes" ? " selected" : "") +
-                    ">Yes</option></select>",
+                    "></div>",
                 summaryFromIncident(incident)
             ) +
             tile(
@@ -886,7 +1202,12 @@
                         "Choose an outcome…"
                     ) +
                     "</select>" +
-                    '<div class="rf-hs-reporter-row" style="margin-top:0.7rem;">' +
+                    '<div class="rf-hs-label" style="margin-top:0.85rem;">Care provided — reported by the care team</div>' +
+                    '<p class="rf-hs-meta">Select the care reported to the EOC. Leave details unrecorded if they are not known.</p>' +
+                    '<div id="hs-care-options">' +
+                    careOptionsInner(incident.care_types, incident) +
+                    "</div>" +
+                    '<div class="rf-hs-reporter-row" style="margin-top:0.85rem;">' +
                     "<div>" +
                     fieldLabel("hs-by-name", "Closed by (required)") +
                     '<input id="hs-by-name" class="form-control form-control-sm" placeholder="Name" value="' +
@@ -895,10 +1216,7 @@
                     ro(incident) +
                     "></div>" +
                     "<div>" +
-                    fieldLabel(
-                        "hs-by-agency",
-                        "Closing member's team or organization (required)"
-                    ) +
+                    fieldLabel("hs-by-agency", "Roles/Organization") +
                     '<select id="hs-by-agency" class="form-select form-select-sm"' +
                     dis(incident) +
                     ">" +
@@ -954,6 +1272,7 @@
             incident_types: selected("incident_types"),
             incident_type_other: val("hs-type-other"),
             care_types: selected("care_types"),
+            care_note: val("hs-care-note"),
             called_911: val("hs-911"),
             outcome: val("hs-outcome"),
             completed_by_name: val("hs-by-name"),
@@ -961,6 +1280,7 @@
             assigned_to: qs("#hs-assigned")
                 ? val("hs-assigned")
                 : String((current && current.assigned_to) || ""),
+            assigned_note: val("hs-assign-note"),
         };
         return payload;
     }
@@ -1292,7 +1612,7 @@
         if (!canCloseCase()) {
             expandTile("outcome");
             showError(
-                "To close, choose an outcome, Closed by, and closing member's team or organization."
+                "To close, choose an outcome, Closed by, and Roles/Organization."
             );
             return Promise.resolve();
         }
@@ -1387,6 +1707,13 @@
                 updateSaveStatus();
                 return;
             }
+            var activityBtn = ev.target.closest("[data-activity]");
+            if (activityBtn && current) {
+                var notes = (current.notes || []).slice().reverse();
+                var note = notes[Number(activityBtn.getAttribute("data-activity"))];
+                if (note) showActivityModal(note, current);
+                return;
+            }
             var openBtn = ev.target.closest("[data-open]");
             if (openBtn) {
                 var id = openBtn.getAttribute("data-open");
@@ -1408,6 +1735,11 @@
             }
             if (targetId === "hs-review-close") {
                 reviewClose();
+                return;
+            }
+            if (targetId === "hs-care-more") {
+                ui.moreCare = !ui.moreCare;
+                refreshCareOptions();
                 return;
             }
             if (targetId === "hs-xfer-open") {
@@ -1435,8 +1767,21 @@
         });
         workspace.addEventListener("change", function (ev) {
             if (ev.target && ev.target.name === "incident_types") {
+                applyProblemExclusive(ev.target);
                 var wrap = qs("#hs-type-other-wrap");
-                if (wrap) wrap.hidden = selected("incident_types").indexOf("other") === -1;
+                if (wrap) {
+                    wrap.hidden =
+                        selected("incident_types").indexOf("other") === -1;
+                }
+                refreshCareOptions();
+            }
+            if (ev.target && ev.target.name === "care_types") {
+                applyCareExclusive(ev.target);
+                var careOther = qs("#hs-care-other-wrap");
+                if (careOther) {
+                    careOther.hidden =
+                        selected("care_types").indexOf("other_care") === -1;
+                }
             }
             if (ev.target && ev.target.id !== "hs-queue-q" && ev.target.id !== "hs-xfer-to") {
                 if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
@@ -1491,6 +1836,23 @@
         });
         document.addEventListener("mousedown", function (ev) {
             if (!ev.target.closest(".rf-hs-typeahead")) showLocMenu(false);
+        });
+        var activityModal = qs("#hs-activity-modal");
+        if (activityModal) {
+            activityModal.addEventListener("click", function (ev) {
+                var activityId = ev.target && ev.target.id;
+                if (activityId === "hs-activity-close" || activityId === "hs-activity-modal") {
+                    hideActivityModal();
+                }
+            });
+        }
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key !== "Escape") return;
+            var openActivity = qs("#hs-activity-modal");
+            if (openActivity && !openActivity.hidden) {
+                hideActivityModal();
+                ev.preventDefault();
+            }
         });
         var navModal = qs("#hs-nav-modal");
         if (navModal) {

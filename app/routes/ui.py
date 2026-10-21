@@ -2,6 +2,7 @@
 UI Route Handlers for Run-Density Web Interface (RF-FE-002)
 
 Serves the 7-page web UI using Jinja2 templates.
+# Template cache bust: execute incidents 914d.
 
 Author: Cursor AI Assistant (per ChatGPT specification)
 Epic: RF-FE-002 | Issue: #279 | Step: 4

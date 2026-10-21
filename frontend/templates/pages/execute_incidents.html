@@ -3,7 +3,7 @@
 {% block title %}Incidents{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="/static/css/execute_hs.css?v=912n">
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=914d">
 {% endblock %}
 
 {% block content %}
@@ -25,6 +25,17 @@
             <section id="rf-hs-case" class="rf-hs-case"></section>
         </div>
     </div>
+    <div id="hs-activity-modal" class="rf-hs-modal" hidden>
+        <div class="rf-hs-modal-card" role="dialog" aria-modal="true" aria-labelledby="hs-activity-title">
+            <h3 id="hs-activity-title">Case log</h3>
+            <p id="hs-activity-when" class="rf-hs-meta"></p>
+            <p id="hs-activity-headline"></p>
+            <p id="hs-activity-detail"></p>
+            <div class="rf-hs-xfer-actions">
+                <button type="button" class="btn btn-sm btn-primary" id="hs-activity-close">Close</button>
+            </div>
+        </div>
+    </div>
     <div id="hs-nav-modal" class="rf-hs-modal" hidden>
         <div class="rf-hs-modal-card" role="dialog" aria-modal="true" aria-labelledby="hs-nav-title">
             <h3 id="hs-nav-title">Unsaved work on this case</h3>
@@ -40,5 +51,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/execute_incidents.js?v=912n"></script>
+<script src="/static/js/execute_incidents.js?v=914d"></script>
 {% endblock %}

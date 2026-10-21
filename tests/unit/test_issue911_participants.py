@@ -153,6 +153,13 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     iid = incident["incident_id"]
     assert incident["bib"] == "21100"
     assert incident["incident_status"] == "active"
+    assert incident["medical_disclosed"] == "yes"
+    assert incident["medical_conditions"] == [
+        "Asthma or other breathing condition",
+        "Diabetes or blood sugar condition",
+        "Other medical condition",
+    ]
+    assert incident["medical_note"] == "Hypothyroidism"
     assert incident["notes"][0]["text"] == "Opened."
     assert incident["notes"][0]["kind"] == "system"
 

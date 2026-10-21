@@ -582,9 +582,9 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - `POST /api/execute/participants/import` — Race Roster CSV → `participants.json`
 - `GET /api/execute/incidents` — Active / Closed lists (`updated_at_label` on rows)
 - `POST /api/execute/incidents` — create from `reg_id`
-- `GET|PUT /api/execute/incidents/{incident_id}` — case fields (v2: description, reported_by, assigned_to, location_loc_id)
+- `GET|PUT /api/execute/incidents/{incident_id}` — case fields (v3: reported problems, `not_yet_known`, closure care, derived Open/Assigned/Closed). First `assigned_to` writes `Assigned SKI.` (`kind=transfer`, optional `detail`)
 - `POST /api/execute/incidents/{incident_id}/notes` — append-only user note
-- `POST /api/execute/incidents/{incident_id}/transfer` — care-agency handoff + `transfer` note
+- `POST /api/execute/incidents/{incident_id}/transfer` — care-agency handoff headline + optional `detail`
 - `POST /api/execute/incidents/{incident_id}/close` — close
 - `GET /api/execute/locations` — slim Plan location catalog for Incidents typeahead (`loc_id`, `loc_label`, `zone`)
 
@@ -592,7 +592,7 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - `{day}/computation/locations_report.json` → read-only planned `loc_end`, resources, proxies
 - `{day}/execution/state.json` → operator clock, `reopened_at`, activity (Issue #893)
 - `{day}/execution/participants.json` → imported roster (Issue #911; local Execute only, not Overview ZIP)
-- `{day}/execution/incidents.json` → incident cases (Issues #911 / #912; schema_version 2)
+- `{day}/execution/incidents.json` → incident cases (Issues #911 / #912 / #914; schema_version 3)
 
 **UI Elements → Data Mapping:**
 - **Closed / Reopen next / Reopened** → board columns; each previews 10 (Show more / Show earlier / Show less); Reopen next is overdue `loc_end` plus the next 15 minutes (earliest cluster before the first estimate)
@@ -602,7 +602,7 @@ Plan workspace for segment-level density (Issue #888). The standalone Segments p
 - **Map** → toolbar popup of all filtered locations as `lat`/`lon` pins colored by column status (view-only; Reopen stays on the lists)
 - **Export CSV** → `GET /api/execute/reopen.csv` (`loc_label`, package `*_count` columns, `loc_start`, `first_runner`, `last_runner`, display `loc_end`, `actual_reopen`, `difference_min`)
 - **Participants** → `/execute/participants` paginated start table (search bib/name, multi-condition filter, No bib)
-- **Incidents** → `/execute/incidents` two-pane queue + case (EOC scribe; Assigned to is the care agency and a later change is a transfer; DNF is an outcome)
+- **Incidents** → `/execute/incidents` two-pane queue + case (EOC scribe; Open/Assigned/Closed from care agency + closure; Assigned to is the care agency and a later change is a transfer; DNF is an outcome)
 
 ### Overview Exports
 
