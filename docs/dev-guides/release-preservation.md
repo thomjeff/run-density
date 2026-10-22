@@ -161,7 +161,8 @@ Do not move tag `v3.1.0`. If a later release is needed, cut `v3.1.1` or `v3.2.0`
 
 **Gaps (do not paper over by changing product code):**
 
-- GitHub Actions `code-quality.yaml` is lint-only (flake8 / black / isort). Pytest and Docker were not in CI before this guide.
+- GitHub Actions `code-quality.yaml` lints **changed `app/` Python files** (flake8 / black / isort). Whole-tree `app/` flake8 still fails on pre-existing style debt and is not the PR gate.
+- Combined-image verify (`.github/workflows/combined-image-verify.yaml`) builds, starts, and regresses the combined image on every PR.
 - `make e2e` is local-only and long; CI runs a unit/regression subset, not the full sat+sun analysis.
 - CONTRIBUTING.md still mentions `make test` / `make e2e-local`; `make smoke` is the current smoke target (`make test` aliases it).
 - No registry-hosted combined `v3.1.0` digest yet.
