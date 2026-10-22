@@ -41,6 +41,7 @@ This documentation is organized by audience and topic for easy navigation.
 | [Domain glossary](architecture/domain-glossary.md) | Runflow vocabulary (Issue #798) |
 | [Race templates](architecture/race-templates.md) | Sample-race defaults vs algorithm constants (Issue #798 Phase 8) |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
+| [Release preservation](dev-guides/release-preservation.md) | Rebuild v3.1.0, keep the combined image, recover last-known-good |
 | [Leg Library & Corridor Pairing](dev-guides/segment-library-2027.md) | Leg platform internals (org library, recipes, pairing, sync) |
 | [Quick Reference](reference/quick-reference.md) | Variable names, terminology, standards (v2.0.2+) |
 | [Data Sources](dev-guides/data-sources.md) | Data source specifications (v2.0.2+) |
@@ -92,6 +93,7 @@ docs/
 │   ├── ai-developer-guide.md          # AI assistant onboarding and rules
 │   ├── developer-guide.md             # Complete developer guide
 │   ├── docker-dev.md                  # Docker development workflow
+│   ├── release-preservation.md        # Rebuild v3.1.0; keep the combined image
 │   ├── segment-library-2027.md        # Leg library, recipes & corridor pairing internals
 │   └── data-sources.md                # Data source specifications
 │

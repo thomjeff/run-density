@@ -1,6 +1,7 @@
 # Run Density
 
 [![Code Quality](https://github.com/thomjeff/run-density/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/code-quality.yaml)
+[![Combined image](https://github.com/thomjeff/run-density/actions/workflows/combined-image-verify.yaml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/combined-image-verify.yaml)
 
 ## Overview
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
@@ -179,6 +180,8 @@ curl -X POST "http://localhost:8080/api/density-report" \
 - `make prune-runs KEEP=n` – prune old run_ids, keeping last n
 - `make stop` – stop and remove Docker container
 - `make build` – build Docker image (no start)
+- `make smoke` – combined-image route regression (requires `run-density-dev`)
+- `make verify-image` – `git archive` build + HTTP smoke of the combined image
 
 ### Legacy Aliases (Backward Compatibility)
 - `make dev-docker` – alias for `make dev`
@@ -191,7 +194,7 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ## Code Quality
 
-Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`).
+Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the existing `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan / Execute routes. See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
 
 ### Quality Checks (On Pull Requests)
 The CI pipeline runs automated checks on all Python code changes:

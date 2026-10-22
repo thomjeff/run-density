@@ -6,6 +6,8 @@
 
 This guide covers local-only development using Docker containers for the run-density application.
 
+**Release preservation:** Keep the current combined `Dockerfile` / `app.main:app` image until an approved split. See [`release-preservation.md`](release-preservation.md) to rebuild v3.1.0 from its git tag, verify a feature branch without retagging the release, and recover the last-known-good combined application.
+
 **Note:** This guide is focused on Docker workflow. For complete v2 architecture and development patterns, see `docs/dev-guides/developer-guide-v2.md`.
 
 ---

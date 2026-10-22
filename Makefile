@@ -4,6 +4,10 @@
 
 # -------- Configuration --------
 PORT ?= 8080
+VERIFY_REF ?= HEAD
+IMAGE_TAG ?= runflow:dev-$(shell git rev-parse --short $(VERIFY_REF))
+VERIFY_PORT ?= 18080
+SKIP_BUILD ?= 0
 
 # Cloud (skinny UI) configuration
 CLOUD_PROJECT_ID ?= runflow-485519
@@ -26,7 +30,7 @@ CLOUD_SERVICE ?= $(CLOUD_SERVICE_PREFIX)
 CLOUD_RUN_PATH ?= $(RUNFLOW_ROOT)/analysis/$(RUN_ID)
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-release cloud-clean
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build smoke test verify-image validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-release cloud-clean
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -44,6 +48,9 @@ help usage --help: ## Show this help message
 	@echo "  dev                 Start Docker container (hot reload enabled)"
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
+	@echo "  smoke               Combined-image route regression (pytest)"
+	@echo "  test                Alias for smoke"
+	@echo "  verify-image        Build committed tree and smoke-start combined image"
 	@echo "  e2e                 Run sat+sun test"
 	@echo "  e2e-sat             Run sat test"
 	@echo "  e2e-sun             Run sun test"
@@ -55,6 +62,7 @@ help usage --help: ## Show this help message
 	@echo ""
 	@echo "Configuration:"
 	@echo "	PORT=$(PORT)  (Docker container port)"
+	@echo "	VERIFY_REF=$(VERIFY_REF) IMAGE_TAG=$(IMAGE_TAG) VERIFY_PORT=$(VERIFY_PORT)"
 	@echo "	ENABLE_AUDIT: (Flag to control audit generation.)"
 	@echo "	To disable audit (faster runs, default): make e2e"
 	@echo "	To enable audit: make e2e ENABLE_AUDIT=y"
@@ -103,6 +111,22 @@ stop: ## Stop Docker container
 build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
+
+smoke: ## Combined-image route regression (does not restart Compose)
+	@echo "🧪 Running combined-image preservation tests..."
+	@if docker ps --format '{{.Names}}' | grep -qx run-density-dev; then \
+		docker exec run-density-dev python -m pytest tests/unit/test_combined_image_preservation.py -v; \
+	else \
+		echo "❌ run-density-dev is not running. Start with 'make dev' or run: python -m pytest tests/unit/test_combined_image_preservation.py -v"; \
+		exit 1; \
+	fi
+
+test: smoke ## Alias for smoke (CONTRIBUTING.md)
+
+verify-image: ## Build committed tree (git archive) and smoke-start the combined image
+	@echo "🔎 Verifying combined image (ref=$(VERIFY_REF) tag=$(IMAGE_TAG))..."
+	@VERIFY_REF="$(VERIFY_REF)" IMAGE_TAG="$(IMAGE_TAG)" VERIFY_PORT="$(VERIFY_PORT)" \
+		SKIP_BUILD="$(SKIP_BUILD)" ./scripts/verify_combined_image.sh
 
 e2e: ENABLE_AUDIT ?= n
 e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENABLE_AUDIT=y

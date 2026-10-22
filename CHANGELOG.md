@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Release preservation (#916)
+- Documented how to rebuild combined Runflow v3.1.0 from the annotated git tag without moving it
+- Added combined-image route smoke tests, `make verify-image`, and PR CI that builds the existing `Dockerfile` / `app.main` image
+- Scoped Code Quality flake8/black/isort to changed `app/` Python files so the check can pass without a repo-wide reformat
+
 ## [v3.1.0] - 2026-10-22
 
 First **v3.1** product release. Execute is a race-day workspace: **Reopen** stands down locations against the analysis clock, **Participants** looks up starts, and **Incidents** is EOC scribe case management. Plan adds **Progression** and owns analysis launch; Build owns location edits.

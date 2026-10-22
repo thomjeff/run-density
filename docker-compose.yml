@@ -13,6 +13,10 @@ services:
       - ./app/sitecustomize.py:/app/sitecustomize.py
       # Bind mount tests directory for v2 testing
       - ./tests:/app/tests
+      # Combined-image contract files (Epic #916 release preservation)
+      - ./Dockerfile:/app/Dockerfile:ro
+      - ./Dockerfile.cloud:/app/Dockerfile.cloud:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
       # Race Roster → runner CSV conversion CLI
       - ./scripts:/app/scripts
       # Bind mount templates for UI pages

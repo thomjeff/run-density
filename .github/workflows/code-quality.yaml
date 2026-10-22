@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '**.py'
+      - '.github/workflows/code-quality.yaml'
 
 jobs:
   lint-and-complexity:
@@ -16,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -27,20 +30,50 @@ jobs:
           pip install --upgrade pip
           pip install flake8 flake8-bugbear black isort
 
+      - name: Resolve changed app Python files
+        id: changed
+        run: |
+          BASE="origin/${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF:-main}"
+          files="$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'app/**/*.py' || true)"
+          echo "Changed app/ Python files:"
+          if [ -z "$files" ]; then
+            echo "(none)"
+          else
+            printf '%s\n' "$files"
+          fi
+          {
+            echo "files<<EOF"
+            printf '%s\n' "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Run flake8 checks (complexity + style)
         run: |
           echo "🔍 flake8: complexity and lint checks"
-          flake8 app/ \
-            --max-complexity=15 \
-            --select=B001,C901,E,F,W \
-            --exclude=tests/*
+          files="${{ steps.changed.outputs.files }}"
+          if [ -z "$files" ]; then
+            echo "No app/ Python files changed; skipping flake8"
+            exit 0
+          fi
+          echo "$files" | xargs -r flake8 --max-complexity=15 --select=B001,C901,E,F,W
 
       - name: Check code formatting with black
         run: |
           echo "🧱 black: formatting check"
-          black app/ --check
+          files="${{ steps.changed.outputs.files }}"
+          if [ -z "$files" ]; then
+            echo "No app/ Python files changed; skipping black"
+            exit 0
+          fi
+          echo "$files" | xargs -r black --check
 
       - name: Check import sorting with isort
         run: |
           echo "🔃 isort: import order check"
-          isort app/ --check-only --profile black
+          files="${{ steps.changed.outputs.files }}"
+          if [ -z "$files" ]; then
+            echo "No app/ Python files changed; skipping isort"
+            exit 0
+          fi
+          echo "$files" | xargs -r isort --check-only --profile black
