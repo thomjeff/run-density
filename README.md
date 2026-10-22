@@ -6,12 +6,12 @@
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
 It provides comprehensive reporting with Markdown and CSV outputs, and is containerized for local development.
 
-**Current Version: v3.0.0** — Density and Flow calculate on the trajectory snapshot. Product chrome is **Build | Plan | Execute**.
+**Current Version: v3.1.0** — Execute is a race-day workspace (Reopen · Participants · Incidents). Plan adds Progression; Build owns location edits.
 
 **v3 product chrome:**
-- **Build:** Legs · Courses · Runners · Packages
+- **Build:** Legs · Courses · Runners · Packages (**Edit Locations** on Legs)
 - **Plan:** run selector + Overview · Density · Flow · Junctions · Motion · Progression · Locations
-- **Execute:** placeholder (race-day clock not in this release)
+- **Execute:** Reopen · Participants · Incidents
 - Day is derived from the selected run (no Plan day dropdown)
 - Overview **Exports** downloads Reports and Data Files as ZIPs; `/reports` and `/segments` redirect to Overview and Density
 

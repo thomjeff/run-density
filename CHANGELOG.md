@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v3.1.0] - 2026-10-22
+
+First **v3.1** product release. Execute is a race-day workspace: **Reopen** stands down locations against the analysis clock, **Participants** looks up starts, and **Incidents** is EOC scribe case management. Plan adds **Progression** and owns analysis launch; Build owns location edits.
+
+### Summary
+- **Execute** is no longer a placeholder: Reopen board + status map + variance CSV, Participants roster, and Incidents Open / Assigned / Closed cases
+- **Plan Progression** replays Lead / Mid-pack / Last on the analysis clock, with a wallboard of course-active windows
+- **Plan** Density absorbs Segments; Overview exports Reports and Data Files as ZIPs; Locations read `{day}/computation/locations_report.json`
+- **Build** owns **Edit Locations** on Legs; package course saves no longer write location ops back; **New analysis** / **Run analysis** live on Plan Overview and the Build package header
+- Street maps can use `CARTO_BASEMAP_KEY` so CARTO tiles are not watermarked at close zoom
+
+### Not in this release
+- The parked clearance-model / execute-clock work (#832 / #830 / #863) is still not a scientific clearance engine; Reopen uses Plan `loc_end` plus operator confirm
+- Reported-problem and care catalogs have not been reviewed by first-aid agencies
+- Incidents data stays local (`{day}/execution/`); it is not in the Overview ZIP
+
 ### Execute Incidents reporting, lifecycle, and closure care (#914)
 - Reported problem is a multi-select of observations, including **Other** and explicit **Not yet known** (`not_yet_known`). Empty means nothing recorded and may be saved; empty is not converted to Not yet known
 - User-facing lifecycle is **Open / Assigned / Closed**, derived from `incident_status` and the on-course care agency. Queue groups stay Active / Closed
