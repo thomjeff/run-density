@@ -47,6 +47,7 @@
         <div class="rf-overview-export-actions">
             <a id="rf-export-reports" class="btn btn-primary" href="#">Reports (.zip)</a>
             <a id="rf-export-data" class="btn btn-outline-primary" href="#">Data Files (.zip)</a>
+            <button type="button" id="rf-publish-day-plan" class="btn btn-outline-primary">Publish day plan</button>
         </div>
         <p id="rf-export-status" class="rf-overview-lead" style="margin-top: 0.75rem;"></p>
     </div>
@@ -188,6 +189,40 @@
         if (day) qs += '&day=' + encodeURIComponent(day);
         reports.href = '/api/reports/export.zip?kind=reports&' + qs;
         dataFiles.href = '/api/reports/export.zip?kind=data_files&' + qs;
+        var publish = document.getElementById('rf-publish-day-plan');
+        if (publish) {
+            publish.onclick = function () {
+                var calendarDate = window.prompt(
+                    'Calendar date for this day plan (YYYY-MM-DD)'
+                );
+                if (!calendarDate) return;
+                fetch('/api/plan/published-plans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        run_id: runId,
+                        day: day,
+                        calendar_date: calendarDate,
+                    }),
+                }).then(function (res) {
+                    if (!res.ok) {
+                        return res.json().then(function (err) {
+                            throw new Error(err.detail || 'Publish failed');
+                        });
+                    }
+                    return res.blob().then(function (blob) {
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'day-plan-' + calendarDate + '.zip';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    });
+                }).catch(function (err) {
+                    if (status) status.textContent = err.message || String(err);
+                });
+            };
+        }
         if (status) {
             status.textContent = day
                 ? ('Exports use run ' + runId + ' / ' + String(day).toUpperCase() + '.')

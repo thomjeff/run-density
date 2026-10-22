@@ -59,9 +59,11 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'href="/execute"' in base_source
     assert "rf-execute-chrome" in base_source
     assert 'data-rf-execute-view="reopen">Reopen</a>' in base_source
+    assert 'data-rf-execute-view="map">Map</a>' in base_source
     assert 'data-rf-execute-view="participants">Participants</a>' in base_source
     assert 'data-rf-execute-view="incidents">Incidents</a>' in base_source
     assert "if (view === \"participants\") href = \"/execute/participants\"" in base_source
+    assert "if (view === \"map\") href = \"/execute/map\"" in base_source
     assert ">Race day<" not in base_source
     execute = EXECUTE.read_text(encoding="utf-8")
     assert 'id="rf-execute-board"' in execute
