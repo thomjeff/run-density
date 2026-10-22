@@ -1,0 +1,54 @@
+name: Combined image verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  combined-image:
+    name: Build, start, and regress combined Runflow
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and smoke-start combined image
+        env:
+          VERIFY_REF: HEAD
+          IMAGE_TAG: runflow:ci-${{ github.sha }}
+          VERIFY_PORT: "18080"
+        run: |
+          chmod +x scripts/verify_combined_image.sh
+          make verify-image
+
+      - name: Run combined-image and v3.1.0 regression pytest
+        env:
+          IMAGE_TAG: runflow:ci-${{ github.sha }}
+        run: |
+          docker run --rm \
+            -v "$PWD/tests:/app/tests:ro" \
+            -v "$PWD/Dockerfile:/app/Dockerfile:ro" \
+            -v "$PWD/Dockerfile.cloud:/app/Dockerfile.cloud:ro" \
+            -v "$PWD/docker-compose.yml:/app/docker-compose.yml:ro" \
+            -e PYTHONPATH=/app \
+            -e DASHBOARD_PASSWORD= \
+            -e RUNFLOW_REPO_ROOT=/app \
+            "$IMAGE_TAG" \
+            python -m pytest \
+              tests/unit/test_combined_image_preservation.py \
+              tests/unit/test_issue878_workspace_nav.py \
+              tests/unit/test_issue893_execute_board.py \
+              tests/unit/test_issue904_build_plan_ownership.py \
+              tests/unit/test_issue911_participants.py \
+              tests/unit/test_issue912_incidents.py \
+              tests/unit/test_issue914_incidents.py \
+              tests/unit/test_issue798_phase1_routers.py \
+              -q --tb=short

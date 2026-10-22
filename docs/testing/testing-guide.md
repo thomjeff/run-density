@@ -204,11 +204,23 @@ pytest tests/v2/e2e.py -v
 
 ## Running Tests
 
+### Combined-image smoke (v3.1.0 preservation)
+
+```bash
+make smoke          # pytest route/Dockerfile contract (needs run-density-dev)
+make verify-image   # git archive + docker build + HTTP smoke on port 18080
+```
+
+These checks prove the combined Build/Plan/Execute image still starts. They do not replace `make e2e`. See `docs/dev-guides/release-preservation.md`.
+
 ### Quick Start
 
 ```bash
 # Start development container
 make dev
+
+# Combined-image smoke
+make smoke
 
 # Run all tests
 pytest tests/v2/ -v
