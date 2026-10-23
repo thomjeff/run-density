@@ -58,12 +58,15 @@ def test_execute_uses_selected_run_and_loads_runs_dropdown(base_source: str):
 def test_execute_board_has_three_columns(base_source: str):
     assert 'href="/execute"' in base_source
     assert "rf-execute-chrome" in base_source
-    assert 'data-rf-execute-view="reopen">Reopen</a>' in base_source
-    assert 'data-rf-execute-view="map">Map</a>' in base_source
+    assert 'data-rf-execute-view="plans">Plans</a>' in base_source
+    assert 'data-rf-execute-view="operations">Operations</a>' in base_source
+    assert 'data-rf-execute-view="reopen">' not in base_source
+    assert 'data-rf-execute-view="map">Map</a>' not in base_source
     assert 'data-rf-execute-view="participants">Participants</a>' in base_source
     assert 'data-rf-execute-view="incidents">Incidents</a>' in base_source
+    assert "if (view === \"plans\") href = \"/execute/plans\"" in base_source
+    assert "if (view === \"operations\") href = \"/execute\"" in base_source
     assert "if (view === \"participants\") href = \"/execute/participants\"" in base_source
-    assert "if (view === \"map\") href = \"/execute/map\"" in base_source
     assert ">Race day<" not in base_source
     execute = EXECUTE.read_text(encoding="utf-8")
     assert 'id="rf-execute-board"' in execute
@@ -71,8 +74,8 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'data-col="reopen_next"' in execute
     assert 'data-col="reopened"' in execute
     assert "Clock suggests order. Radio decides." not in execute
-    assert "{% block title %}Reopen{% endblock %}" in execute
-    assert "<h2>Reopen</h2>" in execute
+    assert "{% block title %}Operations{% endblock %}" in execute
+    assert "<h2>Operations</h2>" in execute
     assert 'id="rf-execute-refresh"' in execute
     assert 'class="course-map-action-btn"' in execute
     assert 'id="rf-execute-next-refresh"' in execute
@@ -105,9 +108,11 @@ def test_execute_board_has_three_columns(base_source: str):
     assert "paintStatusMap" in js
     assert "zoneOptionLabel" in js
     assert '"Zone "' in js
-    assert 'id="rf-execute-map-open"' in execute
+    assert 'id="rf-execute-map-open"' not in execute
+    assert "rf-execute-ops-split" not in execute
+    assert "rf-execute-ops-map" in execute
+    assert 'id="rf-execute-map"' in execute
     assert "rf-ex-map-legend" in execute
-    # Map stays off the main Execute screen; strip links are JS-built
     assert 'href="/locations"' not in execute
 
 

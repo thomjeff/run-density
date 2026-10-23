@@ -1,0 +1,13 @@
+.rf-execute-plans .rf-plans-status {
+    display: inline-block;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.rf-execute-plans .rf-plans-status.is-active {
+    color: #047857;
+}
+
+.rf-execute-plans .rf-plans-status.is-archived {
+    color: #6b7280;
+}

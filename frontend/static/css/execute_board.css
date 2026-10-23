@@ -160,7 +160,7 @@
 
 .rf-execute-board {
     display: grid;
-    grid-template-columns: minmax(0, 25fr) minmax(0, 45fr) minmax(0, 30fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.75rem;
     align-items: start;
 }
@@ -595,4 +595,66 @@
 
 .rf-ex-name button.rf-ex-map-link:hover {
     color: #1a569d;
+}
+
+.rf-execute-ops-map {
+    padding: 1rem 1.15rem 1.15rem;
+    margin-bottom: 1rem;
+}
+
+.rf-execute-ops-map-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.rf-execute-ops-map-head h3 {
+    margin: 0;
+}
+
+.rf-execute-ops-map .rf-execute-map,
+.rf-execute-page .rf-execute-map {
+    height: 600px;
+    border: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
+    background: transparent !important;
+}
+
+.rf-ex-strip.is-selected {
+    outline: 2px solid #206bc4;
+    outline-offset: -2px;
+}
+
+#basemap-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10000;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    display: none;
+    gap: 0.25rem;
+}
+
+#basemap-toggle button {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+#basemap-toggle button.active {
+    background: #3498db;
+    color: #fff;
+    border-color: #2980b9;
 }

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Race-day Execute (#920)
+- Execute nav is **Plans | Operations | Participants | Incidents**
+- Plans follows Build → Packages: Import, Activate, Deactivate, Archive, Restore. Import does not activate; at most one plan is active; archive keeps records; restore does not auto-activate
+- Operations puts the existing Reopen board and Map on one page with a shared selected location; human-confirmed reopen is recorded under the published-plan UUID
+- Participants and Incidents keep their current UI and read the active Day Plan (`source_run_id` + weekday)
+
 ### Published day plan and Execute Operations Map (#917)
 - Plan can publish one calendar date as an immutable ZIP (UUID + `calendar_date`; weekday is display only)
 - Overview publish uses a calendar date field, not a browser prompt

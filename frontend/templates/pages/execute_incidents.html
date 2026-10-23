@@ -14,8 +14,8 @@
     </div>
 
     <div id="rf-hs-empty" class="rf-hs-empty" hidden>
-        <h3>Select a run</h3>
-        <p>Incidents uses the Plan analysis already selected. Pick a run from <strong>Runs</strong>.</p>
+        <h3>No Day Plan is active</h3>
+        <p>Import and activate a Day Plan on <strong>Execute → Plans</strong> to open Incidents.</p>
     </div>
 
     <div id="rf-hs-error" class="rf-hs-error" hidden></div>
@@ -51,5 +51,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/execute_incidents.js?v=914d"></script>
+<script src="/static/js/execute_context.js?v=920"></script>
+<script src="/static/js/execute_incidents.js?v=920"></script>
 {% endblock %}

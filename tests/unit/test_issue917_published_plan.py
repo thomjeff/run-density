@@ -223,7 +223,14 @@ def test_reopen_status_matches_board_not_planned_time(tmp_path: Path):
     assert human["locations"][0]["status"] == "reopened"
 
 
-def test_map_and_publish_routes_exist():
+def test_map_and_publish_routes_exist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "app.core.execute.published_plan.get_runflow_root",
+        lambda: tmp_path,
+    )
     client = TestClient(app)
     response = client.get("/execute/map", follow_redirects=False)
     assert response.status_code in (200, 303)

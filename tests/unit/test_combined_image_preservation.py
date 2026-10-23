@@ -44,6 +44,7 @@ CRITICAL_PATHS = (
     "/course-mapping",
     "/execute",
     "/execute/map",
+    "/execute/plans",
     "/execute/participants",
     "/execute/incidents",
 )

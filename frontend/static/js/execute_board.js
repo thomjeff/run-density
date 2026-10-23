@@ -8,6 +8,8 @@
     var zoneFilter = "";
     var mapInstance = null;
     var mapFocusLocId = null;
+    var selectedLocId = null;
+    var courseLayer = null;
     var lastRefreshAt = 0;
     var expanded = {
         closed: false,
@@ -69,6 +71,7 @@
     }
 
     function apiUrl(path) {
+        if (path.indexOf("/api/execute/ops/") === 0) return path;
         var url = path + "?run_id=" + encodeURIComponent(runId());
         var day = dayCode();
         if (day) url += "&day=" + encodeURIComponent(day);
@@ -175,6 +178,9 @@
         var cls = "rf-ex-strip";
         if (isDone) cls += " is-done";
         if (isFirstNext) cls += " is-next";
+        if (selectedLocId != null && Number(strip.loc_id) === Number(selectedLocId)) {
+            cls += " is-selected";
+        }
         return (
             '<article class="' +
             cls +
@@ -190,7 +196,7 @@
             esc(strip.loc_label) +
             '</button><button type="button" class="rf-ex-pin" data-map-loc="' +
             esc(strip.loc_id) +
-            '" aria-label="Open map">' +
+            '" aria-label="Show on map">' +
             ICON_PIN +
             "</button></span>" +
             timeCell +
@@ -310,7 +316,7 @@
         qs("#rf-execute-workspace").hidden = false;
         qs("#rf-execute-empty").hidden = true;
         qs("#rf-execute-error").hidden = true;
-        if (mapModalOpen()) paintStatusMap(mapFocusLocId);
+        paintStatusMap(selectedLocId);
     }
 
     function allStrips() {
@@ -350,13 +356,13 @@
     function syncExportLink() {
         var link = qs("#rf-execute-export");
         if (!link) return;
-        if (!runId()) {
+        if (!board || board.empty) {
             link.hidden = true;
             link.removeAttribute("href");
             return;
         }
         link.hidden = false;
-        link.href = apiUrl("/api/execute/reopen.csv");
+        link.href = "/api/execute/ops/reopen.csv";
         link.setAttribute("download", "");
     }
 
@@ -375,7 +381,7 @@
         qs("#rf-execute-empty").hidden = true;
         var box = qs("#rf-execute-error");
         box.hidden = false;
-        qs("p", box).textContent = message || "Could not load Reopen.";
+        qs("p", box).textContent = message || "Could not load Operations.";
     }
 
     function formatCountdown(ms) {
@@ -410,17 +416,17 @@
     }
 
     function loadBoard() {
-        if (!runId()) {
-            showEmpty();
-            return Promise.resolve();
-        }
-        return fetch(apiUrl("/api/execute/board"), { credentials: "same-origin" })
+        return fetch("/api/execute/ops/board", { credentials: "same-origin" })
             .then(function (resp) {
                 return resp.json().then(function (data) {
                     return { resp: resp, data: data };
                 });
             })
             .then(function (pack) {
+                if (pack.data && pack.data.empty) {
+                    showEmpty();
+                    return;
+                }
                 if (pack.resp.status === 404) {
                     showError(
                         pack.data.detail ||
@@ -429,7 +435,7 @@
                     return;
                 }
                 if (!pack.resp.ok) {
-                    showError(pack.data.detail || "Could not load Reopen.");
+                    showError(pack.data.detail || "Could not load Operations.");
                     return;
                 }
                 resetColumnExpand();
@@ -449,7 +455,7 @@
     }
 
     function putClock(payload) {
-        return fetch(apiUrl("/api/execute/clock"), {
+        return fetch("/api/execute/ops/clock", {
             method: "PUT",
             credentials: "same-origin",
             headers: { "Content-Type": "application/json" },
@@ -488,7 +494,7 @@
         pendingReopenId = Number(locId);
         reopenError = null;
         render();
-        return fetch(apiUrl("/api/execute/reopen"), {
+        return fetch("/api/execute/ops/reopen", {
             method: "POST",
             credentials: "same-origin",
             headers: { "Content-Type": "application/json" },
@@ -584,6 +590,9 @@
             mapInstance = window.initMap("rf-execute-map", {
                 zoomPosition: "topleft",
             });
+            if (typeof window.enableBasemapToggle === "function") {
+                window.enableBasemapToggle(mapInstance);
+            }
             return mapInstance;
         }
         if (window.L) {
@@ -598,25 +607,45 @@
         return mapInstance;
     }
 
+    function paintCourseLayer(map) {
+        if (courseLayer) {
+            map.removeLayer(courseLayer);
+            courseLayer = null;
+        }
+        var courses = (board && board.courses) || {};
+        var group = window.L.featureGroup();
+        Object.keys(courses).forEach(function (raceId) {
+            var geo = courses[raceId];
+            if (!geo) return;
+            window.L.geoJSON(geo, {
+                style: { color: "#2563eb", weight: 3, opacity: 0.7 },
+            }).addTo(group);
+        });
+        if (group.getLayers().length) {
+            group.addTo(map);
+            courseLayer = group;
+        }
+        return courseLayer;
+    }
+
     function paintStatusMap(focusId) {
         var pins = filteredPins();
+        var courses = (board && board.courses) || {};
+        var hasCourses = Object.keys(courses).some(function (id) {
+            return !!courses[id];
+        });
         var empty = qs("#rf-execute-map-empty");
         var mapEl = qs("#rf-execute-map");
         var legend = qs("#rf-execute-map-legend");
         var hasPins = pins.length > 0;
-        if (empty) empty.hidden = hasPins;
-        if (mapEl) mapEl.hidden = !hasPins;
+        var hasGeo = hasPins || hasCourses;
+        if (empty) empty.hidden = hasGeo;
+        if (mapEl) mapEl.hidden = !hasGeo;
         if (legend) legend.hidden = !hasPins;
-        if (!hasPins) {
-            if (mapInstance) {
-                mapInstance.remove();
-                mapInstance = null;
-                window.existingMap = null;
-            }
-            return;
-        }
-        var map = ensureMapInstance(pins[0].latlng);
+        if (!hasGeo) return;
+        var map = ensureMapInstance(hasPins ? pins[0].latlng : [45.95, -66.64]);
         if (!map || !window.L) return;
+        paintCourseLayer(map);
         if (map._rfStatusLayer) {
             map.removeLayer(map._rfStatusLayer);
             map._rfStatusLayer = null;
@@ -636,6 +665,9 @@
                 opacity: 1,
             });
             marker.bindPopup(markerPopupHtml(pin.strip), { maxWidth: 280 });
+            marker.on("click", function () {
+                selectLocation(locId);
+            });
             marker.addTo(group);
             if (focused) focusMarker = marker;
         });
@@ -649,34 +681,30 @@
             map.setView(pins[0].latlng, 14);
         } else if (group.getLayers().length) {
             map.fitBounds(group.getBounds().pad(0.15));
+        } else if (courseLayer && courseLayer.getBounds().isValid()) {
+            map.fitBounds(courseLayer.getBounds().pad(0.15));
         }
     }
 
     function closeMapModal() {
-        var modalEl = qs("#rf-execute-map-modal");
-        if (modalEl) modalEl.hidden = true;
         mapFocusLocId = null;
-        if (mapInstance) {
-            mapInstance.remove();
-            mapInstance = null;
-            window.existingMap = null;
-        }
     }
 
-    function openMapModal(locId) {
-        mapFocusLocId = locId == null || locId === "" ? null : Number(locId);
-        var strip = mapFocusLocId != null ? findStrip(mapFocusLocId) : null;
+    function selectLocation(locId) {
+        selectedLocId = locId == null || locId === "" ? null : Number(locId);
+        mapFocusLocId = selectedLocId;
+        var strip = selectedLocId != null ? findStrip(selectedLocId) : null;
         var title = qs("#rf-execute-map-title");
         if (title) {
             title.textContent = strip
                 ? strip.loc_id + " · " + strip.loc_label
-                : "Reopen map";
+                : "Course map";
         }
-        var modalEl = qs("#rf-execute-map-modal");
-        if (modalEl) modalEl.hidden = false;
-        setTimeout(function () {
-            paintStatusMap(mapFocusLocId);
-        }, 50);
+        if (board) render();
+    }
+
+    function openMapModal(locId) {
+        selectLocation(locId);
     }
 
     function onClick(ev) {
@@ -700,12 +728,6 @@
             }
             return;
         }
-        var mapLink = ev.target.closest("[data-map-loc]");
-        if (mapLink) {
-            ev.preventDefault();
-            openMapModal(mapLink.getAttribute("data-map-loc"));
-            return;
-        }
         var reopen = ev.target.closest("[data-reopen]");
         if (reopen) {
             postReopen(reopen.getAttribute("data-reopen"));
@@ -720,6 +742,12 @@
         }
         if (ev.target.id === "rf-ex-save-guns") {
             putClock({ guns_accepted: true, guns: collectGuns() });
+            return;
+        }
+        var stripEl = ev.target.closest(".rf-ex-strip[data-loc-id]");
+        if (stripEl) {
+            ev.preventDefault();
+            selectLocation(stripEl.getAttribute("data-loc-id"));
         }
     }
 
@@ -776,14 +804,7 @@
             if (board) render();
         });
         startTick();
-        if (window.runflowDay && window.runflowDay.run_id) {
-            loadBoard();
-            return;
-        }
-        document.addEventListener("runflow:context-ready", loadBoard, { once: true });
-        setTimeout(function () {
-            if (!board) loadBoard();
-        }, 400);
+        loadBoard();
     }
 
     document.addEventListener("DOMContentLoaded", bind);

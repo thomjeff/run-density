@@ -29,6 +29,8 @@
     }
 
     function runId() {
+        var ctx = window.runflowExecuteContext;
+        if (ctx && ctx.active && ctx.run_id) return String(ctx.run_id).trim();
         var params = new URLSearchParams(window.location.search);
         return (
             params.get("run_id") ||
@@ -39,6 +41,10 @@
     }
 
     function dayCode() {
+        var ctx = window.runflowExecuteContext;
+        if (ctx && ctx.active && ctx.weekday_code) {
+            return String(ctx.weekday_code).trim();
+        }
         return (
             (window.runflowDay && window.runflowDay.selected) ||
             localStorage.getItem("selected_day") ||
@@ -599,11 +605,12 @@
             });
     }
 
-    function bind() {
+    function startWorkspace() {
         if (!runId()) {
             qs("#rf-hs-empty").hidden = false;
             return;
         }
+        qs("#rf-hs-empty").hidden = true;
         qs("#rf-hs-workspace").hidden = false;
         qs("#rf-hs-import").addEventListener("click", function () {
             qs("#rf-hs-file").click();
@@ -719,6 +726,18 @@
             renderTable();
         });
         loadRoster();
+    }
+
+    function bind() {
+        if (window.runflowExecuteContext && window.runflowExecuteContext.resolved) {
+            startWorkspace();
+            return;
+        }
+        document.addEventListener(
+            "runflow:execute-context",
+            startWorkspace,
+            { once: true }
+        );
     }
 
     if (document.readyState === "loading") {
