@@ -74,7 +74,10 @@
 
     function ensureMap() {
         if (mapInstance) return mapInstance;
-        mapInstance = initMap("rf-ops-map");
+        mapInstance = initMap("rf-ops-map", { zoomPosition: "topleft" });
+        if (typeof enableBasemapToggle === "function") {
+            enableBasemapToggle(mapInstance);
+        }
         return mapInstance;
     }
 

@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_map.css?v=917a">
+<link rel="stylesheet" href="/static/css/execute_map.css?v=917b">
 {% endblock %}
 
 {% block content %}
@@ -27,10 +27,10 @@
         <p id="rf-ops-map-status" class="rf-ops-map-status"></p>
     </div>
 
-    <div id="rf-ops-map-workspace" hidden>
+    <div id="rf-ops-map-workspace" class="card" hidden>
         <div class="rf-ops-map-toolbar">
             <div>
-                <strong id="rf-ops-map-name">Day plan</strong>
+                <h3 id="rf-ops-map-name">Day plan</h3>
                 <span id="rf-ops-map-date" class="text-secondary"></span>
             </div>
             <label class="rf-ops-map-file">
@@ -43,7 +43,12 @@
             <li><span class="rf-ops-swatch is-next"></span> Reopen next</li>
             <li><span class="rf-ops-swatch is-done"></span> Reopened</li>
         </ul>
-        <div id="rf-ops-map" class="rf-ops-map" role="application" aria-label="Operations Map"></div>
+        <div id="rf-ops-map" class="rf-ops-map" role="application" aria-label="Operations Map">
+            <div id="basemap-toggle" aria-label="Basemap style">
+                <button type="button" id="btn-street" class="active">Street</button>
+                <button type="button" id="btn-satellite">Satellite</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -51,5 +56,5 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
-<script src="/static/js/execute_map.js?v=917a"></script>
+<script src="/static/js/execute_map.js?v=917b"></script>
 {% endblock %}
