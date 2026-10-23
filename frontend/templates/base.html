@@ -107,6 +107,9 @@
                             <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="reopen">Reopen</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute/map' %} active{% endif %}" href="/execute/map" data-rf-execute-view="map">Map</a>
+                        </li>
+                        <li class="nav-item rf-execute-chrome" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/execute/participants' %} active{% endif %}" href="/execute/participants" data-rf-execute-view="participants">Participants</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
@@ -352,6 +355,7 @@
                     let active = false;
                     if (view === "participants") active = path === "/execute/participants";
                     else if (view === "incidents") active = path === "/execute/incidents";
+                    else if (view === "map") active = path === "/execute/map";
                     else active = path === "/execute";
                     a.classList.toggle("active", active);
                 });
@@ -667,6 +671,7 @@
                     let href = "/execute";
                     if (view === "participants") href = "/execute/participants";
                     if (view === "incidents") href = "/execute/incidents";
+                    if (view === "map") href = "/execute/map";
                     if (runId) href = setQueryParam(href, "run_id", runId);
                     a.setAttribute("href", href);
                     return;

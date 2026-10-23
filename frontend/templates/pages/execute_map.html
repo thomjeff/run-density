@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Map{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="/static/css/execute_map.css?v=917b">
+{% endblock %}
+
+{% block content %}
+<div id="rf-ops-map-page" class="rf-ops-map-page">
+    <div class="page-header">
+        <h2>Map</h2>
+        <p class="rf-ops-map-lead">
+            Published day plan courses and locations. Reopen colors come from
+            the human Reopen board, not planned times.
+        </p>
+    </div>
+
+    <div id="rf-ops-map-empty" class="card" hidden>
+        <h3>No published plan is active</h3>
+        <p>Import a day-plan package, then activate it. The map does not fall back to a Plan run.</p>
+        <label class="rf-ops-map-file">
+            <span>Import package</span>
+            <input type="file" id="rf-ops-map-import" accept=".zip,application/zip">
+        </label>
+        <p id="rf-ops-map-status" class="rf-ops-map-status"></p>
+    </div>
+
+    <div id="rf-ops-map-workspace" class="card" hidden>
+        <div class="rf-ops-map-toolbar">
+            <div>
+                <h3 id="rf-ops-map-name">Day plan</h3>
+                <span id="rf-ops-map-date" class="text-secondary"></span>
+            </div>
+            <label class="rf-ops-map-file">
+                <span>Import another</span>
+                <input type="file" id="rf-ops-map-import-more" accept=".zip,application/zip">
+            </label>
+        </div>
+        <ul id="rf-ops-map-legend" class="rf-ops-map-legend" aria-label="Reopen status">
+            <li><span class="rf-ops-swatch is-closed"></span> Closed</li>
+            <li><span class="rf-ops-swatch is-next"></span> Reopen next</li>
+            <li><span class="rf-ops-swatch is-done"></span> Reopened</li>
+        </ul>
+        <div id="rf-ops-map" class="rf-ops-map" role="application" aria-label="Operations Map">
+            <div id="basemap-toggle" aria-label="Basemap style">
+                <button type="button" id="btn-street" class="active">Street</button>
+                <button type="button" id="btn-satellite">Satellite</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js?v=908"></script>
+<script src="/static/js/execute_map.js?v=917b"></script>
+{% endblock %}

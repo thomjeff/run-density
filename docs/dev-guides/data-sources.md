@@ -1345,6 +1345,17 @@ E2E tests validate that UI pages correctly render data from API endpoints and th
 | `locations_report.json` | `GET /api/locations` | Locations table |
 | `health.json` | `GET /api/health/data` | Health status page |
 
+### Published day plan (Issue #917)
+
+| API | Direction | Notes |
+| --- | --- | --- |
+| `POST /api/plan/published-plans` | Plan → ZIP | Requires `run_id`, weekday slice, and `calendar_date`. Weekday is not the id. |
+| `POST /api/execute/published-plans/import` | ZIP → Execute registry | Registers only; does not activate. Same id+revision is idempotent. |
+| `POST /api/execute/published-plans/activate` | Execute | Activate by `published_plan_id` UUID. |
+| `GET /api/execute/map` | Execute Operations Map | Geometry from the imported copy; reopen status from the human Reopen board. |
+
+Imported packages are stored under `runflow/execute/published_plans/`, not in Plan analysis trees or `state.json`.
+
 ### Common Query Parameters
 
 All API endpoints support these optional query parameters:

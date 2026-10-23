@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Published day plan and Execute Operations Map (#917)
+- Plan can publish one calendar date as an immutable ZIP (UUID + `calendar_date`; weekday is display only)
+- Overview publish uses a calendar date field, not a browser prompt
+- Execute can import (no auto-activate) and activate a published plan, and the new Map page shows courses plus closed / reopen-next / reopened pins from the human Reopen board
+- Execute Map uses the same white card, 600px map, zoom, and Street / Satellite toggle as Plan Locations and Density
+
 ### Release preservation (#916)
 - Documented how to rebuild combined Runflow v3.1.0 from the annotated git tag without moving it
 - Added combined-image route smoke tests, `make verify-image`, and PR CI that builds the existing `Dockerfile` / `app.main` image
