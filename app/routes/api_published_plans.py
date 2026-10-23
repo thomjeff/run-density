@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.execute.published_plan import (
@@ -17,7 +17,8 @@ from app.core.execute.published_plan import (
     map_snapshot,
 )
 from app.core.plan.publish_day_plan import publish_day_plan_zip
-from app.utils.auth import is_session_valid
+from app.routes.ui import get_stub_meta, templates
+from app.utils.auth import is_session_valid, require_auth
 from app.utils.env import env_bool
 
 router = APIRouter()
@@ -60,14 +61,11 @@ async def publish_plan(request: Request, body: PublishBody):
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
     filename = f"day-plan-{body.calendar_date}.zip"
+    disposition = f'attachment; filename="{filename}"'
     return Response(
         content=archive,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{filename}"'
-            )
-        },
+        headers={"Content-Disposition": disposition},
     )
 
 
@@ -107,11 +105,23 @@ async def list_plans(request: Request):
     registry = load_registry()
     return {
         "ok": True,
-        "active_published_plan_id": registry.get(
-            "active_published_plan_id"
-        ),
+        "active_published_plan_id": registry.get("active_published_plan_id"),
         "plans": list((registry.get("plans") or {}).values()),
     }
+
+
+@router.get("/execute/map", response_class=HTMLResponse)
+async def execute_map_page(request: Request):
+    """Execute Operations Map page (Issue #917)."""
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/execute_map.html",
+        context={"request": request, "meta": meta},
+    )
 
 
 @router.get("/api/execute/map")

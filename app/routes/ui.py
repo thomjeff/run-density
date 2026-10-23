@@ -378,20 +378,6 @@ async def execute_participants(request: Request):
     )
 
 
-@router.get("/execute/map", response_class=HTMLResponse)
-async def execute_map(request: Request):
-    """Execute Operations Map (Issue #917)."""
-    auth_redirect = require_auth(request)
-    if auth_redirect:
-        return auth_redirect
-    meta = get_stub_meta()
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/execute_map.html",
-        context={"request": request, "meta": meta},
-    )
-
-
 @router.get("/execute/incidents", response_class=HTMLResponse)
 async def execute_incidents(request: Request):
     """Execute incident queue and form (Issue #911)."""

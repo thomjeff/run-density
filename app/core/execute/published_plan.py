@@ -22,7 +22,6 @@ from app.storage import create_runflow_storage
 from app.utils.constants import COURSE_EVENT_IDS, DISPLAY_TIMEZONE
 from app.utils.run_id import get_runflow_root
 
-
 SCHEMA_VERSION = 1
 REGISTRY_NAME = "registry.json"
 MANIFEST_NAME = "manifest.json"
@@ -60,9 +59,7 @@ def parse_calendar_date(value: str) -> date:
     try:
         return date.fromisoformat(text)
     except ValueError as exc:
-        raise PublishedPlanError(
-            "calendar_date must be YYYY-MM-DD."
-        ) from exc
+        raise PublishedPlanError("calendar_date must be YYYY-MM-DD.") from exc
 
 
 def assert_date_matches_weekday(
@@ -72,13 +69,10 @@ def assert_date_matches_weekday(
     derived = weekday_code_for_date(calendar_date)
     wanted = str(weekday_code or "").strip().lower()
     if wanted not in _ISO_WEEKDAY_TO_CODE.values():
-        raise PublishedPlanError(
-            f"Unknown weekday_code {weekday_code!r}."
-        )
+        raise PublishedPlanError(f"Unknown weekday_code {weekday_code!r}.")
     if derived != wanted:
         raise PublishedPlanError(
-            f"calendar_date {calendar_date} is {derived}, "
-            f"not {wanted}."
+            f"calendar_date {calendar_date} is {derived}, " f"not {wanted}."
         )
     return derived
 
@@ -87,9 +81,8 @@ def assert_uuid(value: Any) -> str:
     try:
         return str(UUID(str(value)))
     except (TypeError, ValueError) as exc:
-        raise PublishedPlanError(
-            "published_plan_id must be an RFC 4122 UUID."
-        ) from exc
+        msg = "published_plan_id must be an RFC 4122 UUID."
+        raise PublishedPlanError(msg) from exc
 
 
 def race_display_name(race_id: str) -> str:
@@ -111,11 +104,8 @@ def plan_revision_dir(
     revision: int,
     root: Optional[Path] = None,
 ) -> Path:
-    return (
-        execute_store_root(root)
-        / published_plan_id
-        / f"r{int(revision)}"
-    )
+    root_dir = execute_store_root(root)
+    return root_dir / published_plan_id / f"r{int(revision)}"
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -150,9 +140,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(manifest, Mapping):
         raise PublishedPlanError("manifest must be an object.")
     if int(manifest.get("schema_version") or 0) != SCHEMA_VERSION:
-        raise PublishedPlanError(
-            "Unsupported published-plan schema_version."
-        )
+        raise PublishedPlanError("Unsupported published-plan schema_version.")
     plan_id = assert_uuid(manifest.get("published_plan_id"))
     calendar_date = str(manifest.get("calendar_date") or "").strip()
     if not calendar_date:
@@ -178,17 +166,18 @@ def validate_manifest(manifest: Mapping[str, Any]) -> Dict[str, Any]:
             raise PublishedPlanError("Each race must be an object.")
         race_id = str(race.get("id") or "").strip().lower()
         if race_id not in COURSE_EVENT_IDS:
-            raise PublishedPlanError(
-                f"Race id {race_id!r} is not a Build catalog id."
-            )
+            msg = f"Race id {race_id!r} is not a Build catalog id."
+            raise PublishedPlanError(msg)
+        course = str(race.get("course") or "").strip()
+        if not course:
+            course = f"{COURSES_DIR}/{race_id}.geojson"
         normalized_races.append(
             {
                 "id": race_id,
                 "name": race.get("name") or race_display_name(race_id),
                 "start_time": race.get("start_time"),
                 "duration_minutes": race.get("duration_minutes"),
-                "course": race.get("course")
-                or f"{COURSES_DIR}/{race_id}.geojson",
+                "course": course,
             }
         )
     files = manifest.get("files")
@@ -216,19 +205,17 @@ def _verify_checksums(
             raise PublishedPlanError(f"Missing package file {path}.")
         actual = sha256_bytes(files[path])
         if actual != expected:
-            raise PublishedPlanError(
-                f"Checksum mismatch for {path}."
-            )
+            raise PublishedPlanError(f"Checksum mismatch for {path}.")
 
 
 def extract_package(archive: bytes) -> Dict[str, bytes]:
     try:
         with zipfile.ZipFile(BytesIO(archive), "r") as zf:
-            return {
-                name: zf.read(name)
-                for name in zf.namelist()
-                if not name.endswith("/")
-            }
+            files = {}
+            for name in zf.namelist():
+                if not name.endswith("/"):
+                    files[name] = zf.read(name)
+            return files
     except zipfile.BadZipFile as exc:
         raise PublishedPlanError("Package is not a valid ZIP.") from exc
 
@@ -248,19 +235,16 @@ def import_published_plan(
     dest = plan_revision_dir(plan_id, revision, root)
     registry = load_registry(root)
     existing = (registry.get("plans") or {}).get(plan_id)
-    if (
-        existing
-        and int(existing.get("revision") or 0) == revision
-        and dest.is_dir()
-    ):
+    same_revision = int((existing or {}).get("revision") or 0) == revision
+    if existing and same_revision and dest.is_dir():
+        active_id = registry.get("active_published_plan_id")
         return {
             "imported": False,
             "idempotent": True,
             "published_plan_id": plan_id,
             "revision": revision,
             "calendar_date": manifest["calendar_date"],
-            "activated": registry.get("active_published_plan_id")
-            == plan_id,
+            "activated": active_id == plan_id,
         }
     if dest.exists():
         shutil.rmtree(dest)
@@ -298,9 +282,7 @@ def activate_published_plan(
     plan_id = assert_uuid(published_plan_id)
     registry = load_registry(root)
     if plan_id not in (registry.get("plans") or {}):
-        raise PublishedPlanError(
-            f"Published plan {plan_id} is not imported."
-        )
+        raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
     registry["active_published_plan_id"] = plan_id
     save_registry(registry, root)
     return load_imported_plan(plan_id, root)
@@ -314,24 +296,20 @@ def load_imported_plan(
     registry = load_registry(root)
     meta = (registry.get("plans") or {}).get(plan_id)
     if not meta:
-        raise PublishedPlanError(
-            f"Published plan {plan_id} is not imported."
-        )
+        raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
     dest = plan_revision_dir(plan_id, int(meta["revision"]), root)
     manifest = validate_manifest(
         json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
     )
-    locations_doc = json.loads(
-        (dest / LOCATIONS_NAME).read_text(encoding="utf-8")
-    )
+    loc_path = dest / LOCATIONS_NAME
+    locations_doc = json.loads(loc_path.read_text(encoding="utf-8"))
     courses: Dict[str, Any] = {}
     for race in manifest["races"]:
         rel = race.get("course") or f"{COURSES_DIR}/{race['id']}.geojson"
         course_path = dest / rel
         if course_path.is_file():
-            courses[race["id"]] = json.loads(
-                course_path.read_text(encoding="utf-8")
-            )
+            raw = course_path.read_text(encoding="utf-8")
+            courses[race["id"]] = json.loads(raw)
     return {
         "manifest": manifest,
         "locations": locations_doc,
@@ -373,10 +351,7 @@ def map_snapshot(
         return {
             "ok": False,
             "empty": True,
-            "detail": (
-                "Import and activate a published plan to open the "
-                "Operations Map."
-            ),
+            "detail": "Import and activate a published plan.",
             "locations": [],
             "courses": {},
         }
@@ -401,11 +376,11 @@ def map_snapshot(
                 )
             except Exception:
                 state = {"reopened": {}, "clock": {}, "activity": []}
+    available = locations_doc.get("resources_available") or []
     board = assemble_board(
         locations=locations,
         state=state,
-        resources_available=locations_doc.get("resources_available")
-        or [],
+        resources_available=available,
         run_id=source_run_id or plan_id,
         day=day,
         now_hhmmss=now_hhmmss,

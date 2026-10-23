@@ -20,7 +20,6 @@ from app.core.execute.published_plan import (
     parse_calendar_date,
     race_display_name,
     sha256_bytes,
-    weekday_code_for_date,
 )
 from app.core.locations.report_json import locations_report_relpath
 from app.routes.api_segments import convert_geometry_to_wgs84
@@ -32,9 +31,8 @@ from app.utils.run_id import get_run_directory
 def _read_analysis(run_id: str) -> Dict[str, Any]:
     path = get_run_directory(run_id) / "analysis.json"
     if not path.exists():
-        raise PublishedPlanError(
-            f"Planning scenario {run_id} has no analysis.json."
-        )
+        msg = f"Planning scenario {run_id} has no analysis.json."
+        raise PublishedPlanError(msg)
     from app.config.loader import load_analysis_config_readonly
 
     return dict(load_analysis_config_readonly(get_run_directory(run_id)))
@@ -61,9 +59,7 @@ def _load_locations(run_id: str, day: str) -> Dict[str, Any]:
     storage = create_runflow_storage(run_id)
     rel = locations_report_relpath(day)
     if not storage.exists(rel):
-        raise PublishedPlanError(
-            f"No locations_report.json for day={day}."
-        )
+        raise PublishedPlanError(f"No locations_report.json for day={day}.")
     payload = storage.read_json(rel)
     locations = payload.get("locations") or []
     if not isinstance(locations, list):
@@ -94,9 +90,7 @@ def _wgs84_feature_collection(raw: Mapping[str, Any]) -> Dict[str, Any]:
         item = copy.deepcopy(dict(feature))
         geom = item.get("geometry")
         if isinstance(geom, dict) and not _looks_like_wgs84(geom):
-            item["geometry"] = convert_geometry_to_wgs84(
-                copy.deepcopy(geom)
-            )
+            item["geometry"] = convert_geometry_to_wgs84(copy.deepcopy(geom))
         features.append(item)
     return {"type": "FeatureCollection", "features": features}
 
@@ -143,11 +137,7 @@ def _location_export_row(row: Mapping[str, Any]) -> Dict[str, Any]:
         "loc_end": row.get("loc_end"),
         "proxy_loc_id": row.get("proxy_loc_id"),
         "proxy_pass_id": row.get("proxy_pass_id"),
-        **{
-            key: row.get(key)
-            for key in row
-            if str(key).endswith("_count")
-        },
+        **{key: row.get(key) for key in row if str(key).endswith("_count")},
         "by_event": row.get("by_event") or {},
     }
 
@@ -192,13 +182,13 @@ def build_published_plan_files(
                 "id": race_id,
                 "name": race_display_name(race_id),
                 "start_time": event.get("start_time"),
-                "duration_minutes": event.get(
-                    "event_duration_minutes"
-                ),
+                "duration_minutes": event.get("event_duration_minutes"),
                 "course": rel,
             }
         )
     files[LOCATIONS_NAME] = json.dumps(locations_doc).encode("utf-8")
+    plan_name = name or f"{event_edition or 'Day plan'} {calendar_date}"
+    source_config = analysis.get("config_id") or analysis.get("package_id")
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "published_plan_id": published_plan_id or str(uuid4()),
@@ -206,15 +196,12 @@ def build_published_plan_files(
         "published_at": datetime.now(timezone.utc).isoformat(),
         "calendar_date": calendar_date,
         "weekday_code": weekday,
-        "name": name
-        or f"{event_edition or 'Day plan'} {calendar_date}",
+        "name": plan_name,
         "event_series": event_series or "",
         "event_edition": event_edition or "",
         "timezone": DISPLAY_TIMEZONE,
         "source_run_id": run_id,
-        "source_config_id": analysis.get("config_id")
-        or analysis.get("package_id")
-        or "",
+        "source_config_id": source_config or "",
         "races": races,
         "files": [],
     }
@@ -222,9 +209,8 @@ def build_published_plan_files(
         {"path": path, "sha256": sha256_bytes(payload)}
         for path, payload in sorted(files.items())
     ]
-    files[MANIFEST_NAME] = json.dumps(
-        manifest, indent=2, sort_keys=True
-    ).encode("utf-8")
+    manifest_json = json.dumps(manifest, indent=2, sort_keys=True)
+    files[MANIFEST_NAME] = manifest_json.encode("utf-8")
     return files
 
 
