@@ -1,25 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Reopen{% endblock %}
+{% block title %}Operations{% endblock %}
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=909">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=920c">
 {% endblock %}
 
 {% block content %}
 <div id="rf-execute-page" class="rf-execute-page">
     <div class="page-header">
-        <h2>Reopen</h2>
+        <h2>Operations</h2>
     </div>
 
     <div id="rf-execute-empty" class="rf-execute-empty-page" hidden>
-        <h3>Select a run</h3>
-        <p>Reopen always uses a Plan analysis. Pick a run from <strong>Runs</strong> to open the board.</p>
+        <h3>No Day Plan is active</h3>
+        <p>Import and activate a Day Plan on <strong>Execute → Plans</strong> to open Operations.</p>
     </div>
 
     <div id="rf-execute-error" class="rf-execute-error" hidden>
-        <h3>Reopen is not ready</h3>
+        <h3>Operations is not ready</h3>
         <p></p>
     </div>
 
@@ -46,12 +46,29 @@
                 <input type="search" id="rf-execute-search" class="form-control form-control-sm" placeholder="Search locations..." aria-label="Search locations">
             </div>
             <div class="rf-execute-toolbar-end">
-                <button type="button" class="btn btn-sm" id="rf-execute-map-open">Map</button>
                 <a id="rf-execute-export" class="btn btn-sm rf-execute-export" href="#" hidden>Export CSV</a>
             </div>
         </div>
 
         <div id="rf-execute-guns" class="rf-execute-guns" hidden></div>
+
+        <div class="card rf-execute-ops-map">
+            <div class="rf-execute-ops-map-head">
+                <h3 id="rf-execute-map-title">Course map</h3>
+                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location status">
+                    <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
+                    <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
+                    <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
+                </ul>
+            </div>
+            <div id="rf-execute-map" class="rf-execute-map" role="application" aria-label="Operations map">
+                <div id="basemap-toggle" aria-label="Basemap style">
+                    <button type="button" id="btn-street" class="active">Street</button>
+                    <button type="button" id="btn-satellite">Satellite</button>
+                </div>
+            </div>
+            <p id="rf-execute-map-empty" class="text-secondary small mb-0" hidden>No map coordinates for this location.</p>
+        </div>
 
         <div id="rf-execute-board" class="rf-execute-board">
             <section class="rf-execute-col" data-col="closed">
@@ -77,30 +94,11 @@
             </section>
         </div>
     </div>
-
-    <div id="rf-execute-map-modal" class="rf-execute-map-modal" hidden>
-        <div class="rf-execute-map-backdrop" data-map-close="1"></div>
-        <div class="rf-execute-map-panel" role="dialog" aria-modal="true" aria-labelledby="rf-execute-map-title">
-            <div class="rf-execute-map-header">
-                <h3 class="rf-execute-map-title" id="rf-execute-map-title">Reopen map</h3>
-                <button type="button" class="btn btn-sm" id="rf-execute-map-close" data-map-close="1">Close</button>
-            </div>
-            <div class="rf-execute-map-body">
-                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location status">
-                    <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
-                    <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
-                    <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
-                </ul>
-                <div id="rf-execute-map" class="rf-execute-map"></div>
-                <p id="rf-execute-map-empty" class="text-secondary small mb-0" hidden>No map coordinates for this location.</p>
-            </div>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
-<script src="/static/js/execute_board.js?v=909"></script>
+<script src="/static/js/execute_board.js?v=920b"></script>
 {% endblock %}

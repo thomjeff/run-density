@@ -104,10 +104,10 @@
                             <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="reopen">Reopen</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute/plans' %} active{% endif %}" href="/execute/plans" data-rf-execute-view="plans">Plans</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/execute/map' %} active{% endif %}" href="/execute/map" data-rf-execute-view="map">Map</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/execute' %} active{% endif %}" href="/execute" data-rf-execute-view="operations">Operations</a>
                         </li>
                         <li class="nav-item rf-execute-chrome" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/execute/participants' %} active{% endif %}" href="/execute/participants" data-rf-execute-view="participants">Participants</a>
@@ -353,9 +353,10 @@
                 document.querySelectorAll("[data-rf-execute-view]").forEach(function (a) {
                     const view = a.getAttribute("data-rf-execute-view");
                     let active = false;
-                    if (view === "participants") active = path === "/execute/participants";
+                    if (view === "plans") active = path === "/execute/plans";
+                    else if (view === "participants") active = path === "/execute/participants";
                     else if (view === "incidents") active = path === "/execute/incidents";
-                    else if (view === "map") active = path === "/execute/map";
+                    else if (view === "operations") active = path === "/execute";
                     else active = path === "/execute";
                     a.classList.toggle("active", active);
                 });
@@ -669,9 +670,10 @@
                 if (a.getAttribute("data-rf-execute-view")) {
                     const view = a.getAttribute("data-rf-execute-view");
                     let href = "/execute";
+                    if (view === "plans") href = "/execute/plans";
                     if (view === "participants") href = "/execute/participants";
                     if (view === "incidents") href = "/execute/incidents";
-                    if (view === "map") href = "/execute/map";
+                    if (view === "operations") href = "/execute";
                     if (runId) href = setQueryParam(href, "run_id", runId);
                     a.setAttribute("href", href);
                     return;

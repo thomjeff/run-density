@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Plans{% endblock %}
+
+{% block extra_head %}
+{% include 'partials/race_config_page_styles.html' %}
+<link rel="stylesheet" href="/static/css/execute_plans.css?v=920b">
+{% endblock %}
+
+{% block content %}
+<div class="race-config-page rf-execute-plans">
+    <div class="page-header">
+        <h2>Plans</h2>
+        <p class="race-config-page-lead">
+            Import a published Day Plan. Import does not activate.
+            At most one plan is active. Archive keeps records; restore does not activate.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="card-header">
+            <h3 class="card-title visually-hidden">Day Plans</h3>
+            <div class="card-actions">
+                <input type="file" id="rf-plans-file" accept=".zip,application/zip" hidden>
+                <button type="button" id="rf-plans-import" class="course-btn primary">Import</button>
+            </div>
+        </div>
+        <p id="rf-plans-status" class="card-help" hidden></p>
+        <div class="scrollable-table-container">
+            <table id="rf-plans-table" class="table-sticky-header">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Date</th>
+                        <th>Weekday</th>
+                        <th>Status</th>
+                        <th class="course-map-action-cell">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rf-plans-tbody">
+                    <tr><td colspan="5" class="placeholder">Loading Day Plans…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="card-help" style="margin-bottom: 0;">
+            Activate a plan to open it on Operations, Participants, and Incidents.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/table_actions.js?v=920b"></script>
+<script src="/static/js/execute_plans.js?v=920b"></script>
+{% endblock %}

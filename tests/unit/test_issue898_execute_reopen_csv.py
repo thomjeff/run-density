@@ -170,5 +170,5 @@ def test_execute_js_points_at_reopen_csv():
         / "js"
         / "execute_board.js"
     ).read_text(encoding="utf-8")
-    assert "/api/execute/reopen.csv" in js
+    assert "/api/execute/ops/reopen.csv" in js
     assert "syncExportLink" in js

@@ -50,6 +50,26 @@
         '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
         '<circle cx="12" cy="12" r="3"/>' +
         '</svg>';
+    var ACTIVATE_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<polygon points="5 3 19 12 5 21 5 3"/>' +
+        '</svg>';
+    var DEACTIVATE_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<rect x="6" y="4" width="4" height="16"/>' +
+        '<rect x="14" y="4" width="4" height="16"/>' +
+        '</svg>';
+    var ARCHIVE_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<polyline points="21 8 21 21 3 21 3 8"/>' +
+        '<rect x="1" y="3" width="22" height="5"/>' +
+        '<line x1="10" y1="12" x2="14" y2="12"/>' +
+        '</svg>';
+    var RESTORE_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<polyline points="1 4 1 10 7 10"/>' +
+        '<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>' +
+        '</svg>';
 
     function createIconButton(kind, title, onClick) {
         var btn = document.createElement('button');
@@ -71,6 +91,10 @@
         else if (kind === 'reverse') btn.innerHTML = REVERSE_ICON_SVG;
         else if (kind === 'locations') btn.innerHTML = LOCATIONS_ICON_SVG;
         else if (kind === 'view') btn.innerHTML = VIEW_ICON_SVG;
+        else if (kind === 'activate') btn.innerHTML = ACTIVATE_ICON_SVG;
+        else if (kind === 'deactivate') btn.innerHTML = DEACTIVATE_ICON_SVG;
+        else if (kind === 'archive') btn.innerHTML = ARCHIVE_ICON_SVG;
+        else if (kind === 'restore') btn.innerHTML = RESTORE_ICON_SVG;
         else btn.innerHTML = EDIT_ICON_SVG;
         if (onClick) {
             btn.addEventListener('click', onClick);

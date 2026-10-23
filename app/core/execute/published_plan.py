@@ -13,12 +13,21 @@ import zipfile
 from datetime import date, datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from uuid import UUID
 
 from app.core.execute.board import assemble_board
-from app.core.execute.state import load_or_create_state
-from app.storage import create_runflow_storage
+from app.core.execute.report import (
+    build_reopen_rows,
+    csv_columns,
+    reopen_csv_text,
+)
+from app.core.execute.state import (
+    apply_clock_update,
+    normalize_state,
+    record_reopen,
+)
+from app.core.execute.times import wall_hhmmss
 from app.utils.constants import COURSE_EVENT_IDS, DISPLAY_TIMEZONE
 from app.utils.run_id import get_runflow_root
 
@@ -262,6 +271,7 @@ def import_published_plan(
         "name": manifest.get("name") or "",
         "source_run_id": manifest.get("source_run_id") or "",
         "imported_at": datetime.now(timezone.utc).isoformat(),
+        "archived": bool((existing or {}).get("archived")),
     }
     registry["plans"] = plans
     save_registry(registry, root)
@@ -281,11 +291,289 @@ def activate_published_plan(
 ) -> Dict[str, Any]:
     plan_id = assert_uuid(published_plan_id)
     registry = load_registry(root)
-    if plan_id not in (registry.get("plans") or {}):
+    meta = (registry.get("plans") or {}).get(plan_id)
+    if not meta:
         raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
+    if meta.get("archived"):
+        raise PublishedPlanError("Restore this Day Plan before activating.")
     registry["active_published_plan_id"] = plan_id
     save_registry(registry, root)
     return load_imported_plan(plan_id, root)
+
+
+def deactivate_published_plan(root: Optional[Path] = None) -> None:
+    registry = load_registry(root)
+    registry["active_published_plan_id"] = None
+    save_registry(registry, root)
+
+
+def archive_published_plan(
+    published_plan_id: str,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    plan_id = assert_uuid(published_plan_id)
+    registry = load_registry(root)
+    plans = dict(registry.get("plans") or {})
+    if plan_id not in plans:
+        raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
+    plans[plan_id] = dict(plans[plan_id])
+    plans[plan_id]["archived"] = True
+    registry["plans"] = plans
+    if registry.get("active_published_plan_id") == plan_id:
+        registry["active_published_plan_id"] = None
+    save_registry(registry, root)
+    return plans[plan_id]
+
+
+def restore_published_plan(
+    published_plan_id: str,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    plan_id = assert_uuid(published_plan_id)
+    registry = load_registry(root)
+    plans = dict(registry.get("plans") or {})
+    if plan_id not in plans:
+        raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
+    plans[plan_id] = dict(plans[plan_id])
+    plans[plan_id]["archived"] = False
+    registry["plans"] = plans
+    save_registry(registry, root)
+    return plans[plan_id]
+
+
+def listed_plans(root: Optional[Path] = None) -> Dict[str, Any]:
+    registry = load_registry(root)
+    active_id = registry.get("active_published_plan_id")
+    rows = []
+    for meta in (registry.get("plans") or {}).values():
+        row = dict(meta)
+        plan_id = row.get("published_plan_id")
+        archived = bool(row.get("archived"))
+        row["archived"] = archived
+        row["active"] = (not archived) and plan_id == active_id
+        if archived:
+            row["status"] = "archived"
+        elif row["active"]:
+            row["status"] = "active"
+        else:
+            row["status"] = "inactive"
+        rows.append(row)
+
+    def _sort_key(item: Mapping[str, Any]) -> Tuple[int, str]:
+        status = str(item.get("status") or "")
+        rank = 0 if status == "active" else 1 if status == "inactive" else 2
+        return (rank, str(item.get("calendar_date") or ""))
+
+    rows.sort(key=_sort_key)
+    return {
+        "active_published_plan_id": active_id,
+        "plans": rows,
+    }
+
+
+def operational_state_path(
+    published_plan_id: str,
+    root: Optional[Path] = None,
+) -> Path:
+    plan_id = assert_uuid(published_plan_id)
+    return execute_store_root(root) / plan_id / "execution" / "state.json"
+
+
+def _guns_from_manifest(manifest: Mapping[str, Any]) -> Dict[str, str]:
+    guns: Dict[str, str] = {}
+    for race in manifest.get("races") or []:
+        race_id = str(race.get("id") or "").strip().lower()
+        start = str(race.get("start_time") or "").strip()
+        if race_id and start:
+            guns[race_id] = start
+    return guns
+
+
+def load_operational_state(
+    published_plan_id: str,
+    *,
+    day: str,
+    manifest: Optional[Mapping[str, Any]] = None,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    path = operational_state_path(published_plan_id, root)
+    raw = None
+    if path.is_file():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    guns = _guns_from_manifest(manifest or {})
+    return normalize_state(
+        raw,
+        run_id=published_plan_id,
+        day=day,
+        analysis_guns=guns,
+    )
+
+
+def save_operational_state(
+    published_plan_id: str,
+    state: Mapping[str, Any],
+    root: Optional[Path] = None,
+) -> None:
+    path = operational_state_path(published_plan_id, root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(dict(state), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def operations_board(
+    published_plan_id: Optional[str] = None,
+    root: Optional[Path] = None,
+    now_hhmmss: Optional[str] = None,
+    state: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    plan_id = published_plan_id or active_published_plan_id(root)
+    if not plan_id:
+        return {
+            "ok": False,
+            "empty": True,
+            "detail": "Activate a Day Plan on Execute → Plans.",
+            "columns": {
+                "closed": [],
+                "reopen_next": [],
+                "reopened": [],
+            },
+            "courses": {},
+        }
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    locations_doc = loaded["locations"]
+    locations = list(locations_doc.get("locations") or [])
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    if state is None:
+        state = load_operational_state(
+            plan_id,
+            day=day,
+            manifest=manifest,
+            root=root,
+        )
+    board = assemble_board(
+        locations=locations,
+        state=state,
+        resources_available=locations_doc.get("resources_available") or [],
+        run_id=plan_id,
+        day=day,
+        now_hhmmss=now_hhmmss,
+    )
+    board["ok"] = True
+    board["empty"] = False
+    board["published_plan_id"] = plan_id
+    board["calendar_date"] = manifest.get("calendar_date")
+    board["name"] = manifest.get("name") or ""
+    board["courses"] = loaded.get("courses") or {}
+    board["source_run_id"] = manifest.get("source_run_id") or ""
+    board["weekday_code"] = day
+    return board
+
+
+def record_operations_reopen(
+    loc_id: int,
+    linked_loc_ids: Optional[List[int]] = None,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    plan_id = active_published_plan_id(root)
+    if not plan_id:
+        raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    state = load_operational_state(
+        plan_id,
+        day=day,
+        manifest=manifest,
+        root=root,
+    )
+    record_reopen(
+        state,
+        loc_id=int(loc_id),
+        linked_loc_ids=linked_loc_ids or [],
+    )
+    save_operational_state(plan_id, state, root)
+    return operations_board(plan_id, root=root, state=state)
+
+
+def update_operations_clock(
+    payload: Mapping[str, Any],
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    plan_id = active_published_plan_id(root)
+    if not plan_id:
+        raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    state = load_operational_state(
+        plan_id,
+        day=day,
+        manifest=manifest,
+        root=root,
+    )
+    apply_clock_update(state, payload, now_hhmmss=wall_hhmmss())
+    save_operational_state(plan_id, state, root)
+    return operations_board(plan_id, root=root, state=state)
+
+
+def operations_reopen_csv(
+    root: Optional[Path] = None,
+) -> Tuple[str, str]:
+    plan_id = active_published_plan_id(root)
+    if not plan_id:
+        raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    locations_doc = loaded["locations"]
+    locations = list(locations_doc.get("locations") or [])
+    available = locations_doc.get("resources_available") or []
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    state = load_operational_state(
+        plan_id,
+        day=day,
+        manifest=manifest,
+        root=root,
+    )
+    rows = build_reopen_rows(
+        locations,
+        state,
+        resources_available=available,
+    )
+    fieldnames = csv_columns(locations, available)
+    date = manifest.get("calendar_date") or "day"
+    filename = "execute_reopen_" + str(date) + ".csv"
+    return reopen_csv_text(rows, fieldnames), filename
+
+
+def active_day_context(root: Optional[Path] = None) -> Dict[str, Any]:
+    plan_id = active_published_plan_id(root)
+    if not plan_id:
+        return {"active": False}
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    return {
+        "active": True,
+        "published_plan_id": plan_id,
+        "name": manifest.get("name") or "",
+        "calendar_date": manifest.get("calendar_date"),
+        "weekday_code": day,
+        "run_id": manifest.get("source_run_id") or "",
+        "source_run_id": manifest.get("source_run_id") or "",
+    }
 
 
 def load_imported_plan(
@@ -362,26 +650,19 @@ def map_snapshot(
     day = manifest.get("weekday_code") or weekday_code_for_date(
         manifest["calendar_date"]
     )
-    source_run_id = str(manifest.get("source_run_id") or "").strip()
     if state is None:
-        state = {"reopened": {}, "clock": {}, "activity": []}
-        if source_run_id:
-            try:
-                storage = create_runflow_storage(source_run_id)
-                state = load_or_create_state(
-                    storage,
-                    run_id=source_run_id,
-                    day=day,
-                    analysis={},
-                )
-            except Exception:
-                state = {"reopened": {}, "clock": {}, "activity": []}
+        state = load_operational_state(
+            plan_id,
+            day=day,
+            manifest=manifest,
+            root=root,
+        )
     available = locations_doc.get("resources_available") or []
     board = assemble_board(
         locations=locations,
         state=state,
         resources_available=available,
-        run_id=source_run_id or plan_id,
+        run_id=plan_id,
         day=day,
         now_hhmmss=now_hhmmss,
     )
