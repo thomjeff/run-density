@@ -38,6 +38,7 @@ from app.routes.api_bins import router as api_bins_router
 # from app.routes.api_heatmaps import router as api_heatmaps_router
 from app.routes.api_locations import router as api_locations_router
 from app.routes.api_execute import router as api_execute_router
+from app.routes.api_plan_publish import router as api_plan_publish_router
 from app.routes.api_published_plans import (
     router as api_published_plans_router,
 )
@@ -160,6 +161,7 @@ app.include_router(api_bins_router)
 # app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
 app.include_router(api_locations_router)
 app.include_router(api_execute_router)
+app.include_router(api_plan_publish_router)
 app.include_router(api_published_plans_router)
 app.include_router(api_baseline_router)
 app.include_router(api_course_router)

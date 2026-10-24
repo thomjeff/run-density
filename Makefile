@@ -30,7 +30,7 @@ CLOUD_SERVICE ?= $(CLOUD_SERVICE_PREFIX)
 CLOUD_RUN_PATH ?= $(RUNFLOW_ROOT)/analysis/$(RUN_ID)
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build smoke test verify-image validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-release cloud-clean
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build smoke test verify-image validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-release cloud-clean execute-up execute-cloud-build execute-cloud-stop
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -77,6 +77,9 @@ help usage --help: ## Show this help message
 	@echo "  cloud-deploy       Deploy to Cloud Run"
 	@echo "  cloud-release      Build + push + deploy (RUN_ID=...; one command)"
 	@echo "  cloud-clean        Delete Cloud Run service"
+	@echo "  execute-up         Start Execute image + Postgres on :8081"
+	@echo "  execute-cloud-build  Document Execute Cloud Run image (do not deploy this branch)"
+	@echo "  execute-cloud-stop   Document stopping Execute Cloud SQL / Cloud Run"
 	@echo ""
 	@echo "Cloud Defaults:"
 	@echo "	CLOUD_PROJECT_ID=$(CLOUD_PROJECT_ID)"
@@ -103,6 +106,24 @@ dev: ## Start local development server (hot reload enabled)
 	@echo "🚀 Starting local development server..."
 	@echo "📍 http://localhost:$(PORT)"
 	@docker-compose up --build
+
+execute-up: ## Start purpose-built Execute + Postgres (Issue #922)
+	@echo "Starting Execute on http://localhost:8081"
+	@docker compose up -d --build execute-db execute
+
+execute-cloud-build: ## Document Execute Cloud Run image; do not deploy this branch
+	@echo "Execute Cloud Run (document only; do not deploy feat/922):"
+	@echo "  Image: Dockerfile.execute -> app.execute_app:app"
+	@echo "  Region: $(CLOUD_REGION)  CPU=1  Memory=1Gi  max=3  min=0"
+	@echo "  Env: CLOUD_MODE=true EXECUTE_DATABASE_URL=... (Cloud SQL)"
+	@echo "  Do not bake CLOUD_RUN_ID. Separate service from skinny Locations."
+	@echo "  SQL: Enterprise PG15 zonal db-g1-small, stopped except candidate/live."
+	@exit 0
+
+execute-cloud-stop: ## Document stopping Execute Cloud SQL / Cloud Run
+	@echo "Stop Execute Cloud Run (min=0) and stop Cloud SQL except live windows."
+	@echo "Do not deploy or stop production from this feature branch."
+	@exit 0
 
 stop: ## Stop Docker container
 	@echo "🛑 Stopping container..."

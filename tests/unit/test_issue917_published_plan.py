@@ -76,7 +76,7 @@ def _package(
 
     manifest = {
         "schema_version": 1,
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "revision": revision,
         "published_at": "2026-10-22T12:00:00+00:00",
         "calendar_date": calendar_date,
@@ -112,12 +112,26 @@ def _package(
     )
 
 
+def test_leftover_published_plan_id_is_rejected():
+    with pytest.raises(PublishedPlanError, match="plan_id"):
+        validate_manifest(
+            {
+                "schema_version": 1,
+                "published_plan_id": str(uuid4()),
+                "revision": 1,
+                "calendar_date": "2026-10-24",
+                "races": [{"id": "elite"}],
+                "files": [{"path": "x", "sha256": "a"}],
+            }
+        )
+
+
 def test_calendar_date_required_and_uuid_identity():
     with pytest.raises(PublishedPlanError):
         validate_manifest(
             {
                 "schema_version": 1,
-                "published_plan_id": str(uuid4()),
+                "plan_id": str(uuid4()),
                 "revision": 1,
                 "races": [{"id": "elite"}],
                 "files": [{"path": "x", "sha256": "a"}],
@@ -127,7 +141,7 @@ def test_calendar_date_required_and_uuid_identity():
         validate_manifest(
             {
                 "schema_version": 1,
-                "published_plan_id": "sat",
+                "plan_id": "sat",
                 "revision": 1,
                 "calendar_date": "2026-10-24",
                 "races": [{"id": "elite"}],
@@ -148,22 +162,22 @@ def test_import_is_idempotent(tmp_path: Path):
     second = import_published_plan(archive, root=tmp_path)
     assert first["imported"] is True
     assert second["idempotent"] is True
-    assert first["published_plan_id"] == second["published_plan_id"]
-    plans = list((tmp_path / "execute" / "published_plans").iterdir())
+    assert first["plan_id"] == second["plan_id"]
+    plans = list((tmp_path / "execute" / "plans").iterdir())
     assert len([p for p in plans if p.is_dir()]) == 1
 
 
 def test_second_calendar_date_is_isolated(tmp_path: Path):
     sat = _package(calendar_date="2026-10-24", weekday_code="sat")
     sun = _package(calendar_date="2026-10-25", weekday_code="sun")
-    sat_id = import_published_plan(sat, root=tmp_path)["published_plan_id"]
-    sun_id = import_published_plan(sun, root=tmp_path)["published_plan_id"]
+    sat_id = import_published_plan(sat, root=tmp_path)["plan_id"]
+    sun_id = import_published_plan(sun, root=tmp_path)["plan_id"]
     assert sat_id != sun_id
     activate_published_plan(sat_id, root=tmp_path)
     snap = map_snapshot(root=tmp_path)
     assert snap["calendar_date"] == "2026-10-24"
-    assert snap["published_plan_id"] == sat_id
-    sun_dir = tmp_path / "execute" / "published_plans" / sun_id
+    assert snap["plan_id"] == sat_id
+    sun_dir = tmp_path / "execute" / "plans" / sun_id
     assert sun_dir.is_dir()
 
 
@@ -180,7 +194,7 @@ def test_reopen_status_matches_board_not_planned_time(tmp_path: Path):
         loc_end="06:00:00",
     )
     plan_id = import_published_plan(archive, root=tmp_path)[
-        "published_plan_id"
+        "plan_id"
     ]
     activate_published_plan(plan_id, root=tmp_path)
     locations = [
@@ -234,7 +248,7 @@ def test_map_and_publish_routes_exist(
     client = TestClient(app)
     response = client.get("/execute/map", follow_redirects=False)
     assert response.status_code in (200, 303)
-    listed = client.get("/api/execute/published-plans")
+    listed = client.get("/api/execute/plans")
     assert listed.status_code == 200
     empty = client.get("/api/execute/map")
     assert empty.status_code == 200

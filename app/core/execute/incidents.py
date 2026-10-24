@@ -740,15 +740,9 @@ def close_incident(incident: Dict[str, Any]) -> Dict[str, Any]:
     return incident
 
 
-def location_catalog(storage: Any, day: str) -> List[Dict[str, Any]]:
-    path = locations_report_relpath(day)
-    if not storage.exists(path):
-        return []
-    try:
-        payload = storage.read_json(path)
-    except Exception:
-        return []
-    rows = payload.get("locations") if isinstance(payload, Mapping) else None
+def location_catalog_from_rows(
+    rows: Optional[Sequence[Any]],
+) -> List[Dict[str, Any]]:
     if not isinstance(rows, list):
         return []
     out: List[Dict[str, Any]] = []
@@ -774,7 +768,36 @@ def location_catalog(storage: Any, day: str) -> List[Dict[str, Any]]:
     return out
 
 
+def location_catalog(storage: Any, day: str) -> List[Dict[str, Any]]:
+    path = locations_report_relpath(day)
+    if not storage.exists(path):
+        return []
+    try:
+        payload = storage.read_json(path)
+    except Exception:
+        return []
+    rows = payload.get("locations") if isinstance(payload, Mapping) else None
+    return location_catalog_from_rows(rows)
+
+
 def load_store(storage: Any, *, run_id: str, day: str) -> Dict[str, Any]:
+    from app.core.execute.db import get_blob, using_postgres
+
+    if using_postgres():
+        raw = get_blob(str(run_id), "incidents", day)
+        if raw:
+            store = empty_store(run_id=run_id, day=day)
+            items = (
+                raw.get("incidents")
+                if isinstance(raw.get("incidents"), list)
+                else []
+            )
+            store["incidents"] = [
+                normalize_incident(dict(item))
+                for item in items
+                if isinstance(item, Mapping)
+            ]
+            return store
     path = incidents_relpath(day)
     raw = None
     if storage.exists(path):
@@ -799,9 +822,18 @@ def load_store(storage: Any, *, run_id: str, day: str) -> Dict[str, Any]:
 
 
 def persist_store(storage: Any, day: str, store: Mapping[str, Any]) -> str:
+    from app.core.execute.db import put_blob, using_postgres
+
     payload = dict(store)
     payload["schema_version"] = SCHEMA_VERSION
-    return storage.write_json(incidents_relpath(day), payload)
+    if using_postgres():
+        put_blob(str(store.get("run_id") or ""), "incidents", day, payload)
+    try:
+        return storage.write_json(incidents_relpath(day), payload)
+    except Exception:
+        if using_postgres():
+            return ""
+        raise
 
 
 def find_incident(store: Mapping[str, Any], incident_id: str) -> Dict[str, Any]:

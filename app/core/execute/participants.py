@@ -268,6 +268,17 @@ def condition_matches_any(
 
 
 def load_store(storage: Any, *, run_id: str, day: str) -> Dict[str, Any]:
+    from app.core.execute.db import get_blob, using_postgres
+
+    if using_postgres():
+        raw = get_blob(str(run_id), "participants", day)
+        if raw:
+            store = empty_store(run_id=run_id, day=day)
+            rows = raw.get("rows") if isinstance(raw.get("rows"), list) else []
+            store["rows"] = [
+                dict(row) for row in rows if isinstance(row, Mapping)
+            ]
+            return store
     path = participants_relpath(day)
     raw = None
     if storage.exists(path):
@@ -288,7 +299,17 @@ def load_store(storage: Any, *, run_id: str, day: str) -> Dict[str, Any]:
 
 
 def persist_store(storage: Any, day: str, store: Mapping[str, Any]) -> str:
-    return storage.write_json(participants_relpath(day), dict(store))
+    from app.core.execute.db import put_blob, using_postgres
+
+    payload = dict(store)
+    if using_postgres():
+        put_blob(str(store.get("run_id") or ""), "participants", day, payload)
+    try:
+        return storage.write_json(participants_relpath(day), payload)
+    except Exception:
+        if using_postgres():
+            return ""
+        raise
 
 
 def import_csv_text(

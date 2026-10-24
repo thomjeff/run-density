@@ -16,6 +16,7 @@ services:
       # Combined-image contract files (Epic #916 release preservation)
       - ./Dockerfile:/app/Dockerfile:ro
       - ./Dockerfile.cloud:/app/Dockerfile.cloud:ro
+      - ./Dockerfile.execute:/app/Dockerfile.execute:ro
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       # Race Roster → runner CSV conversion CLI
       - ./scripts:/app/scripts
@@ -70,4 +71,50 @@ services:
         reservations:
           memory: 8G
           cpus: '2.0'
+
+  execute-db:
+    image: postgres:15
+    container_name: runflow-execute-db
+    environment:
+      POSTGRES_DB: execute
+      POSTGRES_USER: execute
+      POSTGRES_PASSWORD: execute
+    ports:
+      - "5433:5432"
+    volumes:
+      - execute-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U execute -d execute"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+    cpus: "1.0"
+
+  execute:
+    build:
+      context: .
+      dockerfile: Dockerfile.execute
+    container_name: runflow-execute
+    ports:
+      - "8081:8080"
+    env_file:
+      - dev.env
+    environment:
+      - PORT=8080
+      - PYTHONPATH=/app
+      - RUNFLOW_EXECUTE_RUNTIME=1
+      - EXECUTE_DATABASE_URL=postgresql://execute:execute@execute-db:5432/execute
+      - RUNFLOW_ROOT=/app/runflow
+    volumes:
+      - execute-runtime-data:/app/runflow
+    depends_on:
+      execute-db:
+        condition: service_healthy
+    mem_limit: 1g
+    cpus: "1.0"
+
+volumes:
+  execute-db-data:
+  execute-runtime-data:
 

@@ -62,7 +62,7 @@
     }
 
     function confirmActivate(row) {
-        if (!activeId || activeId === row.published_plan_id) return true;
+        if (!activeId || activeId === row.plan_id) return true;
         return window.confirm(
             "Activate this Day Plan and deactivate the current one? " +
                 "Reopen records stay with each plan."
@@ -131,7 +131,7 @@
                 "</span></td>";
             var actions = document.createElement("td");
             actions.className = "course-map-action-cell";
-            var id = row.published_plan_id;
+            var id = row.plan_id;
             if (row.archived) {
                 appendAction(actions, "restore", "Restore Day Plan", "restore", id);
             } else if (row.active) {
@@ -153,10 +153,10 @@
     }
 
     function loadPlans() {
-        return jsonFetch("/api/execute/published-plans")
+        return jsonFetch("/api/execute/plans")
             .then(function (data) {
                 plans = data.plans || [];
-                activeId = data.active_published_plan_id || null;
+                activeId = data.active_plan_id || null;
                 render();
             })
             .catch(function (err) {
@@ -174,37 +174,43 @@
 
     function runAction(action, planId) {
         var row = plans.filter(function (item) {
-            return item.published_plan_id === planId;
+            return item.plan_id === planId;
         })[0];
         if (action === "activate") {
             if (row && !confirmActivate(row)) return;
-            return postAction("/api/execute/published-plans/activate", {
-                published_plan_id: planId,
+            return postAction("/api/execute/plans/activate", {
+                plan_id: planId,
             }).then(function () {
                 setStatus("Activated.");
+                if (window.runflowRefreshExecuteContext) {
+                    window.runflowRefreshExecuteContext();
+                }
                 return loadPlans();
             });
         }
         if (action === "deactivate") {
-            return postAction("/api/execute/published-plans/deactivate").then(
+            return postAction("/api/execute/plans/deactivate").then(
                 function () {
                     setStatus("Deactivated.");
+                    if (window.runflowRefreshExecuteContext) {
+                        window.runflowRefreshExecuteContext();
+                    }
                     return loadPlans();
                 }
             );
         }
         if (action === "archive") {
             if (row && !confirmArchive(row)) return;
-            return postAction("/api/execute/published-plans/archive", {
-                published_plan_id: planId,
+            return postAction("/api/execute/plans/archive", {
+                plan_id: planId,
             }).then(function () {
                 setStatus("Archived. Records were kept.");
                 return loadPlans();
             });
         }
         if (action === "restore") {
-            return postAction("/api/execute/published-plans/restore", {
-                published_plan_id: planId,
+            return postAction("/api/execute/plans/restore", {
+                plan_id: planId,
             }).then(function () {
                 setStatus("Restored. Activate it to use it on race day.");
                 return loadPlans();
@@ -218,7 +224,7 @@
         var body = new FormData();
         body.append("package", file);
         setStatus("Importing…");
-        return fetch("/api/execute/published-plans/import", {
+        return fetch("/api/execute/plans/import", {
             method: "POST",
             body: body,
             credentials: "same-origin",
@@ -261,5 +267,9 @@
         loadPlans();
     }
 
-    document.addEventListener("DOMContentLoaded", bind);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bind);
+    } else {
+        bind();
+    }
 })();

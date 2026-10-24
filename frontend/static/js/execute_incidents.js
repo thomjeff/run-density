@@ -28,28 +28,9 @@
         return (root || document).querySelector(sel);
     }
 
-    function runId() {
+    function planActive() {
         var ctx = window.runflowExecuteContext;
-        if (ctx && ctx.active && ctx.run_id) return String(ctx.run_id).trim();
-        var params = new URLSearchParams(window.location.search);
-        return (
-            params.get("run_id") ||
-            (window.runflowDay && window.runflowDay.run_id) ||
-            localStorage.getItem("selected_run_id") ||
-            ""
-        ).trim();
-    }
-
-    function dayCode() {
-        var ctx = window.runflowExecuteContext;
-        if (ctx && ctx.active && ctx.weekday_code) {
-            return String(ctx.weekday_code).trim();
-        }
-        return (
-            (window.runflowDay && window.runflowDay.selected) ||
-            localStorage.getItem("selected_day") ||
-            ""
-        ).trim();
+        return !!(ctx && ctx.active && ctx.plan_id);
     }
 
     function incidentId() {
@@ -57,10 +38,7 @@
     }
 
     function apiUrl(path) {
-        var url = path + "?run_id=" + encodeURIComponent(runId());
-        var day = dayCode();
-        if (day) url += "&day=" + encodeURIComponent(day);
-        return url;
+        return path;
     }
 
     function esc(value) {
@@ -219,10 +197,7 @@
     }
 
     function participantsHref() {
-        var url = "/execute/participants?run_id=" + encodeURIComponent(runId());
-        var day = dayCode();
-        if (day) url += "&day=" + encodeURIComponent(day);
-        return url;
+        return "/execute/participants";
     }
 
     function checks(name, items, selected, incident) {
@@ -1678,7 +1653,7 @@
     }
 
     function startWorkspace() {
-        if (!runId()) {
+        if (!planActive()) {
             qs("#rf-hs-empty").hidden = false;
             return;
         }

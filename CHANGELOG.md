@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Execute platform (#922)
+- Execute identity is **`plan_id`**. Calendar date is an attribute. Import rejects leftover `published_plan_id`. Operator APIs are `/api/execute/plans` and `/api/plan/plans`; the store is `execute/plans`
+- Execute chrome shows the active plan name and date. The Plan Runs dropdown is Plan-only
+- Participants and Incidents store under the imported plan, not `runflow/analysis/{source_run_id}`
+- Purpose-built Execute image (`app.execute_app`, `Dockerfile.execute`) copies only Execute + shared libraries it imports; Build/Plan source is absent. Local Compose Postgres 15; combined `app.main` image is unchanged
+- Recorded Execute gates (local 1 CPU / 1 GiB, Sunday ZIP): image **299 MB** (combined 1.53 GB); `/ready` first **309 ms**; idle p95 RSS **62 MiB** / CPU **0.3%**; peak p95 RSS **62 MiB** / CPU **68%**; board/map/HTML/reopen p95 **62 / 65 / 3 / 103 ms**; 20 parallel jobs **0 lost writes**. Compose memory 1 GiB ≥ 1.5 × peak RSS
+
 ### Race-day Execute (#920)
 - Execute nav is **Plans | Operations | Participants | Incidents**
 - Plans follows Build → Packages: Import, Activate, Deactivate, Archive, Restore. Import does not activate; at most one plan is active; archive keeps records; restore does not auto-activate
