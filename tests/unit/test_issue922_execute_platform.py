@@ -223,6 +223,7 @@ def test_execute_dockerfile_is_not_app_main():
     text = dockerfile.read_text(encoding="utf-8")
     assert "app.execute_app:app" in text
     assert "app.main:app" not in text
+    assert "execute_constants.py" in text
     assert "COPY app /app/app" not in text
     assert "COPY frontend /app/frontend" not in text
     assert "app/core/density" not in text

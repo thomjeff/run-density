@@ -10,7 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import re
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -33,9 +33,7 @@ from app.core.locations.report_json import (
     locations_report_relpath,
     parse_optional_id,
 )
-from app.routes.api_execute_runtime import (
-    router as execute_runtime_router,
-)
+from app.routes.api_execute_runtime import router as execute_runtime_router
 from app.storage import create_runflow_storage
 from app.utils.auth import is_session_valid
 from app.utils.env import env_bool
@@ -57,16 +55,14 @@ class ReopenBody(BaseModel):
     loc_id: int
     linked_loc_ids: List[int] = Field(default_factory=list)
 
+
 def _require_run_id(run_id: Optional[str]) -> str:
     if not run_id or not str(run_id).strip():
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "run_id is required. "
-                "Select a Plan analysis before Execute."
-            ),
-        )
+        missing = "run_id is required."
+        hint = "Select a Plan analysis before Execute."
+        raise HTTPException(status_code=400, detail=f"{missing} {hint}")
     return str(run_id).strip()
+
 
 def _guard_session(request: Request) -> None:
     if env_bool("CLOUD_MODE") and not is_session_valid(request):
@@ -101,10 +97,7 @@ def _load_locations(storage: Any, day: str) -> Dict[str, Any]:
     if not isinstance(locations, list):
         raise HTTPException(
             status_code=500,
-            detail=(
-                "locations_report.json is invalid: "
-                "'locations' must be an array."
-            ),
+            detail="locations_report.json is invalid.",
         )
     return payload
 
@@ -114,7 +107,10 @@ def _board_payload(run_id: str, day: str) -> Dict[str, Any]:
     report = _load_locations(storage, day)
     analysis = _read_analysis(run_id)
     state = load_or_create_state(
-        storage, run_id=run_id, day=day, analysis=analysis
+        storage,
+        run_id=run_id,
+        day=day,
+        analysis=analysis,
     )
     return assemble_board(
         locations=report.get("locations") or [],
@@ -173,19 +169,14 @@ async def get_execute_reopen_csv(
         resources_available=available,
     )
     fieldnames = csv_columns(locations, available)
-    filename = (
-        "execute_reopen_"
-        + _safe_export_token(rid)
-        + "_"
-        + _safe_export_token(selected_day)
-        + ".csv"
+    filename = "execute_reopen_{}_{}.csv".format(
+        _safe_export_token(rid),
+        _safe_export_token(selected_day),
     )
     return StreamingResponse(
         io.BytesIO(reopen_csv_text(rows, fieldnames).encode("utf-8")),
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -275,12 +266,13 @@ async def post_execute_reopen(
             status_code=409,
             detail=f"Location {loc_id} is already reopened.",
         )
-    allowed_linked = {
-        parse_optional_id(row.get("loc_id"))
-        for row in (report.get("locations") or [])
-        if isinstance(row, dict)
-        and parse_optional_id(row.get("proxy_loc_id")) == loc_id
-    }
+    allowed_linked = set()
+    for row in report.get("locations") or []:
+        if not isinstance(row, dict):
+            continue
+        if parse_optional_id(row.get("proxy_loc_id")) != loc_id:
+            continue
+        allowed_linked.add(parse_optional_id(row.get("loc_id")))
     linked = []
     for raw in body.linked_loc_ids:
         lid = parse_optional_id(raw)
@@ -304,5 +296,3 @@ async def post_execute_reopen(
     payload = _board_payload(rid, selected_day)
     payload["state"] = state
     return JSONResponse(content=payload)
-
-

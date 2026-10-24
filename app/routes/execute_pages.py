@@ -88,9 +88,7 @@ async def ready():
 
 @router.get("/api/auth/check")
 async def check_session(request: Request):
-    return JSONResponse(
-        content={"authenticated": is_session_valid(request)}
-    )
+    return JSONResponse(content={"authenticated": is_session_valid(request)})
 
 
 @router.get("/execute", response_class=HTMLResponse)

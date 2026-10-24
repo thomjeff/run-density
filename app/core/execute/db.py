@@ -11,11 +11,10 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
 def database_url() -> str:
-    return (
-        os.environ.get("EXECUTE_DATABASE_URL")
-        or os.environ.get("DATABASE_URL")
-        or ""
-    ).strip()
+    url = os.environ.get("EXECUTE_DATABASE_URL")
+    if not url:
+        url = os.environ.get("DATABASE_URL")
+    return (url or "").strip()
 
 
 def using_postgres() -> bool:
@@ -43,13 +42,11 @@ def registry_from_db() -> Dict[str, Any]:
         active = conn.execute(
             "SELECT plan_id FROM execute_active WHERE lock = 1"
         ).fetchone()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT plan_id, revision, calendar_date, weekday_code, name,
                    source_run_id, archived, imported_at
             FROM execute_plans
-            """
-        ).fetchall()
+            """).fetchall()
     plans = {}
     for row in rows:
         plan_id = str(row[0])

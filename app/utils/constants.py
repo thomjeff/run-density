@@ -8,21 +8,11 @@ Issue #798 Phase 8: race-specific schedules/hotspots/map center come from
 ``app.core.race_templates`` (not treated as universal algorithm law).
 """
 
-try:
-    from app.core.race_templates import (
-        get_hotspot_segments,
-        get_map_center,
-        get_v1_event_duration_minutes,
-    )
-except ImportError:  # Execute image omits race templates
-    def get_hotspot_segments():
-        return []
-
-    def get_map_center():
-        return (0.0, 0.0)
-
-    def get_v1_event_duration_minutes():
-        return {}
+from app.core.race_templates import (
+    get_hotspot_segments,
+    get_map_center,
+    get_v1_event_duration_minutes,
+)
 
 # Time conversion constants
 SECONDS_PER_MINUTE = 60.0

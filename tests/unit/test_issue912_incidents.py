@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -16,11 +19,78 @@ from app.core.execute.incidents import (
     transfer_care,
     type_care_change_note,
 )
+from app.core.execute.published_plan import (
+    activate_published_plan,
+    import_published_plan,
+    sha256_bytes,
+)
 from app.main import app
 from app.storage import Storage
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "issue911_participant_list.csv"
+
+_SUNDAY_LOCS = [
+    {
+        "loc_id": 16,
+        "loc_label": "10K Water Stop",
+        "zone": "Z3",
+    },
+    {
+        "loc_id": 22,
+        "loc_label": "Trail at McKeen",
+        "zone": "Z2",
+    },
+]
+
+
+def _package(locations=None) -> bytes:
+    plan_id = str(uuid4())
+    locations = {
+        "locations": list(locations or _SUNDAY_LOCS),
+        "resources_available": [],
+    }
+    course = {"type": "FeatureCollection", "features": []}
+    loc_bytes = json.dumps(locations).encode("utf-8")
+    course_bytes = json.dumps(course).encode("utf-8")
+    manifest = {
+        "schema_version": 1,
+        "plan_id": plan_id,
+        "revision": 1,
+        "published_at": "2026-10-23T12:00:00+00:00",
+        "calendar_date": "2026-10-25",
+        "weekday_code": "sun",
+        "name": "Test Sunday",
+        "timezone": "America/Halifax",
+        "source_run_id": "should-not-be-operator-key",
+        "races": [
+            {"id": "elite", "name": "5K Elite", "course": "courses/elite.geojson"}
+        ],
+        "files": [
+            {"path": "locations.json", "sha256": sha256_bytes(loc_bytes)},
+            {
+                "path": "courses/elite.geojson",
+                "sha256": sha256_bytes(course_bytes),
+            },
+        ],
+    }
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        zf.writestr("locations.json", loc_bytes)
+        zf.writestr("courses/elite.geojson", course_bytes)
+    return buffer.getvalue()
+
+
+def _activate_plan(monkeypatch, tmp_path: Path) -> tuple[str, Path]:
+    monkeypatch.setattr(
+        "app.core.execute.published_plan.get_runflow_root",
+        lambda: tmp_path,
+    )
+    plan_id = import_published_plan(_package(), root=tmp_path)["plan_id"]
+    activate_published_plan(plan_id, root=tmp_path)
+    dest = tmp_path / "execute" / "plans" / plan_id / "r1"
+    return plan_id, dest
 
 
 def _patch_run(monkeypatch, tmp_path: Path, run_id: str) -> Path:
@@ -125,7 +195,8 @@ def test_transfer_care_appends_handoff_note():
 
 
 def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch):
-    run_id = "exec912incidentaaaaaaaaaa"
+    plan_id, dest = _activate_plan(monkeypatch, tmp_path)
+    run_id = plan_id
     run_dir = _patch_run(monkeypatch, tmp_path, run_id)
     report_dir = run_dir / "sun" / "computation"
     report_dir.mkdir(parents=True)
@@ -134,18 +205,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
             {
                 "run_id": run_id,
                 "day": "sun",
-                "locations": [
-                    {
-                        "loc_id": 16,
-                        "loc_label": "10K Water Stop",
-                        "zone": "Z3",
-                    },
-                    {
-                        "loc_id": 22,
-                        "loc_label": "Trail at McKeen",
-                        "zone": "Z2",
-                    },
-                ],
+                "locations": _SUNDAY_LOCS,
             }
         ),
         encoding="utf-8",
@@ -324,7 +384,9 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert xfer_inc["notes"][-1]["detail"] == "walking, alert"
 
     stored = json.loads(
-        (run_dir / "sun" / "execution" / "incidents.json").read_text(encoding="utf-8")
+        (dest / "sun" / "execution" / "incidents.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert stored["schema_version"] == SCHEMA_VERSION
 
@@ -351,9 +413,9 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
 
 
 def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
-    run_id = "exec912legacyaaaaaaaaaaaa"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    exec_dir = run_dir / "sun" / "execution"
+    plan_id, dest = _activate_plan(monkeypatch, tmp_path)
+    run_id = plan_id
+    exec_dir = dest / "sun" / "execution"
     exec_dir.mkdir(parents=True)
     (exec_dir / "incidents.json").write_text(
         json.dumps(

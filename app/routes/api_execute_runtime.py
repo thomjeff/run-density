@@ -10,17 +10,19 @@ from pydantic import BaseModel
 
 from app.core.execute import incidents as hs_incidents
 from app.core.execute import participants as hs_participants
+from app.core.execute.plan_storage import (
+    PlanStorage,
+    location_catalog_from_rows,
+)
 from app.core.execute.published_plan import (
     PublishedPlanError,
     active_plan_id,
     load_imported_plan,
 )
-from app.storage import Storage
 from app.utils.auth import is_session_valid
 from app.utils.env import env_bool
 
 router = APIRouter()
-
 
 
 class IncidentCreateBody(BaseModel):
@@ -72,7 +74,6 @@ class IncidentTransferBody(BaseModel):
     text: Optional[str] = None
 
 
-
 def _require_execute_plan(
     plan_id: Optional[str] = None,
 ) -> tuple:
@@ -87,7 +88,7 @@ def _require_execute_plan(
     except PublishedPlanError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     day = str(loaded["manifest"].get("weekday_code") or "").strip()
-    storage = Storage(root=str(loaded["directory"]))
+    storage = PlanStorage(root=str(loaded["directory"]), plan_id=pid)
     return pid, day, storage, loaded
 
 
@@ -112,22 +113,19 @@ def _incident_view(
     row = roster.get(str(incident.get("reg_id") or ""))
     if row:
         payload["display_bib"] = hs_incidents.display_bib(incident, row)
-        payload["bib"] = payload["display_bib"] or str(incident.get("bib") or "")
-        payload["sub_event"] = (
-            payload.get("sub_event") or row.get("sub_event") or ""
-        )
-        payload["given_name"] = (
-            payload.get("given_name") or row.get("given_name") or ""
-        )
-        payload["family_name"] = (
-            payload.get("family_name") or row.get("family_name") or ""
-        )
+        bib = incident.get("bib") or ""
+        payload["bib"] = payload["display_bib"] or str(bib)
+        sub = payload.get("sub_event") or row.get("sub_event")
+        payload["sub_event"] = sub or ""
+        given = payload.get("given_name") or row.get("given_name")
+        payload["given_name"] = given or ""
+        family = payload.get("family_name") or row.get("family_name")
+        payload["family_name"] = family or ""
         payload["age"] = payload.get("age") or row.get("age") or ""
         payload["sex"] = payload.get("sex") or row.get("sex") or ""
         payload["medical_disclosed"] = row.get("medical_disclosed") or ""
-        payload["medical_conditions"] = list(
-            row.get("medical_conditions") or []
-        )
+        conditions = row.get("medical_conditions") or []
+        payload["medical_conditions"] = list(conditions)
         payload["medical_note"] = row.get("medical_note") or ""
         payload["medical_avoid"] = row.get("medical_avoid") or ""
     else:
@@ -151,22 +149,20 @@ async def get_execute_participants(
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    store = hs_participants.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_participants.load_store(storage, run_id=rid, day=selected_day)
     starts = hs_participants.lookup_rows(store.get("rows") or [])
     needle = (q or "").strip()
-    wanted = [
-        part.strip()
-        for part in str(condition or "").split(",")
-        if part.strip()
-    ]
-    hits = [
-        row
-        for row in starts
-        if hs_participants.query_matches(needle, field or "any", row)
-        and hs_participants.condition_matches_any(row, wanted)
-    ]
+    wanted = []
+    for part in str(condition or "").split(","):
+        token = part.strip()
+        if token:
+            wanted.append(token)
+    hits = []
+    for row in starts:
+        if not hs_participants.query_matches(needle, field or "any", row):
+            continue
+        if hs_participants.condition_matches_any(row, wanted):
+            hits.append(row)
     conditions: List[str] = []
     seen = set()
     for row in starts:
@@ -237,12 +233,11 @@ async def get_execute_incidents(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
-    items = [
-        _incident_view(item, roster) for item in store.get("incidents") or []
-    ]
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    items = []
+    for item in store.get("incidents") or []:
+        items.append(_incident_view(item, roster))
+
     def _when(item: Mapping[str, Any], *keys: str) -> str:
         for key in keys:
             value = item.get(key)
@@ -250,12 +245,14 @@ async def get_execute_incidents(
                 return str(value)
         return ""
 
-    active = [
-        item for item in items if item.get("incident_status") == "active"
-    ]
-    closed = [
-        item for item in items if item.get("incident_status") == "closed"
-    ]
+    active = []
+    closed = []
+    for item in items:
+        status = item.get("incident_status")
+        if status == "active":
+            active.append(item)
+        elif status == "closed":
+            closed.append(item)
     closed.sort(
         key=lambda item: _when(item, "closed_at", "updated_at", "opened_at"),
         reverse=True,
@@ -297,32 +294,27 @@ async def post_execute_incident(
             detail="Incidents can only be opened on a start row.",
         )
     incident = hs_incidents.empty_incident(reg_id=row["reg_id"])
+    given_name = body.given_name
+    if given_name is None:
+        given_name = row.get("given_name")
+    family_name = body.family_name
+    if family_name is None:
+        family_name = row.get("family_name")
+    sub_event = body.sub_event
+    if sub_event is None:
+        sub_event = row.get("sub_event")
     hs_incidents.apply_fields(
         incident,
         {
             "bib": body.bib if body.bib is not None else row.get("bib"),
-            "given_name": (
-                body.given_name
-                if body.given_name is not None
-                else row.get("given_name")
-            ),
-            "family_name": (
-                body.family_name
-                if body.family_name is not None
-                else row.get("family_name")
-            ),
+            "given_name": given_name,
+            "family_name": family_name,
             "age": body.age if body.age is not None else row.get("age"),
             "sex": body.sex if body.sex is not None else row.get("sex"),
-            "sub_event": (
-                body.sub_event
-                if body.sub_event is not None
-                else row.get("sub_event")
-            ),
+            "sub_event": sub_event,
         },
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     store["incidents"] = list(store.get("incidents") or []) + [incident]
     hs_incidents.persist_store(storage, selected_day, store)
     return JSONResponse(
@@ -345,9 +337,7 @@ async def get_execute_incident(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -377,9 +367,7 @@ async def put_execute_incident(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -413,9 +401,7 @@ async def post_execute_incident_note(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -450,9 +436,7 @@ async def post_execute_incident_transfer(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -486,7 +470,7 @@ async def get_execute_incident_locations(
             "ok": True,
             "plan_id": rid,
             "day": selected_day,
-            "locations": hs_incidents.location_catalog_from_rows(
+            "locations": location_catalog_from_rows(
                 (loaded.get("locations") or {}).get("locations") or []
             ),
         }
@@ -505,9 +489,7 @@ async def post_execute_incident_close(
     roster = _roster_by_reg(
         hs_participants.load_store(storage, run_id=rid, day=selected_day)
     )
-    store = hs_incidents.load_store(
-        storage, run_id=rid, day=selected_day
-    )
+    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:

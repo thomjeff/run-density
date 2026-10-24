@@ -302,9 +302,9 @@ def import_published_plan(
     same_revision = int((existing or {}).get("revision") or 0) == revision
     from app.core.execute.db import using_postgres
 
-    already = dest.is_dir() or (
-        using_postgres() and root is None and bool(existing)
-    )
+    already = dest.is_dir()
+    if using_postgres() and root is None and existing:
+        already = True
     if existing and same_revision and already:
         active_id = registry.get("active_plan_id")
         return {
@@ -689,9 +689,7 @@ def load_imported_plan(
         locations_doc = json.loads(loc_path.read_text(encoding="utf-8"))
         courses = {}
         for race in manifest["races"]:
-            rel = race.get("course") or (
-                f"{COURSES_DIR}/{race['id']}.geojson"
-            )
+            rel = race.get("course") or (f"{COURSES_DIR}/{race['id']}.geojson")
             course_path = dest / rel
             if course_path.is_file():
                 raw = course_path.read_text(encoding="utf-8")

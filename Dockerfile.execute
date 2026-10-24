@@ -20,7 +20,7 @@ COPY app/routes/api_execute_runtime.py /app/app/routes/api_execute_runtime.py
 COPY app/routes/api_published_plans.py /app/app/routes/api_published_plans.py
 COPY app/utils/auth.py /app/app/utils/auth.py
 COPY app/utils/env.py /app/app/utils/env.py
-COPY app/utils/constants.py /app/app/utils/constants.py
+COPY app/utils/execute_constants.py /app/app/utils/constants.py
 COPY app/utils/carto_basemaps.py /app/app/utils/carto_basemaps.py
 COPY app/utils/path_mapper.py /app/app/utils/path_mapper.py
 

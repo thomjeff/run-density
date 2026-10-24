@@ -9,10 +9,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
-from app.utils.auth import is_session_valid, require_auth
-from app.utils.carto_basemaps import register_jinja_map_tiles
-from app.utils.env import env_bool
-
 from app.core.execute.published_plan import (
     PublishedPlanError,
     activate_published_plan,
@@ -29,6 +25,9 @@ from app.core.execute.published_plan import (
     restore_published_plan,
     update_operations_clock,
 )
+from app.utils.auth import is_session_valid, require_auth
+from app.utils.carto_basemaps import register_jinja_map_tiles
+from app.utils.env import env_bool
 
 router = APIRouter()
 templates = Jinja2Templates(directory="frontend/templates")
