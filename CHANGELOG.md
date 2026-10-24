@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Execute leftover cleanup (#924)
+- Combined leftover `/api/execute/board|clock|state|reopen` routes are gone. Operations keeps `/api/execute/ops/*`
+- Participants and Incidents use the active `plan_id` only. Stores write `plan_id` and still read leftover `run_id`
+- Execute Postgres reads `EXECUTE_DATABASE_URL` only. Combined login cookies no longer authenticate `:8081`
+- Incident locations come from the imported plan, not analysis `locations_report.json`
+
 ### Execute GPS overlay (#925)
 - Execute Operations can show resource positions and SOS for the active Day Plan
 - Stock Traccar Client OsmAnd ingest uses `EXECUTE_GPS_TOKEN` (device id is not authentication)

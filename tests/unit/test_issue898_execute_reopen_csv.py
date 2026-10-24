@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -13,7 +12,6 @@ from app.core.execute.report import (
     reopen_csv_text,
 )
 from app.core.execute.state import empty_state, record_reopen
-from app.core.locations.report_json import build_locations_report_document
 from app.main import app
 
 
@@ -101,65 +99,10 @@ def test_csv_text_has_count_columns_after_label():
     assert header == ",".join(columns)
 
 
-def _patch_run(monkeypatch, tmp_path: Path, run_id: str) -> Path:
-    monkeypatch.setattr(
-        "app.utils.run_id.get_run_directory",
-        lambda rid: tmp_path / "analysis" / rid,
-    )
-    return tmp_path / "analysis" / run_id
-
-
-def _seed_run(run_dir: Path, run_id: str) -> None:
-    day = run_dir / "sun"
-    comp = day / "computation"
-    comp.mkdir(parents=True)
-    doc = build_locations_report_document(
-        run_id=run_id,
-        day="sun",
-        locations=_locations(),
-        resources_available=["yssr", "awp", "vol"],
-    )
-    (comp / "locations_report.json").write_text(
-        json.dumps(doc), encoding="utf-8"
-    )
-    (run_dir / "analysis.json").write_text(
-        json.dumps({"start_times": {"10k": 435}}),
-        encoding="utf-8",
-    )
-
-
-def test_api_reopen_csv_requires_run_id():
+def test_leftover_reopen_csv_route_is_gone():
     client = TestClient(app)
-    resp = client.get("/api/execute/reopen.csv")
-    assert resp.status_code == 400
-
-
-def test_api_reopen_csv_download(tmp_path, monkeypatch):
-    run_id = "exec898csvbbbbbbbbbbbb"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    _seed_run(run_dir, run_id)
-    client = TestClient(app)
-    client.post(
-        f"/api/execute/reopen?run_id={run_id}&day=sun",
-        json={"loc_id": 2, "linked_loc_ids": []},
-    )
-    resp = client.get(f"/api/execute/reopen.csv?run_id={run_id}&day=sun")
-    assert resp.status_code == 200, resp.text
-    assert "text/csv" in resp.headers["content-type"]
-    assert "execute_reopen_" in resp.headers["content-disposition"]
-    lines = resp.text.strip().split("\n")
-    assert lines[0] == (
-        "loc_id,loc_label,awp_count,vol_count,yssr_count,"
-        "loc_start,first_runner,last_runner,loc_end,"
-        "actual_reopen,difference_min"
-    )
-    queen = [line for line in lines if line.startswith("2,")][0]
-    assert queen.startswith("2,St John at Queen,1,0,2,")
-    assert "06:30:00" in queen
-    assert "07:20:10" in queen
-    assert "08:40:00" in queen
-    water = [line for line in lines if line.startswith("3,")][0]
-    assert water.endswith(",")
+    assert client.get("/api/execute/reopen.csv").status_code == 404
+    assert client.get("/api/execute/reopen").status_code == 404
 
 
 def test_execute_js_points_at_reopen_csv():

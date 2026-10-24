@@ -117,17 +117,14 @@ def test_duplicate_start_bibs_fail():
 
 def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     plan_id, dest = _activate_plan(monkeypatch, tmp_path)
-    run_id = plan_id
     client = TestClient(app)
-    empty = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun"
-    )
+    empty = client.get("/api/execute/participants")
     assert empty.status_code == 200, empty.text
     assert empty.json()["participants"] == []
     assert empty.json()["starts"] == 0
 
     imported = client.post(
-        f"/api/execute/participants/import?run_id={run_id}&day=sun",
+        "/api/execute/participants/import",
         files={
             "file": (
                 "roster.csv",
@@ -147,48 +144,39 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
         )
     )
     assert len(stored["rows"]) == 12
+    assert stored["plan_id"] == plan_id
+    assert "run_id" not in stored
 
-    listed = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun"
-    )
+    listed = client.get("/api/execute/participants")
     assert listed.status_code == 200
     assert listed.json()["count"] == 10
     assert listed.json()["starts"] == 10
 
-    hit = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun&q=21100&field=bib"
-    )
+    hit = client.get("/api/execute/participants?q=21100&field=bib")
     assert hit.status_code == 200
     people = hit.json()["participants"]
     assert len(people) == 1
     assert people[0]["given_name"] == "Debbie"
-    asthma = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun"
-        "&condition=Asthma"
-    )
+    asthma = client.get("/api/execute/participants?condition=Asthma")
     names = {row["given_name"] for row in asthma.json()["participants"]}
     assert "Debbie" in names
 
-    hidden = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun&q=Jesome&field=name"
-    )
+    hidden = client.get("/api/execute/participants?q=Jesome&field=name")
     sally = hidden.json()["participants"]
     assert len(sally) == 2
     assert {row["bib"] for row in sally} == {"5013", "10100"}
 
-    nobib = client.get(
-        f"/api/execute/participants?run_id={run_id}&day=sun&q=Chen&field=name"
-    )
+    nobib = client.get("/api/execute/participants?q=Chen&field=name")
     assert nobib.json()["participants"][0]["bib"] == ""
 
     bundle_reg = client.post(
-        f"/api/execute/incidents?run_id={run_id}&day=sun",
+        "/api/execute/incidents",
         json={"reg_id": "5"},
     )
     assert bundle_reg.status_code == 400
 
     created = client.post(
-        f"/api/execute/incidents?run_id={run_id}&day=sun",
+        "/api/execute/incidents",
         json={"reg_id": "1"},
     )
     assert created.status_code == 200, created.text
@@ -207,18 +195,18 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     assert incident["notes"][0]["kind"] == "system"
 
     note1 = client.post(
-        f"/api/execute/incidents/{iid}/notes?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}/notes",
         json={"text": "Arrived walking."},
     )
     assert note1.status_code == 200
     note2 = client.post(
-        f"/api/execute/incidents/{iid}/notes?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}/notes",
         json={"text": "Elects not to continue."},
     )
     assert len(note2.json()["incident"]["notes"]) == 3
 
     saved = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"outcome": "dnf", "location_text": "Med tent, km 16"},
     )
     assert saved.json()["incident"]["outcome"] == "dnf"
@@ -226,14 +214,12 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     assert saved_notes == ["Opened.", "Arrived walking.", "Elects not to continue."]
     assert not any(text.startswith("Updated ") for text in saved_notes)
     closed = client.post(
-        f"/api/execute/incidents/{iid}/close?run_id={run_id}&day=sun"
+        f"/api/execute/incidents/{iid}/close"
     )
     assert closed.json()["incident"]["incident_status"] == "closed"
     closed_notes = [item["text"] for item in closed.json()["incident"]["notes"]]
     assert "Closed · Did not finish (DNF)." in closed_notes
-    lists = client.get(
-        f"/api/execute/incidents?run_id={run_id}&day=sun"
-    )
+    lists = client.get("/api/execute/incidents")
     assert lists.json()["counts"]["closed"] == 1
     assert lists.json()["closed"][0]["display_bib"] == "21100"
 
@@ -242,12 +228,12 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
         "1,29999,Perkins,Debbie",
     )
     again = client.post(
-        f"/api/execute/participants/import?run_id={run_id}&day=sun",
+        "/api/execute/participants/import",
         files={"file": ("roster.csv", rewritten.encode("utf-8"), "text/csv")},
     )
     assert again.status_code == 200, again.text
     shown = client.get(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun"
+        f"/api/execute/incidents/{iid}"
     )
     assert shown.json()["incident"]["display_bib"] == "29999"
     assert shown.json()["incident"]["incident_status"] == "closed"
@@ -255,14 +241,13 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
 
 def test_api_rejects_duplicate_start_bibs(tmp_path, monkeypatch):
     plan_id, _dest = _activate_plan(monkeypatch, tmp_path)
-    run_id = plan_id
     client = TestClient(app)
     colliding = FIXTURE.read_text(encoding="utf-8").replace(
         "11,10102,Smith,James",
         "11,10100,Smith,James",
     )
     resp = client.post(
-        f"/api/execute/participants/import?run_id={run_id}&day=sun",
+        "/api/execute/participants/import",
         files={"file": ("roster.csv", colliding.encode("utf-8"), "text/csv")},
     )
     assert resp.status_code == 409

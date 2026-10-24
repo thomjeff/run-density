@@ -19,6 +19,7 @@ from app.core.execute.published_plan import (
     active_plan_id,
     load_imported_plan,
 )
+from app.core.execute.store_identity import with_plan_id
 from app.utils.auth import is_session_valid
 from app.utils.env import env_bool
 
@@ -92,6 +93,38 @@ def _require_execute_plan(
     return pid, day, storage, loaded
 
 
+def _participants_store(
+    storage: Any,
+    plan_id: str,
+    day: str,
+) -> Dict[str, Any]:
+    return with_plan_id(
+        hs_participants.load_store(storage, run_id=plan_id, day=day),
+        plan_id,
+    )
+
+
+def _incidents_store(
+    storage: Any,
+    plan_id: str,
+    day: str,
+) -> Dict[str, Any]:
+    return with_plan_id(
+        hs_incidents.load_store(storage, run_id=plan_id, day=day),
+        plan_id,
+    )
+
+
+def _persist_incidents(
+    storage: Any,
+    day: str,
+    store: Mapping[str, Any],
+    plan_id: str,
+) -> str:
+    payload = with_plan_id(store, plan_id)
+    return hs_incidents.persist_store(storage, day, payload)
+
+
 def _guard_session(request: Request) -> None:
     if env_bool("CLOUD_MODE") and not is_session_valid(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -141,15 +174,13 @@ def _incident_view(
 @router.get("/api/execute/participants")
 async def get_execute_participants(
     request: Request,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     field: Optional[str] = Query("any"),
     condition: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    store = hs_participants.load_store(storage, run_id=rid, day=selected_day)
+    store = _participants_store(storage, rid, selected_day)
     starts = hs_participants.lookup_rows(store.get("rows") or [])
     needle = (q or "").strip()
     wanted = []
@@ -189,8 +220,6 @@ async def get_execute_participants(
 async def post_execute_participants_import(
     request: Request,
     file: UploadFile = File(...),
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
@@ -206,6 +235,8 @@ async def post_execute_participants_import(
         store, stats = hs_participants.import_csv_text(
             storage, run_id=rid, day=selected_day, text=text
         )
+        store = with_plan_id(store, rid)
+        hs_participants.persist_store(storage, selected_day, store)
     except hs_participants.DuplicateBibError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -225,15 +256,11 @@ async def post_execute_participants_import(
 @router.get("/api/execute/incidents")
 async def get_execute_incidents(
     request: Request,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     items = []
     for item in store.get("incidents") or []:
         items.append(_incident_view(item, roster))
@@ -274,14 +301,10 @@ async def get_execute_incidents(
 async def post_execute_incident(
     request: Request,
     body: IncidentCreateBody,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
     row = roster.get(str(body.reg_id).strip())
     if row is None:
         raise HTTPException(
@@ -314,9 +337,9 @@ async def post_execute_incident(
             "sub_event": sub_event,
         },
     )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    store = _incidents_store(storage, rid, selected_day)
     store["incidents"] = list(store.get("incidents") or []) + [incident]
-    hs_incidents.persist_store(storage, selected_day, store)
+    _persist_incidents(storage, selected_day, store, rid)
     return JSONResponse(
         content={
             "ok": True,
@@ -329,15 +352,11 @@ async def post_execute_incident(
 async def get_execute_incident(
     request: Request,
     incident_id: str,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -359,15 +378,11 @@ async def put_execute_incident(
     request: Request,
     incident_id: str,
     body: IncidentUpdateBody,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -379,7 +394,7 @@ async def put_execute_incident(
         hs_incidents.apply_fields(incident, body.model_dump(exclude_none=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    hs_incidents.persist_store(storage, selected_day, store)
+    _persist_incidents(storage, selected_day, store, rid)
     return JSONResponse(
         content={
             "ok": True,
@@ -393,15 +408,11 @@ async def post_execute_incident_note(
     request: Request,
     incident_id: str,
     body: IncidentNoteBody,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -414,7 +425,7 @@ async def post_execute_incident_note(
         hs_incidents.append_note(incident, body.text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    hs_incidents.persist_store(storage, selected_day, store)
+    _persist_incidents(storage, selected_day, store, rid)
     return JSONResponse(
         content={
             "ok": True,
@@ -428,15 +439,11 @@ async def post_execute_incident_transfer(
     request: Request,
     incident_id: str,
     body: IncidentTransferBody,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -448,7 +455,7 @@ async def post_execute_incident_transfer(
         hs_incidents.transfer_care(incident, body.to_agency, body.text or "")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    hs_incidents.persist_store(storage, selected_day, store)
+    _persist_incidents(storage, selected_day, store, rid)
     return JSONResponse(
         content={
             "ok": True,
@@ -460,8 +467,6 @@ async def post_execute_incident_transfer(
 @router.get("/api/execute/locations")
 async def get_execute_incident_locations(
     request: Request,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, loaded = _require_execute_plan()
@@ -481,15 +486,11 @@ async def get_execute_incident_locations(
 async def post_execute_incident_close(
     request: Request,
     incident_id: str,
-    run_id: Optional[str] = Query(None),
-    day: Optional[str] = Query(None),
 ) -> JSONResponse:
     _guard_session(request)
     rid, selected_day, storage, _loaded = _require_execute_plan()
-    roster = _roster_by_reg(
-        hs_participants.load_store(storage, run_id=rid, day=selected_day)
-    )
-    store = hs_incidents.load_store(storage, run_id=rid, day=selected_day)
+    roster = _roster_by_reg(_participants_store(storage, rid, selected_day))
+    store = _incidents_store(storage, rid, selected_day)
     try:
         incident = hs_incidents.find_incident(store, incident_id)
     except hs_incidents.IncidentNotFoundError as exc:
@@ -498,7 +499,7 @@ async def post_execute_incident_close(
             detail=f"Unknown incident_id {incident_id}.",
         ) from exc
     hs_incidents.close_incident(incident)
-    hs_incidents.persist_store(storage, selected_day, store)
+    _persist_incidents(storage, selected_day, store, rid)
     return JSONResponse(
         content={
             "ok": True,

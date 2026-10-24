@@ -12,6 +12,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.core.execute.db import init_schema, using_postgres
+from app.core.execute.session_cookies import (
+    rewrite_request_cookies,
+    rewrite_response_cookies,
+)
 from app.routes.api_execute_gps import router as api_execute_gps_router
 from app.routes.api_execute_runtime import router as api_execute_router
 from app.routes.api_published_plans import router as api_published_plans_router
@@ -27,6 +31,15 @@ os.environ.setdefault("RUNFLOW_EXECUTE_RUNTIME", "1")
 app = FastAPI(title="Runflow Execute", version=get_version())
 execute_page_templates.env.globals["execute_runtime"] = True
 execute_plan_templates.env.globals["execute_runtime"] = True
+
+
+@app.middleware("http")
+async def isolate_execute_session_cookies(request, call_next):
+    rewrite_request_cookies(request)
+    response = await call_next(request)
+    return rewrite_response_cookies(response)
+
+
 app.include_router(execute_pages_router)
 app.include_router(api_execute_router)
 app.include_router(api_execute_gps_router)

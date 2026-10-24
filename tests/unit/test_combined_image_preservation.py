@@ -105,7 +105,8 @@ def test_app_registers_build_plan_execute_routes():
     missing = [path for path in CRITICAL_PATHS if path not in paths]
     assert missing == [], f"Missing combined-app routes: {missing}"
     assert "/api/plan/plans" in paths
-    assert "/api/execute/board" in paths
+    assert "/api/execute/ops/board" in paths
+    assert "/api/execute/board" not in paths
 
 
 def test_critical_routes_respond_without_500():

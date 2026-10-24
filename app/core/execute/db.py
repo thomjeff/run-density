@@ -11,10 +11,7 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
 def database_url() -> str:
-    url = os.environ.get("EXECUTE_DATABASE_URL")
-    if not url:
-        url = os.environ.get("DATABASE_URL")
-    return (url or "").strip()
+    return (os.environ.get("EXECUTE_DATABASE_URL") or "").strip()
 
 
 def using_postgres() -> bool:
