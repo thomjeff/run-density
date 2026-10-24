@@ -52,30 +52,8 @@
         return (root || document).querySelector(sel);
     }
 
-    function runId() {
-        var params = new URLSearchParams(window.location.search);
-        return (
-            params.get("run_id") ||
-            (window.runflowDay && window.runflowDay.run_id) ||
-            localStorage.getItem("selected_run_id") ||
-            ""
-        ).trim();
-    }
-
-    function dayCode() {
-        return (
-            (window.runflowDay && window.runflowDay.selected) ||
-            localStorage.getItem("selected_day") ||
-            ""
-        ).trim();
-    }
-
     function apiUrl(path) {
-        if (path.indexOf("/api/execute/ops/") === 0) return path;
-        var url = path + "?run_id=" + encodeURIComponent(runId());
-        var day = dayCode();
-        if (day) url += "&day=" + encodeURIComponent(day);
-        return url;
+        return path;
     }
 
     function esc(value) {
@@ -807,5 +785,9 @@
         loadBoard();
     }
 
-    document.addEventListener("DOMContentLoaded", bind);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bind);
+    } else {
+        bind();
+    }
 })();

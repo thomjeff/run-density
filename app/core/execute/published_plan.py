@@ -29,7 +29,7 @@ from app.core.execute.state import (
 )
 from app.core.execute.times import wall_hhmmss
 from app.utils.constants import COURSE_EVENT_IDS, DISPLAY_TIMEZONE
-from app.utils.run_id import get_runflow_root
+from app.utils.path_mapper import resolve_runflow_root as get_runflow_root
 
 SCHEMA_VERSION = 1
 REGISTRY_NAME = "registry.json"
@@ -90,7 +90,7 @@ def assert_uuid(value: Any) -> str:
     try:
         return str(UUID(str(value)))
     except (TypeError, ValueError) as exc:
-        msg = "published_plan_id must be an RFC 4122 UUID."
+        msg = "plan_id must be an RFC 4122 UUID."
         raise PublishedPlanError(msg) from exc
 
 
@@ -101,7 +101,11 @@ def race_display_name(race_id: str) -> str:
 
 def execute_store_root(root: Optional[Path] = None) -> Path:
     base = Path(root) if root else get_runflow_root()
-    return base / "execute" / "published_plans"
+    store = base / "execute" / "plans"
+    leftover = base / "execute" / "published_plans"
+    if not store.exists() and leftover.exists():
+        leftover.rename(store)
+    return store
 
 
 def registry_path(root: Optional[Path] = None) -> Path:
@@ -109,12 +113,12 @@ def registry_path(root: Optional[Path] = None) -> Path:
 
 
 def plan_revision_dir(
-    published_plan_id: str,
+    plan_id: str,
     revision: int,
     root: Optional[Path] = None,
 ) -> Path:
     root_dir = execute_store_root(root)
-    return root_dir / published_plan_id / f"r{int(revision)}"
+    return root_dir / plan_id / f"r{int(revision)}"
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -122,21 +126,31 @@ def sha256_bytes(payload: bytes) -> str:
 
 
 def load_registry(root: Optional[Path] = None) -> Dict[str, Any]:
+    from app.core.execute.db import registry_from_db, using_postgres
+
+    if using_postgres() and root is None:
+        return registry_from_db()
     path = registry_path(root)
     if not path.is_file():
-        return {"active_published_plan_id": None, "plans": {}}
+        return {"active_plan_id": None, "plans": {}}
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise PublishedPlanError("registry.json is invalid.")
-    data.setdefault("active_published_plan_id", None)
-    data.setdefault("plans", {})
-    return data
+    normalized = _normalize_registry(data)
+    if _registry_has_leftover(data):
+        save_registry(normalized, root)
+    return normalized
 
 
 def save_registry(
     registry: Mapping[str, Any],
     root: Optional[Path] = None,
 ) -> None:
+    from app.core.execute.db import save_registry_db, using_postgres
+
+    if using_postgres() and root is None:
+        save_registry_db(dict(registry))
+        return
     path = registry_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -145,12 +159,52 @@ def save_registry(
     )
 
 
+def _registry_has_leftover(data: Mapping[str, Any]) -> bool:
+    if "active_published_plan_id" in data:
+        return True
+    for meta in (data.get("plans") or {}).values():
+        if isinstance(meta, Mapping) and "published_plan_id" in meta:
+            return True
+    return False
+
+
+def _normalize_registry(data: Mapping[str, Any]) -> Dict[str, Any]:
+    out = dict(data)
+    leftover_active = out.pop("active_published_plan_id", None)
+    if out.get("active_plan_id") in (None, "") and leftover_active:
+        out["active_plan_id"] = leftover_active
+    out.setdefault("active_plan_id", None)
+    plans: Dict[str, Any] = {}
+    for key, meta in (out.get("plans") or {}).items():
+        if not isinstance(meta, Mapping):
+            continue
+        row = dict(meta)
+        leftover_id = row.pop("published_plan_id", None)
+        raw_id = row.get("plan_id") or leftover_id or key
+        try:
+            plan_id = assert_uuid(raw_id)
+        except PublishedPlanError:
+            continue
+        row["plan_id"] = plan_id
+        plans[plan_id] = row
+    active = out.get("active_plan_id")
+    if active:
+        try:
+            out["active_plan_id"] = assert_uuid(active)
+        except PublishedPlanError:
+            out["active_plan_id"] = None
+    out["plans"] = plans
+    return out
+
+
 def validate_manifest(manifest: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(manifest, Mapping):
         raise PublishedPlanError("manifest must be an object.")
     if int(manifest.get("schema_version") or 0) != SCHEMA_VERSION:
         raise PublishedPlanError("Unsupported published-plan schema_version.")
-    plan_id = assert_uuid(manifest.get("published_plan_id"))
+    if manifest.get("plan_id") in (None, ""):
+        raise PublishedPlanError("plan_id is required.")
+    plan_id = assert_uuid(manifest.get("plan_id"))
     calendar_date = str(manifest.get("calendar_date") or "").strip()
     if not calendar_date:
         raise PublishedPlanError("calendar_date is required.")
@@ -193,7 +247,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(files, list) or not files:
         raise PublishedPlanError("files + checksums are required.")
     out = dict(manifest)
-    out["published_plan_id"] = plan_id
+    out["plan_id"] = plan_id
+    out.pop("published_plan_id", None)
     out["calendar_date"] = calendar_date
     out["weekday_code"] = weekday
     out["revision"] = revision
@@ -239,18 +294,23 @@ def import_published_plan(
         raise PublishedPlanError("Package is missing manifest.json.")
     manifest = validate_manifest(json.loads(raw.decode("utf-8")))
     _verify_checksums(manifest, files)
-    plan_id = manifest["published_plan_id"]
+    plan_id = manifest["plan_id"]
     revision = int(manifest["revision"])
     dest = plan_revision_dir(plan_id, revision, root)
     registry = load_registry(root)
     existing = (registry.get("plans") or {}).get(plan_id)
     same_revision = int((existing or {}).get("revision") or 0) == revision
-    if existing and same_revision and dest.is_dir():
-        active_id = registry.get("active_published_plan_id")
+    from app.core.execute.db import using_postgres
+
+    already = dest.is_dir() or (
+        using_postgres() and root is None and bool(existing)
+    )
+    if existing and same_revision and already:
+        active_id = registry.get("active_plan_id")
         return {
             "imported": False,
             "idempotent": True,
-            "published_plan_id": plan_id,
+            "plan_id": plan_id,
             "revision": revision,
             "calendar_date": manifest["calendar_date"],
             "activated": active_id == plan_id,
@@ -264,7 +324,7 @@ def import_published_plan(
         target.write_bytes(payload)
     plans = dict(registry.get("plans") or {})
     plans[plan_id] = {
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "revision": revision,
         "calendar_date": manifest["calendar_date"],
         "weekday_code": manifest["weekday_code"],
@@ -275,10 +335,28 @@ def import_published_plan(
     }
     registry["plans"] = plans
     save_registry(registry, root)
+    if using_postgres() and root is None:
+        from app.core.execute.db import save_plan_package
+
+        locations_doc = json.loads((dest / LOCATIONS_NAME).read_text())
+        courses: Dict[str, Any] = {}
+        for race in manifest["races"]:
+            rel = race.get("course") or f"{COURSES_DIR}/{race['id']}.geojson"
+            course_path = dest / rel
+            if course_path.is_file():
+                courses[race["id"]] = json.loads(
+                    course_path.read_text(encoding="utf-8")
+                )
+        save_plan_package(
+            plan_id,
+            manifest=manifest,
+            locations=locations_doc,
+            courses=courses,
+        )
     return {
         "imported": True,
         "idempotent": False,
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "revision": revision,
         "calendar_date": manifest["calendar_date"],
         "activated": False,
@@ -286,32 +364,32 @@ def import_published_plan(
 
 
 def activate_published_plan(
-    published_plan_id: str,
+    plan_id: str,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = assert_uuid(published_plan_id)
+    plan_id = assert_uuid(plan_id)
     registry = load_registry(root)
     meta = (registry.get("plans") or {}).get(plan_id)
     if not meta:
         raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
     if meta.get("archived"):
         raise PublishedPlanError("Restore this Day Plan before activating.")
-    registry["active_published_plan_id"] = plan_id
+    registry["active_plan_id"] = plan_id
     save_registry(registry, root)
     return load_imported_plan(plan_id, root)
 
 
 def deactivate_published_plan(root: Optional[Path] = None) -> None:
     registry = load_registry(root)
-    registry["active_published_plan_id"] = None
+    registry["active_plan_id"] = None
     save_registry(registry, root)
 
 
 def archive_published_plan(
-    published_plan_id: str,
+    plan_id: str,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = assert_uuid(published_plan_id)
+    plan_id = assert_uuid(plan_id)
     registry = load_registry(root)
     plans = dict(registry.get("plans") or {})
     if plan_id not in plans:
@@ -319,17 +397,17 @@ def archive_published_plan(
     plans[plan_id] = dict(plans[plan_id])
     plans[plan_id]["archived"] = True
     registry["plans"] = plans
-    if registry.get("active_published_plan_id") == plan_id:
-        registry["active_published_plan_id"] = None
+    if registry.get("active_plan_id") == plan_id:
+        registry["active_plan_id"] = None
     save_registry(registry, root)
     return plans[plan_id]
 
 
 def restore_published_plan(
-    published_plan_id: str,
+    plan_id: str,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = assert_uuid(published_plan_id)
+    plan_id = assert_uuid(plan_id)
     registry = load_registry(root)
     plans = dict(registry.get("plans") or {})
     if plan_id not in plans:
@@ -343,11 +421,11 @@ def restore_published_plan(
 
 def listed_plans(root: Optional[Path] = None) -> Dict[str, Any]:
     registry = load_registry(root)
-    active_id = registry.get("active_published_plan_id")
+    active_id = registry.get("active_plan_id")
     rows = []
     for meta in (registry.get("plans") or {}).values():
         row = dict(meta)
-        plan_id = row.get("published_plan_id")
+        plan_id = row.get("plan_id")
         archived = bool(row.get("archived"))
         row["archived"] = archived
         row["active"] = (not archived) and plan_id == active_id
@@ -366,16 +444,16 @@ def listed_plans(root: Optional[Path] = None) -> Dict[str, Any]:
 
     rows.sort(key=_sort_key)
     return {
-        "active_published_plan_id": active_id,
+        "active_plan_id": active_id,
         "plans": rows,
     }
 
 
 def operational_state_path(
-    published_plan_id: str,
+    plan_id: str,
     root: Optional[Path] = None,
 ) -> Path:
-    plan_id = assert_uuid(published_plan_id)
+    plan_id = assert_uuid(plan_id)
     return execute_store_root(root) / plan_id / "execution" / "state.json"
 
 
@@ -390,45 +468,54 @@ def _guns_from_manifest(manifest: Mapping[str, Any]) -> Dict[str, str]:
 
 
 def load_operational_state(
-    published_plan_id: str,
+    plan_id: str,
     *,
     day: str,
     manifest: Optional[Mapping[str, Any]] = None,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    path = operational_state_path(published_plan_id, root)
+    from app.core.execute.db import get_blob, using_postgres
+
+    path = operational_state_path(plan_id, root)
     raw = None
-    if path.is_file():
+    if using_postgres() and root is None:
+        raw = get_blob(plan_id, "reopen_state", day)
+    if raw is None and path.is_file():
         raw = json.loads(path.read_text(encoding="utf-8"))
     guns = _guns_from_manifest(manifest or {})
     return normalize_state(
         raw,
-        run_id=published_plan_id,
+        run_id=plan_id,
         day=day,
         analysis_guns=guns,
     )
 
 
 def save_operational_state(
-    published_plan_id: str,
+    plan_id: str,
     state: Mapping[str, Any],
     root: Optional[Path] = None,
 ) -> None:
-    path = operational_state_path(published_plan_id, root)
+    from app.core.execute.db import put_blob, using_postgres
+
+    payload = dict(state)
+    if using_postgres() and root is None:
+        put_blob(plan_id, "reopen_state", str(state.get("day") or ""), payload)
+    path = operational_state_path(plan_id, root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(dict(state), indent=2, sort_keys=True) + "\n",
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
 
 def operations_board(
-    published_plan_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
     root: Optional[Path] = None,
     now_hhmmss: Optional[str] = None,
     state: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    plan_id = published_plan_id or active_published_plan_id(root)
+    plan_id = plan_id or active_plan_id(root)
     if not plan_id:
         return {
             "ok": False,
@@ -465,7 +552,7 @@ def operations_board(
     )
     board["ok"] = True
     board["empty"] = False
-    board["published_plan_id"] = plan_id
+    board["plan_id"] = plan_id
     board["calendar_date"] = manifest.get("calendar_date")
     board["name"] = manifest.get("name") or ""
     board["courses"] = loaded.get("courses") or {}
@@ -479,7 +566,7 @@ def record_operations_reopen(
     linked_loc_ids: Optional[List[int]] = None,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = active_published_plan_id(root)
+    plan_id = active_plan_id(root)
     if not plan_id:
         raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
     loaded = load_imported_plan(plan_id, root)
@@ -506,7 +593,7 @@ def update_operations_clock(
     payload: Mapping[str, Any],
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = active_published_plan_id(root)
+    plan_id = active_plan_id(root)
     if not plan_id:
         raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
     loaded = load_imported_plan(plan_id, root)
@@ -528,7 +615,7 @@ def update_operations_clock(
 def operations_reopen_csv(
     root: Optional[Path] = None,
 ) -> Tuple[str, str]:
-    plan_id = active_published_plan_id(root)
+    plan_id = active_plan_id(root)
     if not plan_id:
         raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
     loaded = load_imported_plan(plan_id, root)
@@ -557,7 +644,7 @@ def operations_reopen_csv(
 
 
 def active_day_context(root: Optional[Path] = None) -> Dict[str, Any]:
-    plan_id = active_published_plan_id(root)
+    plan_id = active_plan_id(root)
     if not plan_id:
         return {"active": False}
     loaded = load_imported_plan(plan_id, root)
@@ -567,48 +654,59 @@ def active_day_context(root: Optional[Path] = None) -> Dict[str, Any]:
     )
     return {
         "active": True,
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "name": manifest.get("name") or "",
         "calendar_date": manifest.get("calendar_date"),
         "weekday_code": day,
-        "run_id": manifest.get("source_run_id") or "",
         "source_run_id": manifest.get("source_run_id") or "",
     }
 
 
 def load_imported_plan(
-    published_plan_id: str,
+    plan_id: str,
     root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    plan_id = assert_uuid(published_plan_id)
+    plan_id = assert_uuid(plan_id)
     registry = load_registry(root)
     meta = (registry.get("plans") or {}).get(plan_id)
     if not meta:
         raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
     dest = plan_revision_dir(plan_id, int(meta["revision"]), root)
-    manifest = validate_manifest(
-        json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
-    )
-    loc_path = dest / LOCATIONS_NAME
-    locations_doc = json.loads(loc_path.read_text(encoding="utf-8"))
-    courses: Dict[str, Any] = {}
-    for race in manifest["races"]:
-        rel = race.get("course") or f"{COURSES_DIR}/{race['id']}.geojson"
-        course_path = dest / rel
-        if course_path.is_file():
-            raw = course_path.read_text(encoding="utf-8")
-            courses[race["id"]] = json.loads(raw)
+    from app.core.execute.db import load_plan_package, using_postgres
+
+    package = None
+    if using_postgres() and root is None:
+        package = load_plan_package(plan_id)
+    if package and package.get("manifest"):
+        manifest = validate_manifest(package["manifest"])
+        locations_doc = package.get("locations") or {}
+        courses = package.get("courses") or {}
+    else:
+        manifest = validate_manifest(
+            json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
+        )
+        loc_path = dest / LOCATIONS_NAME
+        locations_doc = json.loads(loc_path.read_text(encoding="utf-8"))
+        courses = {}
+        for race in manifest["races"]:
+            rel = race.get("course") or (
+                f"{COURSES_DIR}/{race['id']}.geojson"
+            )
+            course_path = dest / rel
+            if course_path.is_file():
+                raw = course_path.read_text(encoding="utf-8")
+                courses[race["id"]] = json.loads(raw)
     return {
         "manifest": manifest,
         "locations": locations_doc,
         "courses": courses,
         "directory": str(dest),
-        "active": registry.get("active_published_plan_id") == plan_id,
+        "active": registry.get("active_plan_id") == plan_id,
     }
 
 
-def active_published_plan_id(root: Optional[Path] = None) -> Optional[str]:
-    return load_registry(root).get("active_published_plan_id")
+def active_plan_id(root: Optional[Path] = None) -> Optional[str]:
+    return load_registry(root).get("active_plan_id")
 
 
 def classify_locations(
@@ -629,12 +727,12 @@ def classify_locations(
 
 
 def map_snapshot(
-    published_plan_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
     root: Optional[Path] = None,
     now_hhmmss: Optional[str] = None,
     state: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    plan_id = published_plan_id or active_published_plan_id(root)
+    plan_id = plan_id or active_plan_id(root)
     if not plan_id:
         return {
             "ok": False,
@@ -688,7 +786,7 @@ def map_snapshot(
     return {
         "ok": True,
         "empty": False,
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "calendar_date": manifest["calendar_date"],
         "weekday_code": manifest.get("weekday_code"),
         "name": manifest.get("name") or "",

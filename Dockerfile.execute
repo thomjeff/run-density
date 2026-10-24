@@ -1,0 +1,51 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-execute.txt /app/requirements-execute.txt
+RUN pip install --no-cache-dir -r /app/requirements-execute.txt
+
+# Execute application + shared libraries it actually imports.
+# Do not COPY app/ or frontend/ wholesale.
+COPY app/execute_app.py /app/app/execute_app.py
+COPY app/version.py /app/app/version.py
+COPY app/storage.py /app/app/storage.py
+COPY app/core/__init__.py /app/app/core/__init__.py
+COPY app/core/execute /app/app/core/execute
+COPY app/core/locations/__init__.py /app/app/core/locations/__init__.py
+COPY app/core/locations/report_json.py /app/app/core/locations/report_json.py
+COPY app/routes/__init__.py /app/app/routes/__init__.py
+COPY app/routes/execute_pages.py /app/app/routes/execute_pages.py
+COPY app/routes/api_execute_runtime.py /app/app/routes/api_execute_runtime.py
+COPY app/routes/api_published_plans.py /app/app/routes/api_published_plans.py
+COPY app/utils/auth.py /app/app/utils/auth.py
+COPY app/utils/env.py /app/app/utils/env.py
+COPY app/utils/constants.py /app/app/utils/constants.py
+COPY app/utils/carto_basemaps.py /app/app/utils/carto_basemaps.py
+COPY app/utils/path_mapper.py /app/app/utils/path_mapper.py
+
+COPY frontend/templates/base.html /app/frontend/templates/base.html
+COPY frontend/templates/pages/password.html /app/frontend/templates/pages/password.html
+COPY frontend/templates/pages/execute.html /app/frontend/templates/pages/execute.html
+COPY frontend/templates/pages/execute_plans.html /app/frontend/templates/pages/execute_plans.html
+COPY frontend/templates/pages/execute_participants.html /app/frontend/templates/pages/execute_participants.html
+COPY frontend/templates/pages/execute_incidents.html /app/frontend/templates/pages/execute_incidents.html
+COPY frontend/templates/partials/race_config_page_styles.html /app/frontend/templates/partials/race_config_page_styles.html
+COPY frontend/static/css/common.css /app/frontend/static/css/common.css
+COPY frontend/static/css/tabler_spike.css /app/frontend/static/css/tabler_spike.css
+COPY frontend/static/css/execute_plans.css /app/frontend/static/css/execute_plans.css
+COPY frontend/static/css/execute_board.css /app/frontend/static/css/execute_board.css
+COPY frontend/static/css/execute_hs.css /app/frontend/static/css/execute_hs.css
+COPY frontend/static/js/execute_context.js /app/frontend/static/js/execute_context.js
+COPY frontend/static/js/execute_plans.js /app/frontend/static/js/execute_plans.js
+COPY frontend/static/js/execute_board.js /app/frontend/static/js/execute_board.js
+COPY frontend/static/js/execute_participants.js /app/frontend/static/js/execute_participants.js
+COPY frontend/static/js/execute_incidents.js /app/frontend/static/js/execute_incidents.js
+COPY frontend/static/js/table_actions.js /app/frontend/static/js/table_actions.js
+COPY frontend/static/js/map/base_map.js /app/frontend/static/js/map/base_map.js
+
+ENV PYTHONPATH=/app
+ENV RUNFLOW_EXECUTE_RUNTIME=1
+
+EXPOSE 8080
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.execute_app:app", "-b", "0.0.0.0:8080"]

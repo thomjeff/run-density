@@ -8,28 +8,38 @@
         ctx = ctx || { active: false };
         ctx.resolved = true;
         window.runflowExecuteContext = ctx;
-        if (ctx.active && ctx.run_id) {
+        if (ctx.active && ctx.plan_id) {
             window.runflowDay = window.runflowDay || {};
-            window.runflowDay.run_id = ctx.run_id;
+            window.runflowDay.plan_id = ctx.plan_id;
             window.runflowDay.selected = ctx.weekday_code || "";
-            try {
-                localStorage.setItem("selected_run_id", ctx.run_id);
-                if (ctx.weekday_code) {
-                    localStorage.setItem("selected_day", ctx.weekday_code);
-                }
-            } catch (err) {}
+        }
+        var label = document.getElementById("rf-execute-plan-name");
+        if (label) {
+            if (ctx.active && (ctx.name || ctx.calendar_date)) {
+                var parts = [];
+                if (ctx.name) parts.push(ctx.name);
+                if (ctx.calendar_date) parts.push(ctx.calendar_date);
+                label.textContent = parts.join(" · ");
+            } else {
+                label.textContent = "No plan active";
+            }
         }
         document.dispatchEvent(
             new CustomEvent("runflow:execute-context", { detail: ctx })
         );
     }
 
-    fetch("/api/execute/active-context", { credentials: "same-origin" })
-        .then(function (resp) {
-            return resp.json();
-        })
-        .then(apply)
-        .catch(function () {
-            apply({ active: false });
-        });
+    function refresh() {
+        return fetch("/api/execute/active-context", { credentials: "same-origin" })
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(apply)
+            .catch(function () {
+                apply({ active: false });
+            });
+    }
+
+    window.runflowRefreshExecuteContext = refresh;
+    refresh();
 })();

@@ -27,7 +27,7 @@
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3 mb-0">
-                    <a href="/overview" class="text-decoration-none text-reset">
+                    <a href="{% if execute_runtime|default(false) %}/execute/plans{% else %}/overview{% endif %}" class="text-decoration-none text-reset">
                         <span class="rf-tabler-brand">Runflow</span>
                     </a>
                 </h1>
@@ -45,7 +45,7 @@
                             <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations">Locations</a>
                         </li>
                         {% else %}
-                        {# Issue #878: mutually exclusive Build | Plan | Execute workspace control #}
+                        {% if not execute_runtime|default(false) %}
                         <li class="nav-item dropdown" id="rf-workspace-dropdown">
                             <a class="nav-link dropdown-toggle rf-workspace-toggle" href="#" id="rf-workspace-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Switch workspace">
                                 <span id="rf-workspace-label">Plan</span>
@@ -56,7 +56,7 @@
                                 <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="execute">Execute</a>
                             </div>
                         </li>
-                        <li class="nav-item dropdown rf-results-chrome rf-execute-runs-chrome" id="rf-runs-dropdown">
+                        <li class="nav-item dropdown rf-results-chrome" id="rf-runs-dropdown">
                             <a class="nav-link dropdown-toggle rf-runs-toggle{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="#" id="rf-runs-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                 <span id="rf-runs-trigger-label">Runs</span>
                             </a>
@@ -103,6 +103,10 @@
                         <li class="nav-item rf-build-chrome" hidden>
                             <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
                         </li>
+                        {% endif %}
+                        <li class="nav-item rf-execute-chrome" id="rf-execute-plan-label" hidden>
+                            <span class="nav-link disabled text-secondary" id="rf-execute-plan-name">No plan active</span>
+                        </li>
                         <li class="nav-item rf-execute-chrome" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/execute/plans' %} active{% endif %}" href="/execute/plans" data-rf-execute-view="plans">Plans</a>
                         </li>
@@ -141,6 +145,8 @@
     <script>
     (function() {
         const CLOUD_UI = {% if cloud_mode %}true{% else %}false{% endif %};
+        const EXECUTE_RUNTIME = {% if execute_runtime|default(false) %}true{% else %}false{% endif %};
+        window.RUNFLOW_EXECUTE_RUNTIME = EXECUTE_RUNTIME;
         // Skip session check on password page and public loc sheet URLs (local only; Issue #735, #737)
         const path = window.location.pathname;
         if (path === '/' || path === '/login') {
@@ -163,6 +169,9 @@
                 window.location.href = '/';
                 return null;
             }
+            if (!response.ok) {
+                return null;
+            }
             return response.json();
         })
         .then(data => {
@@ -173,7 +182,9 @@
         })
         .catch(error => {
             console.error('Session check failed:', error);
-            window.location.href = '/';
+            if (!EXECUTE_RUNTIME) {
+                window.location.href = '/';
+            }
         });
     })();
     </script>
@@ -182,7 +193,9 @@
     <script>
     (function() {
         const CLOUD_MODE = {% if cloud_mode %}true{% else %}false{% endif %};
+        const EXECUTE_RUNTIME = {% if execute_runtime|default(false) %}true{% else %}false{% endif %};
         window.CLOUD_UI = CLOUD_MODE;
+        window.RUNFLOW_EXECUTE_RUNTIME = EXECUTE_RUNTIME;
         const CLOUD_RUN_ID = {{ cloud_run_id_json | default('null') | safe }};
         const CLOUD_AVAILABLE_DAYS = {{ cloud_available_days_json | default('[]') | safe }};
 
@@ -316,10 +329,7 @@
         }
 
         function lastExecutePath() {
-            const runId = (localStorage.getItem("selected_run_id") || "").trim();
-            return runId
-                ? ("/execute?run_id=" + encodeURIComponent(runId))
-                : DEFAULT_EXECUTE_PATH;
+            return DEFAULT_EXECUTE_PATH;
         }
 
         function applyWorkspaceChrome(ws) {
@@ -329,7 +339,7 @@
             const isPlan = target === "plan";
             document.querySelectorAll(".rf-results-chrome").forEach(function (el) {
                 if (el.id === "rf-runs-dropdown") {
-                    el.hidden = !(isPlan || isExecute);
+                    el.hidden = !isPlan;
                     return;
                 }
                 if (!isPlan) {
@@ -417,10 +427,17 @@
                 });
             });
 
-            // Brand returns to Plan workspace (last Plan route)
+            // Combined image: brand returns to Plan. Standalone Execute stays here.
             const brand = document.querySelector(".navbar-brand a");
             if (brand) {
                 brand.addEventListener("click", function (ev) {
+                    if (EXECUTE_RUNTIME) {
+                        ev.preventDefault();
+                        if (window.location.pathname !== "/execute/plans") {
+                            window.location.href = "/execute/plans";
+                        }
+                        return;
+                    }
                     const current = getStoredWorkspace();
                     if (current === "build" || current === "execute" || isConfigRoutePath(window.location.pathname) || isExecuteRoutePath(window.location.pathname)) {
                         ev.preventDefault();
@@ -480,7 +497,7 @@
                     return;
                 }
                 if (el.id === "rf-runs-dropdown") {
-                    el.hidden = !(onPlan || onExecute);
+                    el.hidden = !onPlan;
                     return;
                 }
                 el.hidden = !onPlan;
@@ -496,7 +513,7 @@
 
             if (!hasRun) {
                 if (trigger) trigger.textContent = "Runs";
-                if (onPlan || onExecute) refreshRunsDropdown(null);
+                if (onPlan) refreshRunsDropdown(null);
                 applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
                 return;
             }
@@ -509,7 +526,7 @@
             } catch (e) { /* ignore */ }
 
             if (trigger) trigger.textContent = formatRunsTriggerLabel(label, id, day);
-            if (onPlan || onExecute) refreshRunsDropdown(id);
+            if (onPlan) refreshRunsDropdown(id);
             applyWorkspaceChrome(onBuild ? "build" : (onExecute ? "execute" : "plan"));
         }
 
@@ -674,7 +691,6 @@
                     if (view === "participants") href = "/execute/participants";
                     if (view === "incidents") href = "/execute/incidents";
                     if (view === "operations") href = "/execute";
-                    if (runId) href = setQueryParam(href, "run_id", runId);
                     a.setAttribute("href", href);
                     return;
                 }
@@ -792,22 +808,20 @@
             if (isExecuteRoutePath(window.location.pathname)) {
                 setStoredWorkspace("execute");
                 const params = new URLSearchParams(window.location.search);
-                const urlRun = (params.get("run_id") || "").trim();
-                const storedRun = (urlRun || localStorage.getItem("selected_run_id") || "").trim() || null;
-                if (storedRun) localStorage.setItem("selected_run_id", storedRun);
-                if (storedRun && params.get("run_id") !== storedRun) {
-                    params.set("run_id", storedRun);
+                if (params.has("run_id") || params.has("day")) {
+                    params.delete("run_id");
+                    params.delete("day");
+                    const qs = params.toString();
                     window.history.replaceState(
                         {},
                         "",
-                        window.location.pathname + "?" + params.toString()
+                        window.location.pathname + (qs ? "?" + qs : "")
                     );
                 }
                 rememberWorkspaceRoute("execute");
                 applyWorkspaceChrome("execute");
-                const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
-                updateNavLinks(day, storedRun);
-                announceRunflowContextReady(storedRun, day);
+                updateNavLinks(null, null);
+                announceRunflowContextReady(null, null);
                 return;
             }
 

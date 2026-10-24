@@ -48,11 +48,13 @@ def test_plan_chrome_has_no_package_top_nav(base_source: str):
     ).read_text(encoding="utf-8")
 
 
-def test_execute_uses_selected_run_and_loads_runs_dropdown(base_source: str):
+def test_execute_hides_plan_runs_dropdown(base_source: str):
     assert "function lastExecutePath()" in base_source
-    assert '("/execute?run_id=" + encodeURIComponent(runId))' in base_source
-    assert "if (onPlan || onExecute) refreshRunsDropdown" in base_source
-    assert 'el.id === "rf-runs-dropdown"' in base_source
+    assert "return DEFAULT_EXECUTE_PATH;" in base_source
+    assert '("/execute?run_id=" + encodeURIComponent(runId))' not in base_source
+    assert "if (onPlan) refreshRunsDropdown" in base_source
+    assert 'el.hidden = !isPlan;' in base_source
+    assert 'id="rf-execute-plan-name"' in base_source
 
 
 def test_execute_board_has_three_columns(base_source: str):

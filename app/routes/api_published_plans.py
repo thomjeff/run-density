@@ -6,13 +6,18 @@ from typing import List, Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+
+from app.utils.auth import is_session_valid, require_auth
+from app.utils.carto_basemaps import register_jinja_map_tiles
+from app.utils.env import env_bool
 
 from app.core.execute.published_plan import (
     PublishedPlanError,
     activate_published_plan,
     active_day_context,
-    active_published_plan_id,
+    active_plan_id,
     archive_published_plan,
     deactivate_published_plan,
     import_published_plan,
@@ -24,25 +29,14 @@ from app.core.execute.published_plan import (
     restore_published_plan,
     update_operations_clock,
 )
-from app.core.plan.publish_day_plan import publish_day_plan_zip
-from app.routes.ui import get_stub_meta, templates
-from app.utils.auth import is_session_valid, require_auth
-from app.utils.env import env_bool
 
 router = APIRouter()
-
-
-class PublishBody(BaseModel):
-    run_id: str
-    day: str
-    calendar_date: str
-    name: Optional[str] = None
-    event_series: Optional[str] = None
-    event_edition: Optional[str] = None
+templates = Jinja2Templates(directory="frontend/templates")
+register_jinja_map_tiles(templates)
 
 
 class ActivateBody(BaseModel):
-    published_plan_id: str = Field(..., min_length=36)
+    plan_id: str = Field(..., min_length=36)
 
 
 class ReopenBody(BaseModel):
@@ -66,30 +60,7 @@ def _fail(exc: PublishedPlanError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/api/plan/published-plans")
-async def publish_plan(request: Request, body: PublishBody):
-    _guard(request)
-    try:
-        archive = publish_day_plan_zip(
-            run_id=body.run_id.strip(),
-            day=body.day.strip().lower(),
-            calendar_date=body.calendar_date.strip(),
-            name=body.name,
-            event_series=body.event_series,
-            event_edition=body.event_edition,
-        )
-    except PublishedPlanError as exc:
-        raise _fail(exc) from exc
-    filename = f"day-plan-{body.calendar_date}.zip"
-    disposition = f'attachment; filename="{filename}"'
-    return Response(
-        content=archive,
-        media_type="application/zip",
-        headers={"Content-Disposition": disposition},
-    )
-
-
-@router.post("/api/execute/published-plans/import")
+@router.post("/api/execute/plans/import")
 async def import_plan(
     request: Request,
     package: UploadFile = File(...),  # noqa: B008
@@ -104,55 +75,55 @@ async def import_plan(
     return result
 
 
-@router.post("/api/execute/published-plans/activate")
+@router.post("/api/execute/plans/activate")
 async def activate_plan(request: Request, body: ActivateBody):
     _guard(request)
     try:
-        loaded = activate_published_plan(body.published_plan_id)
+        loaded = activate_published_plan(body.plan_id)
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
     return {
         "ok": True,
-        "published_plan_id": loaded["manifest"]["published_plan_id"],
+        "plan_id": loaded["manifest"]["plan_id"],
         "calendar_date": loaded["manifest"]["calendar_date"],
         "active": True,
     }
 
 
-@router.post("/api/execute/published-plans/deactivate")
+@router.post("/api/execute/plans/deactivate")
 async def deactivate_plan(request: Request):
     _guard(request)
     deactivate_published_plan()
     return {"ok": True, "active": False}
 
 
-@router.post("/api/execute/published-plans/archive")
+@router.post("/api/execute/plans/archive")
 async def archive_plan(request: Request, body: ActivateBody):
     _guard(request)
     try:
-        row = archive_published_plan(body.published_plan_id)
+        row = archive_published_plan(body.plan_id)
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
     return {"ok": True, "plan": row}
 
 
-@router.post("/api/execute/published-plans/restore")
+@router.post("/api/execute/plans/restore")
 async def restore_plan(request: Request, body: ActivateBody):
     _guard(request)
     try:
-        row = restore_published_plan(body.published_plan_id)
+        row = restore_published_plan(body.plan_id)
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
     return {"ok": True, "plan": row}
 
 
-@router.get("/api/execute/published-plans")
+@router.get("/api/execute/plans")
 async def list_plans(request: Request):
     _guard(request)
     listing = listed_plans()
     return {
         "ok": True,
-        "active_published_plan_id": listing["active_published_plan_id"],
+        "active_plan_id": listing["active_plan_id"],
         "plans": listing["plans"],
     }
 
@@ -205,16 +176,35 @@ async def get_ops_reopen_csv(request: Request):
     )
 
 
+@router.get("/api/execute/map")
+async def get_operations_map(
+    request: Request,
+    plan_id: Optional[str] = Query(None),  # noqa: B008
+):
+    _guard(request)
+    plan_id = plan_id or active_plan_id()
+    try:
+        return map_snapshot(plan_id)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+
+
 @router.get("/execute/plans", response_class=HTMLResponse)
 async def execute_plans_page(request: Request):
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
-    meta = get_stub_meta()
     return templates.TemplateResponse(
         request=request,
         name="pages/execute_plans.html",
-        context={"request": request, "meta": meta},
+        context={
+            "request": request,
+            "meta": {
+                "run_timestamp": "pending",
+                "environment": "execute",
+                "run_hash": "dev",
+            },
+        },
     )
 
 
@@ -224,16 +214,3 @@ async def execute_map_page(request: Request):
     if auth_redirect:
         return auth_redirect
     return RedirectResponse(url="/execute", status_code=303)
-
-
-@router.get("/api/execute/map")
-async def get_operations_map(
-    request: Request,
-    published_plan_id: Optional[str] = Query(None),  # noqa: B008
-):
-    _guard(request)
-    plan_id = published_plan_id or active_published_plan_id()
-    try:
-        return map_snapshot(plan_id)
-    except PublishedPlanError as exc:
-        raise _fail(exc) from exc
