@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Execute GPS overlay (#925)
+- Execute Operations can show resource positions and SOS for the active Day Plan
+- Stock Traccar Client OsmAnd ingest uses `EXECUTE_GPS_TOKEN` (device id is not authentication)
+- GPS never writes reopen. Stale fixes stay stale. SOS rows survive a later position
+- Combined Build/Plan does not ingest GPS and does not gain PostgreSQL
+
 ### Execute platform (#922)
 - Execute identity is **`plan_id`**. Calendar date is an attribute. Import rejects leftover `published_plan_id`. Operator APIs are `/api/execute/plans` and `/api/plan/plans`; the store is `execute/plans`
 - Execute chrome shows the active plan name and date. The Plan Runs dropdown is Plan-only

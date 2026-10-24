@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=920c">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=925d">
 {% endblock %}
 
 {% block content %}
@@ -52,13 +52,18 @@
 
         <div id="rf-execute-guns" class="rf-execute-guns" hidden></div>
 
+        <p id="rf-execute-gps-status" class="rf-execute-gps-status" hidden></p>
+
         <div class="card rf-execute-ops-map">
             <div class="rf-execute-ops-map-head">
                 <h3 id="rf-execute-map-title">Course map</h3>
-                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location status">
+                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
                     <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
                     <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
                     <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
+                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> GPS</li>
+                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Stale GPS</li>
+                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
                 </ul>
             </div>
             <div id="rf-execute-map" class="rf-execute-map" role="application" aria-label="Operations map">
@@ -101,5 +106,5 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_board.js?v=922d"></script>
+<script src="/static/js/execute_board.js?v=925e"></script>
 {% endblock %}

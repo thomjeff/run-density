@@ -569,6 +569,63 @@
     background: var(--rf-ex-done);
 }
 
+.rf-ex-map-swatch.is-gps {
+    background: #7c3aed;
+}
+
+.rf-ex-map-swatch.is-gps-stale {
+    background: #9ca3af;
+}
+
+.rf-ex-map-swatch.is-sos {
+    background: #be123c;
+}
+
+.rf-execute-gps-status {
+    width: 100%;
+    margin: 0 0 0.85rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    background: #f3e8ff;
+    color: #4c1d95;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.rf-execute-gps-status.is-sos {
+    background: #ffe4e6;
+    color: #9f1239;
+}
+
+.rf-execute-gps-status[hidden] {
+    display: none;
+}
+
+.rf-ex-gps-icon {
+    background: none !important;
+    border: none !important;
+}
+
+.rf-ex-gps-marker {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: #7c3aed;
+    color: #fff;
+    font: 700 11px/1.2 system-ui, sans-serif;
+    box-shadow: 0 1px 5px rgba(15, 23, 42, 0.4);
+    white-space: nowrap;
+}
+
+.rf-ex-gps-marker.is-stale {
+    background: #6b7280;
+}
+
+.rf-ex-gps-marker.is-sos {
+    background: #be123c;
+}
+
 .rf-ex-map-popup-id {
     font-weight: 700;
     margin-bottom: 0.15rem;

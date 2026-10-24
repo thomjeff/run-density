@@ -17,6 +17,7 @@ COPY app/core/locations/report_json.py /app/app/core/locations/report_json.py
 COPY app/routes/__init__.py /app/app/routes/__init__.py
 COPY app/routes/execute_pages.py /app/app/routes/execute_pages.py
 COPY app/routes/api_execute_runtime.py /app/app/routes/api_execute_runtime.py
+COPY app/routes/api_execute_gps.py /app/app/routes/api_execute_gps.py
 COPY app/routes/api_published_plans.py /app/app/routes/api_published_plans.py
 COPY app/utils/auth.py /app/app/utils/auth.py
 COPY app/utils/env.py /app/app/utils/env.py

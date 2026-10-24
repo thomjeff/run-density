@@ -105,6 +105,7 @@ services:
       - PYTHONPATH=/app
       - RUNFLOW_EXECUTE_RUNTIME=1
       - EXECUTE_DATABASE_URL=postgresql://execute:execute@execute-db:5432/execute
+      - EXECUTE_GPS_TOKEN=${EXECUTE_GPS_TOKEN:-}
       - RUNFLOW_ROOT=/app/runflow
     volumes:
       - execute-runtime-data:/app/runflow

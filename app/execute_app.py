@@ -12,15 +12,12 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.core.execute.db import init_schema, using_postgres
+from app.routes.api_execute_gps import router as api_execute_gps_router
 from app.routes.api_execute_runtime import router as api_execute_router
-from app.routes.api_published_plans import (
-    router as api_published_plans_router,
-    templates as execute_plan_templates,
-)
-from app.routes.execute_pages import (
-    router as execute_pages_router,
-    templates as execute_page_templates,
-)
+from app.routes.api_published_plans import router as api_published_plans_router
+from app.routes.api_published_plans import templates as execute_plan_templates
+from app.routes.execute_pages import router as execute_pages_router
+from app.routes.execute_pages import templates as execute_page_templates
 from app.version import get_version
 
 logger = logging.getLogger(__name__)
@@ -32,6 +29,7 @@ execute_page_templates.env.globals["execute_runtime"] = True
 execute_plan_templates.env.globals["execute_runtime"] = True
 app.include_router(execute_pages_router)
 app.include_router(api_execute_router)
+app.include_router(api_execute_gps_router)
 app.include_router(api_published_plans_router)
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
