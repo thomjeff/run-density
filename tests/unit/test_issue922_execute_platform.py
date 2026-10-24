@@ -187,6 +187,8 @@ def test_execute_app_is_not_main_and_omits_analysis_routes():
     assert "/execute/plans" in paths
     assert "/ready" in paths
     assert "/api/auth/check" in paths
+    assert "/api/execute/gps/osmand" in paths
+    assert "/api/execute/gps/overlay" in paths
     assert "/density" not in paths
     assert "/overview" not in paths
     assert "/config" not in paths

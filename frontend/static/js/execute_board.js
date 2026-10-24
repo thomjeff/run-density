@@ -7,9 +7,12 @@
     var filterText = "";
     var zoneFilter = "";
     var mapInstance = null;
+    var mapFitted = false;
     var mapFocusLocId = null;
     var selectedLocId = null;
     var courseLayer = null;
+    var gpsOverlay = null;
+    var gpsTimer = null;
     var lastRefreshAt = 0;
     var expanded = {
         closed: false,
@@ -21,6 +24,7 @@
     var unpausing = false;
     var COLUMN_PREVIEW = 10;
     var BOARD_REFRESH_MS = 5 * 60 * 1000;
+    var GPS_REFRESH_MS = 10 * 1000;
     var STATUS_COLORS = {
         closed: "#4b5563",
         reopen_next: "#1d4ed8",
@@ -280,7 +284,7 @@
             "</div>";
     }
 
-    function render() {
+    function render(options) {
         if (!board) return;
         qs("#rf-execute-clock-time").textContent = board.now || "—";
         syncRefreshCountdown();
@@ -294,7 +298,9 @@
         qs("#rf-execute-workspace").hidden = false;
         qs("#rf-execute-empty").hidden = true;
         qs("#rf-execute-error").hidden = true;
-        paintStatusMap(selectedLocId);
+        paintStatusMap(selectedLocId, {
+            preserveView: !(options && options.fitMap),
+        });
     }
 
     function allStrips() {
@@ -381,10 +387,77 @@
         );
     }
 
+    function gpsHeard(iso) {
+        if (!iso) return "";
+        var when = new Date(iso);
+        if (isNaN(when.getTime())) return "";
+        return when.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+        });
+    }
+
+    function showGpsLegend(on) {
+        document.querySelectorAll(".rf-ex-gps-legend").forEach(function (el) {
+            el.hidden = !on;
+        });
+    }
+
+    function renderGpsStatus() {
+        var el = qs("#rf-execute-gps-status");
+        if (!el) return;
+        var positions = (gpsOverlay && gpsOverlay.positions) || [];
+        var sos = (gpsOverlay && gpsOverlay.sos) || [];
+        var available = !!(gpsOverlay && gpsOverlay.ok);
+        showGpsLegend(available);
+        el.classList.toggle("is-sos", sos.length > 0);
+        if (!available) {
+            el.hidden = true;
+            el.textContent = "";
+            return;
+        }
+        if (!positions.length && !sos.length) {
+            el.hidden = false;
+            el.textContent = "GPS  No units yet";
+            return;
+        }
+        var parts = positions.map(function (row) {
+            var bits = [row.device_id || "unit"];
+            bits.push(row.stale ? "stale" : "live");
+            var heard = gpsHeard(row.received_at);
+            if (heard) bits.push(heard);
+            return bits.join(" · ");
+        });
+        if (sos.length) {
+            parts.push("SOS " + sos.length);
+        }
+        el.hidden = false;
+        el.textContent = "GPS  " + parts.join("   ");
+    }
+
+    function loadGpsOverlay() {
+        return fetch("/api/execute/gps/overlay", { credentials: "same-origin" })
+            .then(function (resp) {
+                if (!resp.ok) return null;
+                return resp.json();
+            })
+            .then(function (data) {
+                gpsOverlay = data;
+                renderGpsStatus();
+                paintStatusMap(mapFocusLocId, { preserveView: true });
+            })
+            .catch(function () {
+                gpsOverlay = null;
+                renderGpsStatus();
+            });
+    }
+
     function applyBoard(data) {
         board = data;
         lastRefreshAt = Date.now();
         render();
+        loadGpsOverlay();
         if (board.clock && board.clock.paused && !unpausing) {
             unpausing = true;
             putClock({ paused: false, jump_to_now: true }).then(function () {
@@ -606,7 +679,75 @@
         return courseLayer;
     }
 
-    function paintStatusMap(focusId) {
+    function ensureGpsPane(map) {
+        if (!map.getPane("rfGps")) {
+            map.createPane("rfGps");
+            map.getPane("rfGps").style.zIndex = 650;
+        }
+    }
+
+    function gpsPopupHtml(row, kind) {
+        var label = kind === "sos" ? "SOS" : row.stale ? "Stale GPS" : "GPS";
+        var heard = gpsHeard(row.received_at);
+        return (
+            '<div class="rf-ex-map-popup">' +
+            '<div class="rf-ex-map-popup-id">' +
+            esc(row.device_id || "") +
+            "</div>" +
+            "<div>" +
+            esc(label) +
+            (heard ? " · " + esc(heard) : "") +
+            "</div>" +
+            "</div>"
+        );
+    }
+
+    function addGpsChip(group, row, kind) {
+        if (row.lat == null || row.lon == null || !window.L) return;
+        var text =
+            kind === "sos"
+                ? "SOS · " + (row.device_id || "")
+                : row.device_id || "GPS";
+        var cls = "rf-ex-gps-marker";
+        if (kind === "sos") cls += " is-sos";
+        else if (row.stale) cls += " is-stale";
+        var icon = window.L.divIcon({
+            className: "rf-ex-gps-icon",
+            html: '<div class="' + cls + '">' + esc(text) + "</div>",
+            iconSize: [140, 26],
+            iconAnchor: kind === "sos" ? [16, 36] : [16, 13],
+        });
+        window.L.marker([row.lat, row.lon], {
+            icon: icon,
+            pane: "rfGps",
+            keyboard: false,
+        })
+            .bindPopup(gpsPopupHtml(row, kind), { maxWidth: 240 })
+            .addTo(group);
+    }
+
+    function paintGpsLayer(map) {
+        if (map._rfGpsLayer) {
+            map.removeLayer(map._rfGpsLayer);
+            map._rfGpsLayer = null;
+        }
+        if (!gpsOverlay || !window.L) return;
+        ensureGpsPane(map);
+        var group = window.L.featureGroup();
+        (gpsOverlay.positions || []).forEach(function (row) {
+            addGpsChip(group, row, "position");
+        });
+        (gpsOverlay.sos || []).forEach(function (row) {
+            addGpsChip(group, row, "sos");
+        });
+        if (group.getLayers().length) {
+            group.addTo(map);
+            map._rfGpsLayer = group;
+        }
+    }
+
+    function paintStatusMap(focusId, options) {
+        options = options || {};
         var pins = filteredPins();
         var courses = (board && board.courses) || {};
         var hasCourses = Object.keys(courses).some(function (id) {
@@ -616,10 +757,15 @@
         var mapEl = qs("#rf-execute-map");
         var legend = qs("#rf-execute-map-legend");
         var hasPins = pins.length > 0;
-        var hasGeo = hasPins || hasCourses;
+        var hasGps = !!(
+            gpsOverlay &&
+            ((gpsOverlay.positions && gpsOverlay.positions.length) ||
+                (gpsOverlay.sos && gpsOverlay.sos.length))
+        );
+        var hasGeo = hasPins || hasCourses || hasGps;
         if (empty) empty.hidden = hasGeo;
         if (mapEl) mapEl.hidden = !hasGeo;
-        if (legend) legend.hidden = !hasPins;
+        if (legend) legend.hidden = !(hasPins || hasGps);
         if (!hasGeo) return;
         var map = ensureMapInstance(hasPins ? pins[0].latlng : [45.95, -66.64]);
         if (!map || !window.L) return;
@@ -651,17 +797,29 @@
         });
         group.addTo(map);
         map._rfStatusLayer = group;
+        paintGpsLayer(map);
         map.invalidateSize();
+        if (options.preserveView && mapFitted) return;
         if (focusMarker) {
             map.setView(focusMarker.getLatLng(), 16);
             focusMarker.openPopup();
-        } else if (pins.length === 1) {
-            map.setView(pins[0].latlng, 14);
-        } else if (group.getLayers().length) {
-            map.fitBounds(group.getBounds().pad(0.15));
-        } else if (courseLayer && courseLayer.getBounds().isValid()) {
-            map.fitBounds(courseLayer.getBounds().pad(0.15));
+        } else {
+            var fit = window.L.featureGroup();
+            group.eachLayer(function (layer) {
+                fit.addLayer(layer);
+            });
+            if (map._rfGpsLayer) {
+                map._rfGpsLayer.eachLayer(function (layer) {
+                    fit.addLayer(layer);
+                });
+            }
+            if (fit.getLayers().length) {
+                map.fitBounds(fit.getBounds().pad(0.2));
+            } else if (courseLayer && courseLayer.getBounds().isValid()) {
+                map.fitBounds(courseLayer.getBounds().pad(0.15));
+            }
         }
+        mapFitted = true;
     }
 
     function closeMapModal() {
@@ -678,7 +836,7 @@
                 ? strip.loc_id + " · " + strip.loc_label
                 : "Course map";
         }
-        if (board) render();
+        if (board) render({ fitMap: true });
     }
 
     function openMapModal(locId) {
@@ -782,6 +940,10 @@
             if (board) render();
         });
         startTick();
+        if (gpsTimer) clearInterval(gpsTimer);
+        gpsTimer = setInterval(function () {
+            if (board && !board.empty) loadGpsOverlay();
+        }, GPS_REFRESH_MS);
         loadBoard();
     }
 

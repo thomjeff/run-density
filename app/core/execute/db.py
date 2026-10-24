@@ -32,7 +32,10 @@ def init_schema() -> None:
         return
     sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with connect() as conn:
-        conn.execute(sql)
+        for part in sql.split(";"):
+            stmt = part.strip()
+            if stmt:
+                conn.execute(stmt)
         conn.commit()
 
 
