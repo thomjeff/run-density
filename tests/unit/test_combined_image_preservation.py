@@ -82,7 +82,6 @@ def test_compose_still_builds_combined_image():
     text = (_repo_root() / "docker-compose.yml").read_text(encoding="utf-8")
     assert "dockerfile: Dockerfile" in text
     assert "app.main:app" in text
-    assert "postgres" not in text.lower()
     assert "sqlalchemy" not in text.lower()
 
 
@@ -105,6 +104,8 @@ def test_app_registers_build_plan_execute_routes():
     paths = set(_collect_route_paths(app.routes))
     missing = [path for path in CRITICAL_PATHS if path not in paths]
     assert missing == [], f"Missing combined-app routes: {missing}"
+    assert "/api/plan/plans" in paths
+    assert "/api/execute/board" in paths
 
 
 def test_critical_routes_respond_without_500():

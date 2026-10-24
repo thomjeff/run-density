@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import zipfile
+from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -14,10 +17,61 @@ from app.core.execute.participants import (
     lookup_rows,
     parse_roster_csv,
 )
+from app.core.execute.published_plan import (
+    activate_published_plan,
+    import_published_plan,
+    sha256_bytes,
+)
 from app.main import app
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "issue911_participant_list.csv"
+
+
+def _package() -> bytes:
+    plan_id = str(uuid4())
+    locations = {"locations": [], "resources_available": []}
+    course = {"type": "FeatureCollection", "features": []}
+    loc_bytes = json.dumps(locations).encode("utf-8")
+    course_bytes = json.dumps(course).encode("utf-8")
+    manifest = {
+        "schema_version": 1,
+        "plan_id": plan_id,
+        "revision": 1,
+        "published_at": "2026-10-23T12:00:00+00:00",
+        "calendar_date": "2026-10-25",
+        "weekday_code": "sun",
+        "name": "Test Sunday",
+        "timezone": "America/Halifax",
+        "source_run_id": "should-not-be-operator-key",
+        "races": [
+            {"id": "elite", "name": "5K Elite", "course": "courses/elite.geojson"}
+        ],
+        "files": [
+            {"path": "locations.json", "sha256": sha256_bytes(loc_bytes)},
+            {
+                "path": "courses/elite.geojson",
+                "sha256": sha256_bytes(course_bytes),
+            },
+        ],
+    }
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        zf.writestr("locations.json", loc_bytes)
+        zf.writestr("courses/elite.geojson", course_bytes)
+    return buffer.getvalue()
+
+
+def _activate_plan(monkeypatch, tmp_path: Path) -> tuple[str, Path]:
+    monkeypatch.setattr(
+        "app.core.execute.published_plan.get_runflow_root",
+        lambda: tmp_path,
+    )
+    plan_id = import_published_plan(_package(), root=tmp_path)["plan_id"]
+    activate_published_plan(plan_id, root=tmp_path)
+    dest = tmp_path / "execute" / "plans" / plan_id / "r1"
+    return plan_id, dest
 
 
 def test_bundle_vs_start_from_sub_event():
@@ -61,20 +115,9 @@ def test_duplicate_start_bibs_fail():
         assert exc.bib == "10100"
 
 
-def _patch_run(monkeypatch, tmp_path: Path, run_id: str) -> Path:
-    monkeypatch.setattr(
-        "app.utils.run_id.get_run_directory",
-        lambda rid: tmp_path / "analysis" / rid,
-    )
-    run_dir = tmp_path / "analysis" / run_id
-    (run_dir / "sun").mkdir(parents=True)
-    (run_dir / "analysis.json").write_text("{}", encoding="utf-8")
-    return run_dir
-
-
 def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
-    run_id = "exec911participantaaaaaaa"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
+    plan_id, dest = _activate_plan(monkeypatch, tmp_path)
+    run_id = plan_id
     client = TestClient(app)
     empty = client.get(
         f"/api/execute/participants?run_id={run_id}&day=sun"
@@ -99,7 +142,7 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     assert stats["bundles"] == 2
     assert stats["no_bib"] == 1
     stored = json.loads(
-        (run_dir / "sun" / "execution" / "participants.json").read_text(
+        (dest / "sun" / "execution" / "participants.json").read_text(
             encoding="utf-8"
         )
     )
@@ -211,8 +254,8 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
 
 
 def test_api_rejects_duplicate_start_bibs(tmp_path, monkeypatch):
-    run_id = "exec911dupbibaaaaaaaaaaaa"
-    _patch_run(monkeypatch, tmp_path, run_id)
+    plan_id, _dest = _activate_plan(monkeypatch, tmp_path)
+    run_id = plan_id
     client = TestClient(app)
     colliding = FIXTURE.read_text(encoding="utf-8").replace(
         "11,10102,Smith,James",

@@ -28,42 +28,18 @@
         return (root || document).querySelector(sel);
     }
 
-    function runId() {
+    function planActive() {
         var ctx = window.runflowExecuteContext;
-        if (ctx && ctx.active && ctx.run_id) return String(ctx.run_id).trim();
-        var params = new URLSearchParams(window.location.search);
-        return (
-            params.get("run_id") ||
-            (window.runflowDay && window.runflowDay.run_id) ||
-            localStorage.getItem("selected_run_id") ||
-            ""
-        ).trim();
-    }
-
-    function dayCode() {
-        var ctx = window.runflowExecuteContext;
-        if (ctx && ctx.active && ctx.weekday_code) {
-            return String(ctx.weekday_code).trim();
-        }
-        return (
-            (window.runflowDay && window.runflowDay.selected) ||
-            localStorage.getItem("selected_day") ||
-            ""
-        ).trim();
+        return !!(ctx && ctx.active && ctx.plan_id);
     }
 
     function apiUrl(path) {
-        var url = path + "?run_id=" + encodeURIComponent(runId());
-        var day = dayCode();
-        if (day) url += "&day=" + encodeURIComponent(day);
-        return url;
+        return path;
     }
 
     function incidentsHref(incidentId) {
-        var url = "/execute/incidents?run_id=" + encodeURIComponent(runId());
-        var day = dayCode();
-        if (day) url += "&day=" + encodeURIComponent(day);
-        if (incidentId) url += "&incident_id=" + encodeURIComponent(incidentId);
+        var url = "/execute/incidents";
+        if (incidentId) url += "?incident_id=" + encodeURIComponent(incidentId);
         return url;
     }
 
@@ -566,10 +542,8 @@
             })
             .then(function (body) {
                 var id = body.incident && body.incident.incident_id;
-                var url = "/execute/incidents?run_id=" + encodeURIComponent(runId());
-                var day = dayCode();
-                if (day) url += "&day=" + encodeURIComponent(day);
-                if (id) url += "&incident_id=" + encodeURIComponent(id);
+                var url = "/execute/incidents";
+                if (id) url += "?incident_id=" + encodeURIComponent(id);
                 window.location.href = url;
             })
             .catch(function (err) {
@@ -606,7 +580,7 @@
     }
 
     function startWorkspace() {
-        if (!runId()) {
+        if (!planActive()) {
             qs("#rf-hs-empty").hidden = false;
             return;
         }

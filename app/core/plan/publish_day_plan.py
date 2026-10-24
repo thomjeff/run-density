@@ -150,7 +150,7 @@ def build_published_plan_files(
     name: Optional[str] = None,
     event_series: Optional[str] = None,
     event_edition: Optional[str] = None,
-    published_plan_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
     revision: int = 1,
 ) -> Dict[str, bytes]:
     parse_calendar_date(calendar_date)
@@ -191,7 +191,7 @@ def build_published_plan_files(
     source_config = analysis.get("config_id") or analysis.get("package_id")
     manifest = {
         "schema_version": SCHEMA_VERSION,
-        "published_plan_id": published_plan_id or str(uuid4()),
+        "plan_id": plan_id or str(uuid4()),
         "revision": int(revision),
         "published_at": datetime.now(timezone.utc).isoformat(),
         "calendar_date": calendar_date,

@@ -28,7 +28,7 @@
         if (!file) return;
         var body = new FormData();
         body.append("package", file);
-        return fetch("/api/execute/published-plans/import", {
+        return fetch("/api/execute/plans/import", {
             method: "POST",
             body: body,
         })
@@ -40,11 +40,11 @@
             })
             .then(function (data) {
                 if (!activateAfter) return data;
-                return fetch("/api/execute/published-plans/activate", {
+                return fetch("/api/execute/plans/activate", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        published_plan_id: data.published_plan_id,
+                        plan_id: data.plan_id,
                     }),
                 }).then(function (res) {
                     return res.json().then(function (act) {

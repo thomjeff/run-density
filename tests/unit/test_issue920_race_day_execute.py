@@ -78,7 +78,7 @@ def _package(
 
     manifest = {
         "schema_version": 1,
-        "published_plan_id": plan_id,
+        "plan_id": plan_id,
         "revision": 1,
         "published_at": "2026-10-22T12:00:00+00:00",
         "calendar_date": calendar_date,
@@ -119,7 +119,7 @@ def test_import_does_not_activate(tmp_path: Path):
     result = import_published_plan(archive, root=tmp_path)
     assert result["activated"] is False
     listing = listed_plans(root=tmp_path)
-    assert listing["active_published_plan_id"] is None
+    assert listing["active_plan_id"] is None
     assert listing["plans"][0]["status"] == "inactive"
     board = operations_board(root=tmp_path)
     assert board["empty"] is True
@@ -128,20 +128,20 @@ def test_import_does_not_activate(tmp_path: Path):
 def test_archive_restore_and_activate_rules(tmp_path: Path):
     archive = _package(calendar_date="2026-10-25", weekday_code="sun")
     plan_id = import_published_plan(archive, root=tmp_path)[
-        "published_plan_id"
+        "plan_id"
     ]
     activate_published_plan(plan_id, root=tmp_path)
     row = archive_published_plan(plan_id, root=tmp_path)
     assert row["archived"] is True
     listing = listed_plans(root=tmp_path)
-    assert listing["active_published_plan_id"] is None
+    assert listing["active_plan_id"] is None
     assert listing["plans"][0]["status"] == "archived"
     with pytest.raises(PublishedPlanError, match="Restore"):
         activate_published_plan(plan_id, root=tmp_path)
     restored = restore_published_plan(plan_id, root=tmp_path)
     assert restored["archived"] is False
     listing = listed_plans(root=tmp_path)
-    assert listing["active_published_plan_id"] is None
+    assert listing["active_plan_id"] is None
     assert listing["plans"][0]["status"] == "inactive"
 
 
@@ -152,7 +152,7 @@ def test_reopen_writes_execute_owned_state(tmp_path: Path):
         source_run_id="srcRun920",
     )
     plan_id = import_published_plan(archive, root=tmp_path)[
-        "published_plan_id"
+        "plan_id"
     ]
     activate_published_plan(plan_id, root=tmp_path)
     board = record_operations_reopen(2, root=tmp_path)
@@ -167,13 +167,13 @@ def test_reopen_writes_execute_owned_state(tmp_path: Path):
 def test_switching_plans_isolates_reopen_state(tmp_path: Path):
     sat = _package(calendar_date="2026-10-24", weekday_code="sat")
     sun = _package(calendar_date="2026-10-25", weekday_code="sun")
-    sat_id = import_published_plan(sat, root=tmp_path)["published_plan_id"]
-    sun_id = import_published_plan(sun, root=tmp_path)["published_plan_id"]
+    sat_id = import_published_plan(sat, root=tmp_path)["plan_id"]
+    sun_id = import_published_plan(sun, root=tmp_path)["plan_id"]
     activate_published_plan(sat_id, root=tmp_path)
     record_operations_reopen(2, root=tmp_path)
     activate_published_plan(sun_id, root=tmp_path)
     sun_board = operations_board(root=tmp_path)
-    assert sun_board["published_plan_id"] == sun_id
+    assert sun_board["plan_id"] == sun_id
     assert sun_board["columns"]["reopened"] == []
     activate_published_plan(sat_id, root=tmp_path)
     sat_board = operations_board(root=tmp_path)
@@ -188,13 +188,15 @@ def test_active_day_context_uses_source_run(tmp_path: Path):
         source_run_id="srcSun920",
     )
     plan_id = import_published_plan(archive, root=tmp_path)[
-        "published_plan_id"
+        "plan_id"
     ]
     assert active_day_context(root=tmp_path)["active"] is False
     activate_published_plan(plan_id, root=tmp_path)
     ctx = active_day_context(root=tmp_path)
     assert ctx["active"] is True
-    assert ctx["run_id"] == "srcSun920"
+    assert ctx["plan_id"] == plan_id
+    assert ctx["source_run_id"] == "srcSun920"
+    assert "run_id" not in ctx
     assert ctx["weekday_code"] == "sun"
     deactivate_published_plan(root=tmp_path)
     assert active_day_context(root=tmp_path)["active"] is False
@@ -211,18 +213,18 @@ def test_ops_http_uses_active_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert empty.json()["empty"] is True
     archive = _package(calendar_date="2026-10-24", weekday_code="sat")
     imported = client.post(
-        "/api/execute/published-plans/import",
+        "/api/execute/plans/import",
         files={"package": ("sat.zip", archive, "application/zip")},
     )
     assert imported.status_code == 200
     body = imported.json()
     assert body["activated"] is False
-    plan_id = body["published_plan_id"]
-    listed = client.get("/api/execute/published-plans")
-    assert listed.json()["active_published_plan_id"] is None
+    plan_id = body["plan_id"]
+    listed = client.get("/api/execute/plans")
+    assert listed.json()["active_plan_id"] is None
     client.post(
-        "/api/execute/published-plans/activate",
-        json={"published_plan_id": plan_id},
+        "/api/execute/plans/activate",
+        json={"plan_id": plan_id},
     )
     board = client.get("/api/execute/ops/board")
     assert board.status_code == 200
