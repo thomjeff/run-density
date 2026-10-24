@@ -14,18 +14,18 @@ from fastapi.testclient import TestClient
 from app.core.execute.incidents import (
     SCHEMA_VERSION,
     catalog,
-    location_catalog,
     normalize_incident,
     transfer_care,
     type_care_change_note,
 )
+from app.core.execute.plan_storage import location_catalog_from_rows
 from app.core.execute.published_plan import (
     activate_published_plan,
     import_published_plan,
+    load_imported_plan,
     sha256_bytes,
 )
 from app.main import app
-from app.storage import Storage
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "issue911_participant_list.csv"
@@ -93,20 +93,9 @@ def _activate_plan(monkeypatch, tmp_path: Path) -> tuple[str, Path]:
     return plan_id, dest
 
 
-def _patch_run(monkeypatch, tmp_path: Path, run_id: str) -> Path:
-    monkeypatch.setattr(
-        "app.utils.run_id.get_run_directory",
-        lambda rid: tmp_path / "analysis" / rid,
-    )
-    run_dir = tmp_path / "analysis" / run_id
-    (run_dir / "sun").mkdir(parents=True)
-    (run_dir / "analysis.json").write_text("{}", encoding="utf-8")
-    return run_dir
-
-
-def _import_roster(client: TestClient, run_id: str) -> None:
+def _import_roster(client: TestClient) -> None:
     resp = client.post(
-        f"/api/execute/participants/import?run_id={run_id}&day=sun",
+        "/api/execute/participants/import",
         files={"file": ("roster.csv", FIXTURE.read_bytes(), "text/csv")},
     )
     assert resp.status_code == 200, resp.text
@@ -196,25 +185,11 @@ def test_transfer_care_appends_handoff_note():
 
 def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch):
     plan_id, dest = _activate_plan(monkeypatch, tmp_path)
-    run_id = plan_id
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    report_dir = run_dir / "sun" / "computation"
-    report_dir.mkdir(parents=True)
-    (report_dir / "locations_report.json").write_text(
-        json.dumps(
-            {
-                "run_id": run_id,
-                "day": "sun",
-                "locations": _SUNDAY_LOCS,
-            }
-        ),
-        encoding="utf-8",
-    )
     client = TestClient(app)
-    _import_roster(client, run_id)
+    _import_roster(client)
 
     created = client.post(
-        f"/api/execute/incidents?run_id={run_id}&day=sun",
+        f"/api/execute/incidents",
         json={"reg_id": "1"},
     )
     assert created.status_code == 200, created.text
@@ -226,7 +201,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert incident["lifecycle"]["id"] == "open"
     assert incident["incident_types"] == []
 
-    listed = client.get(f"/api/execute/incidents?run_id={run_id}&day=sun")
+    listed = client.get(f"/api/execute/incidents")
     assert listed.status_code == 200
     active = listed.json()["active"]
     assert active[0]["updated_at_label"] == incident["updated_at_label"]
@@ -235,7 +210,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
         0
     ] == "ANB"
 
-    locs = client.get(f"/api/execute/locations?run_id={run_id}&day=sun")
+    locs = client.get(f"/api/execute/locations")
     assert locs.status_code == 200
     labels = {row["loc_label"] for row in locs.json()["locations"]}
     assert labels == {"10K Water Stop", "Trail at McKeen"}
@@ -246,7 +221,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert water["zone"] == "Z3"
 
     picked = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "location_text": "10K Water Stop",
             "location_loc_id": "16",
@@ -281,7 +256,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert kinds.count("transfer") == 1
 
     again_report = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "reported_by_name": "Jeff",
             "reported_by_agency": "race_crew",
@@ -293,7 +268,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert again_report_texts.count("Reported by Jeff · Race Crew.") == 1
 
     renamed = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "reported_by_name": "Jeffrey",
             "reported_by_agency": "race_crew",
@@ -304,7 +279,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert renamed_inc["notes"][-1]["text"] == "Reported by Jeffrey · Race Crew."
 
     other = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "incident_types": ["other"],
             "incident_type_other": "Bee sting, swelling",
@@ -318,7 +293,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
 
     noop_stamp = other.json()["incident"]["updated_at"]
     noop = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "incident_types": ["other"],
             "incident_type_other": "Bee sting, swelling",
@@ -330,14 +305,14 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     )
 
     care = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"care_types": ["fluids_provided", "ice_cold_pack"]},
     )
     assert care.json()["incident"]["notes"][-1]["text"] == (
         "Care added: Ice / cold pack applied, Fluids provided."
     )
     care_removed = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"care_types": ["ice_cold_pack"]},
     )
     assert care_removed.json()["incident"]["notes"][-1]["text"] == (
@@ -345,7 +320,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     )
 
     changed = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"assigned_to": "sja"},
     )
     assert changed.status_code == 200
@@ -355,7 +330,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert changed_inc["notes"][-1]["text"] == "Transferred SKI → SJA."
 
     again_911 = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"called_911": "yes", "outcome": "dnf"},
     )
     again_texts = [item["text"] for item in again_911.json()["incident"]["notes"]]
@@ -363,7 +338,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert not any(text.startswith("Updated ") for text in again_texts)
 
     free = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={
             "location_text": "Between Water Stop and Brookside",
             "location_loc_id": "",
@@ -373,7 +348,7 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert free.json()["incident"]["location_loc_id"] == ""
 
     xfer = client.post(
-        f"/api/execute/incidents/{iid}/transfer?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}/transfer",
         json={"to_agency": "anb", "text": "walking, alert"},
     )
     assert xfer.status_code == 200, xfer.text
@@ -389,39 +364,42 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
         )
     )
     assert stored["schema_version"] == SCHEMA_VERSION
+    assert stored["plan_id"] == plan_id
+    assert "run_id" not in stored
 
     closed = client.post(
-        f"/api/execute/incidents/{iid}/close?run_id={run_id}&day=sun"
+        f"/api/execute/incidents/{iid}/close"
     )
     assert closed.status_code == 200
     assert closed.json()["incident"]["lifecycle"]["id"] == "closed"
     blocked = client.put(
-        f"/api/execute/incidents/{iid}?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}",
         json={"description": "should not write"},
     )
     assert blocked.status_code == 400
     assert "read-only" in blocked.json()["detail"]
     blocked_note = client.post(
-        f"/api/execute/incidents/{iid}/notes?run_id={run_id}&day=sun",
+        f"/api/execute/incidents/{iid}/notes",
         json={"text": "should not write"},
     )
     assert blocked_note.status_code == 400
 
-    storage = Storage(root=str(run_dir))
-    catalog = location_catalog(storage, "sun")
+    loaded = load_imported_plan(plan_id, root=tmp_path)
+    catalog = location_catalog_from_rows(
+        (loaded.get("locations") or {}).get("locations") or []
+    )
     assert catalog[0]["loc_label"] == "10K Water Stop"
 
 
 def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
     plan_id, dest = _activate_plan(monkeypatch, tmp_path)
-    run_id = plan_id
     exec_dir = dest / "sun" / "execution"
     exec_dir.mkdir(parents=True)
     (exec_dir / "incidents.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
-                "run_id": run_id,
+                "run_id": plan_id,
                 "day": "sun",
                 "incidents": [
                     {
@@ -452,10 +430,10 @@ def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    _import_roster(TestClient(app), run_id)
+    _import_roster(TestClient(app))
     client = TestClient(app)
     got = client.get(
-        f"/api/execute/incidents/inc_legacy?run_id={run_id}&day=sun"
+        f"/api/execute/incidents/inc_legacy"
     )
     assert got.status_code == 200, got.text
     incident = got.json()["incident"]

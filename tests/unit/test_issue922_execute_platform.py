@@ -21,6 +21,7 @@ from app.core.execute.published_plan import (
     validate_manifest,
 )
 from app.core.execute.participants import load_store, persist_store
+from app.core.execute.store_identity import with_plan_id
 from app.storage import Storage
 
 
@@ -159,7 +160,9 @@ def test_participants_store_lives_under_imported_plan(tmp_path: Path):
         {"schema_version": 1, "run_id": plan_id, "day": "sat", "rows": []},
     )
     loaded = load_store(storage, run_id=plan_id, day="sat")
-    assert loaded["run_id"] == plan_id
+    normalized = with_plan_id(loaded, plan_id)
+    assert normalized["plan_id"] == plan_id
+    assert "run_id" not in normalized
     assert (dest / "sat" / "execution" / "participants.json").is_file()
     assert not (tmp_path / "analysis").exists()
 

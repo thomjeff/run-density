@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 
 from app.core.execute.board import assemble_board, reopen_next_ids, zone_code
@@ -21,7 +18,6 @@ from app.core.execute.times import (
     gun_deltas_minutes,
     parse_hhmm,
 )
-from app.core.locations.report_json import build_locations_report_document
 from app.main import app
 from app.storage import Storage
 
@@ -272,115 +268,13 @@ def test_estimate_passed_helper():
     assert estimate_passed(None, "08:50:00") is False
 
 
-def _patch_run(monkeypatch, tmp_path: Path, run_id: str) -> Path:
-    monkeypatch.setattr(
-        "app.utils.run_id.get_run_directory",
-        lambda rid: tmp_path / "analysis" / rid,
-    )
-    return tmp_path / "analysis" / run_id
-
-
-def _seed_run(run_dir: Path, run_id: str) -> None:
-    day = run_dir / "sun"
-    comp = day / "computation"
-    comp.mkdir(parents=True)
-    doc = build_locations_report_document(
-        run_id=run_id,
-        day="sun",
-        locations=_locations(),
-        resources_available=["yssr", "fpf", "vol", "ofc"],
-    )
-    (comp / "locations_report.json").write_text(
-        json.dumps(doc), encoding="utf-8"
-    )
-    (run_dir / "analysis.json").write_text(
-        json.dumps(
-            {
-                "start_times": {"full": 420, "half": 460, "10k": 435},
-                "events": [
-                    {"name": "full", "start_time": 420},
-                    {"name": "10k", "start_time": 435},
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
-def test_api_requires_run_id():
+def test_leftover_analysis_board_routes_are_gone():
     client = TestClient(app)
-    resp = client.get("/api/execute/board")
-    assert resp.status_code == 400
-
-
-def test_api_board_and_reopen_persist_json(tmp_path, monkeypatch):
-    run_id = "exec893boardaaaaaaaaaaa"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    _seed_run(run_dir, run_id)
-    client = TestClient(app)
-    board = client.get(f"/api/execute/board?run_id={run_id}&day=sun")
-    assert board.status_code == 200, board.text
-    body = board.json()
-    assert body["ok"] is True
-    assert body["counts"]["reopened"] == 0
-    next_ids = {row["loc_id"] for row in body["columns"]["reopen_next"]}
-    assert 2 in next_ids
-
-    reopen = client.post(
-        f"/api/execute/reopen?run_id={run_id}&day=sun",
-        json={"loc_id": 2, "linked_loc_ids": [8]},
-    )
-    assert reopen.status_code == 200, reopen.text
-    after = reopen.json()
-    reopened_ids = {row["loc_id"] for row in after["columns"]["reopened"]}
-    assert reopened_ids == {2, 8}
-    assert all(row["operator"] is None for row in after["columns"]["reopened"])
-
-    stored = json.loads(
-        (run_dir / "sun" / "execution" / "state.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert stored["reopened"]["2"]["reopened_at"]
-    assert stored["reopened"]["2"]["operator"] is None
-
-    dup = client.post(
-        f"/api/execute/reopen?run_id={run_id}&day=sun",
-        json={"loc_id": 2, "linked_loc_ids": []},
-    )
-    assert dup.status_code == 409
-
-
-def test_api_rejects_unlinked_proxy(tmp_path, monkeypatch):
-    run_id = "exec893unlinkaaaaaaaaaa"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    _seed_run(run_dir, run_id)
-    client = TestClient(app)
-    resp = client.post(
-        f"/api/execute/reopen?run_id={run_id}&day=sun",
-        json={"loc_id": 2, "linked_loc_ids": [9]},
-    )
-    assert resp.status_code == 400
-
-
-def test_clock_accept_persists_guns(tmp_path, monkeypatch):
-    run_id = "exec893clockaaaaaaaaaaa"
-    run_dir = _patch_run(monkeypatch, tmp_path, run_id)
-    _seed_run(run_dir, run_id)
-    client = TestClient(app)
-    resp = client.put(
-        f"/api/execute/clock?run_id={run_id}&day=sun",
-        json={
-            "guns_accepted": True,
-            "guns": {"10k": "07:20", "full": "07:00"},
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    clock = resp.json()["clock"]
-    assert clock["guns_accepted"] is True
-    assert clock["guns"]["10k"] == "07:20"
-    storage = Storage(root=str(run_dir))
-    assert storage.exists(execution_state_relpath("sun"))
+    assert client.get("/api/execute/board").status_code == 404
+    assert client.get("/api/execute/state").status_code == 404
+    assert client.put("/api/execute/clock").status_code == 404
+    assert client.post("/api/execute/reopen").status_code == 404
+    assert client.get("/api/execute/reopen.csv").status_code == 404
 
 
 def test_persist_state_helper(tmp_path):
