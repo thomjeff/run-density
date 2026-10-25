@@ -1,4 +1,4 @@
-/* Execute race-day board (Issue #893). UI → API → JSON only. */
+/* Execute Operations command surface (Issue #928). */
 (function () {
     "use strict";
 
@@ -6,58 +6,40 @@
     var tickTimer = null;
     var filterText = "";
     var zoneFilter = "";
+    var focusedCol = "";
     var mapInstance = null;
     var mapFitted = false;
-    var mapFocusLocId = null;
     var selectedLocId = null;
+    var selectedDeviceId = null;
+    var followDeviceId = null;
     var courseLayer = null;
     var gpsOverlay = null;
     var gpsTimer = null;
     var lastRefreshAt = 0;
-    var expanded = {
-        closed: false,
-        reopen_next: false,
-        reopened: false,
-    };
     var pendingReopenId = null;
     var reopenError = null;
-    var unpausing = false;
-    var COLUMN_PREVIEW = 10;
+    var assignRows = [];
+    var assignUnassigned = [];
+    var assignEditDeviceId = null;
     var BOARD_REFRESH_MS = 5 * 60 * 1000;
     var GPS_REFRESH_MS = 10 * 1000;
     var STATUS_COLORS = {
-        closed: "#4b5563",
-        reopen_next: "#1d4ed8",
-        reopened: "#047857",
+        closed: "#64748b",
+        reopen_next: "#3b82f6",
+        reopened: "#10b981",
     };
-
-    var ICON_PIN =
-        '<svg class="rf-ex-icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<path fill="currentColor" d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12zm0-9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>';
-    var ICON_ROUTE =
-        '<svg class="rf-ex-icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-        'd="M6 19v-6a3 3 0 0 1 3-3h6m0 0-2.2-2.2M15 10l-2.2 2.2"/></svg>';
-    var ICON_CHECK =
-        '<svg class="rf-ex-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<circle cx="12" cy="12" r="10" fill="#047857"/>' +
-        '<path d="M8 12.4l2.6 2.6L16.4 9" fill="none" stroke="#fff" stroke-width="2" ' +
-        'stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    var ICON_MORE =
-        '<svg class="rf-ex-icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-        'd="M6 9l6 6 6-6"/></svg>';
-    var ICON_LESS =
-        '<svg class="rf-ex-icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-        'd="M6 15l6-6 6 6"/></svg>';
+    var layers = {
+        courses: true,
+        turnarounds: true,
+        resources: true,
+        sos: true,
+        reopen: true,
+        water: false,
+        all: false,
+    };
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
-    }
-
-    function apiUrl(path) {
-        return path;
     }
 
     function esc(value) {
@@ -84,22 +66,14 @@
         return rest ? "Zone " + rest : "All Zones";
     }
 
-    function resourceLine(resources) {
-        if (!resources || !resources.length) return "";
-        return resources
-            .map(function (r) {
-                return esc(r.code) + " " + esc(r.count);
-            })
-            .join(" · ");
-    }
-
-    function metaLine(strip) {
-        var parts = [];
-        var zone = zoneLabel(strip);
-        if (zone) parts.push(esc(zone));
-        var resources = resourceLine(strip.resources);
-        if (resources) parts.push(resources);
-        return parts.join(" · ");
+    function stripInMapView(strip) {
+        if (!mapInstance || !mapFitted) return true;
+        if (typeof mapInstance.getBounds !== "function") return true;
+        var latlng = stripLatLon(strip);
+        if (!latlng) return false;
+        var bounds = mapInstance.getBounds();
+        if (!bounds || (bounds.isValid && !bounds.isValid())) return true;
+        return bounds.contains(latlng);
     }
 
     function stripMatches(strip) {
@@ -112,195 +86,10 @@
             strip.loc_type || "",
             zoneLabel(strip),
             zoneOptionLabel(zoneLabel(strip)),
-            (strip.resources || [])
-                .map(function (r) {
-                    return r.code + " " + r.count;
-                })
-                .join(" "),
         ]
             .join(" ")
             .toLowerCase();
         return hay.indexOf(q) !== -1;
-    }
-
-    function renderStrip(strip, col, opts) {
-        var isNext = col === "reopen_next";
-        var isDone = col === "reopened";
-        var isFirstNext = !!(opts && opts.firstNext);
-        var pending = pendingReopenId === Number(strip.loc_id);
-        var err =
-            reopenError && Number(reopenError.locId) === Number(strip.loc_id)
-                ? reopenError.message
-                : "";
-        var meta = metaLine(strip);
-        var timeCell = isDone
-            ? '<span class="rf-ex-time is-actual">' +
-              esc(strip.reopened_at || "—") +
-              "</span>"
-            : '<span class="rf-ex-time' +
-              (strip.estimate_passed ? " is-passed" : "") +
-              '"><span class="rf-ex-time-label">est.</span>' +
-              '<span class="rf-ex-time-value">' +
-              esc(strip.loc_end || "—") +
-              "</span></span>";
-        var action = "";
-        if (isNext) {
-            action =
-                '<button type="button" class="rf-ex-reopen" data-reopen="' +
-                esc(strip.loc_id) +
-                '"' +
-                (pending || pendingReopenId ? " disabled" : "") +
-                ">" +
-                ICON_ROUTE +
-                (pending ? " Reopening…" : " Reopen") +
-                "</button>";
-        } else if (isDone) {
-            action = '<span class="rf-ex-done-icon">' + ICON_CHECK + "</span>";
-        }
-        var cls = "rf-ex-strip";
-        if (isDone) cls += " is-done";
-        if (isFirstNext) cls += " is-next";
-        if (selectedLocId != null && Number(strip.loc_id) === Number(selectedLocId)) {
-            cls += " is-selected";
-        }
-        return (
-            '<article class="' +
-            cls +
-            '" data-loc-id="' +
-            esc(strip.loc_id) +
-            '">' +
-            '<span class="rf-ex-id">' +
-            esc(strip.loc_id) +
-            "</span>" +
-            '<span class="rf-ex-name"><button type="button" class="rf-ex-map-link" data-map-loc="' +
-            esc(strip.loc_id) +
-            '">' +
-            esc(strip.loc_label) +
-            '</button><button type="button" class="rf-ex-pin" data-map-loc="' +
-            esc(strip.loc_id) +
-            '" aria-label="Show on map">' +
-            ICON_PIN +
-            "</button></span>" +
-            timeCell +
-            action +
-            '<span class="rf-ex-meta">' +
-            (meta || "") +
-            "</span>" +
-            (err
-                ? '<span class="rf-ex-strip-error">' + esc(err) + "</span>"
-                : "") +
-            "</article>"
-        );
-    }
-
-    function resetColumnExpand() {
-        expanded.closed = false;
-        expanded.reopen_next = false;
-        expanded.reopened = false;
-    }
-
-    function moreLabel(id, isExpanded) {
-        if (isExpanded) return "Show less";
-        if (id === "reopened") return "Show earlier";
-        return "Show more";
-    }
-
-    function renderColumn(id, title, rows) {
-        var visible = rows.filter(stripMatches);
-        var shown = visible;
-        var more = "";
-        var collapseSearch = !filterText;
-        var isExpanded = !!expanded[id];
-        if (collapseSearch && visible.length > COLUMN_PREVIEW) {
-            if (!isExpanded) shown = visible.slice(0, COLUMN_PREVIEW);
-            more =
-                '<button type="button" class="rf-ex-more" data-toggle-col="' +
-                esc(id) +
-                '" aria-expanded="' +
-                (isExpanded ? "true" : "false") +
-                '">' +
-                (isExpanded ? ICON_LESS : ICON_MORE) +
-                " " +
-                moreLabel(id, isExpanded) +
-                "</button>";
-        }
-        var body = shown.length
-            ? shown
-                  .map(function (row, index) {
-                      return renderStrip(row, id, {
-                          firstNext: id === "reopen_next" && index === 0,
-                      });
-                  })
-                  .join("") + more
-            : '<p class="rf-execute-empty">None.</p>';
-        var el = qs('[data-col="' + id + '"]');
-        if (!el) return;
-        qs(".rf-execute-col-count", el).textContent = String(visible.length);
-        qs(".rf-execute-col-body", el).innerHTML = body;
-        qs(".rf-execute-col-head", el).setAttribute(
-            "aria-label",
-            title + ", " + visible.length + " locations"
-        );
-    }
-
-    function gunInputsHtml(clock) {
-        var guns = (clock && (clock.guns || clock.analysis_guns)) || {};
-        return Object.keys(guns)
-            .sort()
-            .map(function (name) {
-                var value = guns[name] || "";
-                return (
-                    "<label>" +
-                    esc(name) +
-                    ' <input type="time" data-gun="' +
-                    esc(name) +
-                    '" value="' +
-                    esc(value) +
-                    '"></label>'
-                );
-            })
-            .join("");
-    }
-
-    function renderGuns(clock) {
-        var box = qs("#rf-execute-guns");
-        if (!box) return;
-        if (!clock || clock.guns_accepted) {
-            box.hidden = true;
-            box.innerHTML = "";
-            return;
-        }
-        box.hidden = false;
-        box.innerHTML =
-            "<p>Use planned start times for this run, or override them. " +
-            "Display Est. Re-Open shifts if a gun changes. " +
-            "Plan is not re-run.</p>" +
-            '<div class="rf-execute-gun-list">' +
-            gunInputsHtml(clock) +
-            "</div>" +
-            '<div class="rf-ex-confirm-actions">' +
-            '<button type="button" class="btn btn-sm btn-primary" id="rf-ex-accept-guns">Accept planned guns</button>' +
-            '<button type="button" class="btn btn-sm" id="rf-ex-save-guns">Save override</button>' +
-            "</div>";
-    }
-
-    function render(options) {
-        if (!board) return;
-        qs("#rf-execute-clock-time").textContent = board.now || "—";
-        syncRefreshCountdown();
-        var cols = board.columns || {};
-        renderColumn("closed", "Closed", cols.closed || []);
-        renderColumn("reopen_next", "Reopen next", cols.reopen_next || []);
-        renderColumn("reopened", "Reopened", cols.reopened || []);
-        renderGuns(board.clock);
-        syncExportLink();
-        syncZoneSelect();
-        qs("#rf-execute-workspace").hidden = false;
-        qs("#rf-execute-empty").hidden = true;
-        qs("#rf-execute-error").hidden = true;
-        paintStatusMap(selectedLocId, {
-            preserveView: !(options && options.fitMap),
-        });
     }
 
     function allStrips() {
@@ -309,6 +98,391 @@
             .concat(cols.closed || [])
             .concat(cols.reopen_next || [])
             .concat(cols.reopened || []);
+    }
+
+    function columnMap() {
+        return (board && board.columns) || {};
+    }
+
+    function findStrip(locId) {
+        var id = Number(locId);
+        var rows = allStrips();
+        for (var i = 0; i < rows.length; i++) {
+            if (Number(rows[i].loc_id) === id) return rows[i];
+        }
+        return null;
+    }
+
+    function isTurnaround(strip) {
+        var type = String((strip && strip.loc_type) || "").toLowerCase();
+        if (
+            type === "turnaround" ||
+            type === "turn-around" ||
+            type === "turn_around"
+        ) {
+            return true;
+        }
+        if (type === "water") return false;
+        var label = String((strip && strip.loc_label) || "");
+        if (/turn[\s-]?around/i.test(label)) return true;
+        if (!/\bturn\b/i.test(label)) return false;
+        return type === "official" || type === "course" || type === "";
+    }
+
+    function isWater(strip) {
+        var type = String((strip && strip.loc_type) || "").toLowerCase();
+        return type === "water" || type === "aid" || type === "official";
+    }
+
+    function locationVisible(strip) {
+        if (!stripMatches(strip)) return false;
+        if (layers.all) return true;
+        if (layers.turnarounds && isTurnaround(strip)) return true;
+        if (layers.water && isWater(strip)) return true;
+        if (!layers.reopen) return false;
+        if (strip.status === "closed" || strip.status === "reopened") return true;
+        if (strip.status === "reopen_next") {
+            return focusedCol === "reopen_next" || !!zoneFilter;
+        }
+        return false;
+    }
+
+    function statusTitle(status) {
+        if (status === "reopen_next") return "Reopen next";
+        if (status === "reopened") return "Reopened";
+        return "Closed";
+    }
+
+    function statusColor(status) {
+        return STATUS_COLORS[status] || STATUS_COLORS.closed;
+    }
+
+    function gpsHeard(iso) {
+        if (!iso) return "";
+        var when = new Date(iso);
+        if (isNaN(when.getTime())) return "";
+        return when.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }
+
+    function formatSpeed(speed) {
+        if (speed == null || speed === "") return "—";
+        var n = Number(speed);
+        if (!Number.isFinite(n)) return "—";
+        return n.toFixed(1);
+    }
+
+    function formatCoord(lat, lon) {
+        var a = Number(lat);
+        var b = Number(lon);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return "—";
+        return a.toFixed(5) + ", " + b.toFixed(5);
+    }
+
+    function sosIcon() {
+        return '<span class="rf-ex-sos-icon">SOS</span>';
+    }
+
+    function tileCloseButton(attr, disabled) {
+        return (
+            '<button type="button" class="rf-ex-tile-close" ' +
+            attr +
+            (disabled ? " disabled" : "") +
+            ' aria-label="Close">×</button>'
+        );
+    }
+
+    function resourceRows() {
+        var byId = {};
+        ((gpsOverlay && gpsOverlay.positions) || []).forEach(function (row) {
+            byId[row.device_id] = Object.assign({}, row, { kind: "position" });
+        });
+        ((gpsOverlay && gpsOverlay.sos) || []).forEach(function (row) {
+            var current = byId[row.device_id] || Object.assign({}, row);
+            current.sos = true;
+            current.attention = row.attention || "new";
+            byId[row.device_id] = current;
+        });
+        return Object.keys(byId)
+            .map(function (id) {
+                return byId[id];
+            })
+            .sort(function (a, b) {
+                return String(a.display_name || a.device_id).localeCompare(
+                    String(b.display_name || b.device_id)
+                );
+            });
+    }
+
+    function findResource(deviceId) {
+        var rows = resourceRows();
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].device_id === deviceId) return rows[i];
+        }
+        return null;
+    }
+
+    function counts() {
+        var cols = columnMap();
+        return {
+            closed: (cols.closed || []).filter(stripMatches).length,
+            reopen_next: (cols.reopen_next || []).filter(stripMatches).length,
+            reopened: (cols.reopened || []).filter(stripMatches).length,
+        };
+    }
+
+    function renderStripCounts() {
+        var c = counts();
+        ["closed", "reopen_next", "reopened"].forEach(function (id) {
+            var el = qs('[data-count="' + id + '"]');
+            if (el) el.textContent = String(c[id]);
+            var btn = qs('.rf-ex-strip-btn[data-col="' + id + '"]');
+            if (btn) {
+                btn.setAttribute(
+                    "aria-pressed",
+                    focusedCol === id ? "true" : "false"
+                );
+            }
+        });
+        var sos = qs("#rf-execute-sos-count");
+        var n = ((gpsOverlay && gpsOverlay.sos) || []).length;
+        if (sos) {
+            sos.hidden = n < 1;
+            sos.textContent = "SOS " + n;
+        }
+    }
+
+    function renderResources() {
+        var list = qs("#rf-execute-resources");
+        var tile = qs("#rf-execute-resource-tile");
+        if (!list) return;
+        var rows = resourceRows();
+        if (!rows.length) {
+            list.innerHTML =
+                '<p class="rf-execute-empty">No units yet.</p>';
+        } else {
+            list.innerHTML = rows
+                .map(function (row) {
+                    var selected =
+                        selectedDeviceId && row.device_id === selectedDeviceId
+                            ? " is-selected"
+                            : "";
+                    var stale = !!row.stale;
+                    var status = stale
+                        ? "last seen " + (gpsHeard(row.received_at) || "")
+                        : "live " + (gpsHeard(row.received_at) || "");
+                    var dot =
+                        "rf-ex-dot" +
+                        (row.sos ? " is-sos" : stale ? " is-stale" : "");
+                    return (
+                        '<button type="button" class="rf-ex-resource' +
+                        selected +
+                        '" data-device="' +
+                        esc(row.device_id) +
+                        '">' +
+                        '<span class="rf-ex-resource-name">' +
+                        '<span class="' +
+                        dot +
+                        '" aria-hidden="true"></span>' +
+                        esc(row.display_name || row.device_id || "unnamed") +
+                        (row.sos ? " " + sosIcon() : "") +
+                        "</span>" +
+                        '<span class="rf-ex-resource-status">' +
+                        esc(status.trim()) +
+                        "</span></button>"
+                    );
+                })
+                .join("");
+        }
+        var selected = selectedDeviceId
+            ? findResource(selectedDeviceId)
+            : null;
+        if (!tile) return;
+        if (!selected) {
+            tile.hidden = true;
+            tile.innerHTML = "";
+            return;
+        }
+        tile.hidden = false;
+        var following = followDeviceId === selected.device_id;
+        tile.innerHTML =
+            '<div class="rf-ex-tile-head">' +
+            '<div class="rf-ex-tile-name">' +
+            esc(selected.display_name || selected.device_id) +
+            " " +
+            (selected.sos ? sosIcon() : "") +
+            "</div>" +
+            tileCloseButton("data-close-resource") +
+            "</div><dl>" +
+            "<dt>" +
+            (selected.stale ? "Last seen" : "Live") +
+            "</dt><dd>" +
+            esc(gpsHeard(selected.received_at) || "—") +
+            "</dd>" +
+            (selected.person_name
+                ? "<dt>Person</dt><dd>" + esc(selected.person_name) + "</dd>"
+                : "") +
+            (selected.phone
+                ? "<dt>Phone</dt><dd>" + esc(selected.phone) + "</dd>"
+                : "") +
+            (selected.agency
+                ? "<dt>Agency</dt><dd>" + esc(selected.agency) + "</dd>"
+                : "") +
+            "<dt>Speed</dt><dd>" +
+            esc(formatSpeed(selected.speed)) +
+            "</dd>" +
+            "<dt>Coords</dt><dd>" +
+            esc(formatCoord(selected.lat, selected.lon)) +
+            "</dd></dl>" +
+            '<div class="rf-ex-tile-actions">' +
+            '<button type="button" class="btn btn-sm" data-locate-device="' +
+            esc(selected.device_id) +
+            '">Locate</button>' +
+            '<button type="button" class="btn btn-sm" data-follow-device="' +
+            esc(selected.device_id) +
+            '">' +
+            (following ? "Stop follow" : "Follow") +
+            "</button></div>";
+    }
+
+    function renderFocusedList() {
+        var box = qs("#rf-execute-board");
+        if (!box) return;
+        if (!focusedCol) {
+            box.innerHTML =
+                '<p class="rf-execute-empty">Select Closed, Reopen next, or Reopened.</p>';
+            return;
+        }
+        var rows = ((board && board.columns && board.columns[focusedCol]) || [])
+            .filter(locationVisible)
+            .filter(stripInMapView);
+        var items = rows.length
+            ? rows
+                  .map(function (strip) {
+                      var selected =
+                          selectedLocId != null &&
+                          Number(strip.loc_id) === Number(selectedLocId)
+                              ? " is-selected"
+                              : "";
+                      var next =
+                          strip.status === "reopen_next" ? " is-next" : "";
+                      return (
+                          '<button type="button" class="rf-ex-strip' +
+                          selected +
+                          next +
+                          '" data-loc-id="' +
+                          esc(strip.loc_id) +
+                          '"><span class="rf-ex-id">' +
+                          esc(strip.loc_id) +
+                          '</span><span class="rf-ex-name">' +
+                          esc(strip.loc_label) +
+                          '</span><span class="rf-ex-time">est. ' +
+                          esc(strip.loc_end || "—") +
+                          '</span><span class="rf-ex-meta">' +
+                          esc(zoneLabel(strip) || "") +
+                          "</span></button>"
+                      );
+                  })
+                  .join("")
+            : '<p class="rf-execute-empty">None in the current map view.</p>';
+        box.innerHTML =
+            '<div class="rf-ex-focus-head">' +
+            esc(statusTitle(focusedCol)) +
+            "</div>" +
+            items;
+    }
+
+    function renderSelectedLocation() {
+        var box = qs("#rf-execute-selected");
+        if (!box) return;
+        var strip = selectedLocId != null ? findStrip(selectedLocId) : null;
+        if (!strip) {
+            box.hidden = true;
+            box.innerHTML = "";
+            return;
+        }
+        var pending = pendingReopenId === Number(strip.loc_id);
+        var err =
+            reopenError && Number(reopenError.locId) === Number(strip.loc_id)
+                ? reopenError.message
+                : "";
+        var action = "";
+        if (strip.status === "reopen_next") {
+            action =
+                '<button type="button" class="btn btn-sm btn-primary rf-ex-reopen" data-reopen="' +
+                esc(strip.loc_id) +
+                '"' +
+                (pending || pendingReopenId ? " disabled" : "") +
+                ">" +
+                (pending ? "Reopening…" : "Confirm reopen") +
+                "</button>";
+        } else if (strip.status === "reopened") {
+            action =
+                "<p>Reopened " +
+                esc(strip.reopened_at || "") +
+                "</p>" +
+                '<button type="button" class="btn btn-sm rf-ex-reopen" data-mark-closed="' +
+                esc(strip.loc_id) +
+                '"' +
+                (pending || pendingReopenId ? " disabled" : "") +
+                ">Mark closed</button>";
+        }
+        box.hidden = false;
+        box.innerHTML =
+            '<div class="rf-ex-tile-head">' +
+            '<div class="rf-ex-tile-name">' +
+            esc(strip.loc_id) +
+            " · " +
+            esc(strip.loc_label) +
+            "</div>" +
+            tileCloseButton("data-close-location", pending) +
+            "</div><dl>" +
+            "<dt>Status</dt><dd>" +
+            esc(statusTitle(strip.status)) +
+            "</dd>" +
+            "<dt>Zone</dt><dd>" +
+            esc(zoneLabel(strip) || "—") +
+            "</dd>" +
+            "<dt>Est.</dt><dd>" +
+            esc(strip.loc_end || "—") +
+            "</dd></dl>" +
+            action +
+            (err
+                ? '<span class="rf-ex-strip-error">' + esc(err) + "</span>"
+                : "");
+    }
+
+    function renderAttention() {
+        var box = qs("#rf-execute-attention");
+        if (!box) return;
+        box.hidden = true;
+        box.innerHTML = "";
+    }
+
+    function render(options) {
+        if (!board) return;
+        qs("#rf-execute-clock-time").textContent = board.now || "—";
+        var label = qs("#rf-execute-plan-label");
+        if (label) {
+            label.textContent = [board.name, board.calendar_date]
+                .filter(Boolean)
+                .join(" · ");
+        }
+        syncRefreshCountdown();
+        renderStripCounts();
+        renderResources();
+        renderFocusedList();
+        renderSelectedLocation();
+        renderAttention();
+        syncZoneSelect();
+        qs("#rf-execute-workspace").hidden = false;
+        qs("#rf-execute-empty").hidden = true;
+        qs("#rf-execute-error").hidden = true;
+        paintStatusMap(selectedLocId, {
+            preserveView: !(options && options.fitMap),
+        });
     }
 
     function syncZoneSelect() {
@@ -337,30 +511,13 @@
         }
     }
 
-    function syncExportLink() {
-        var link = qs("#rf-execute-export");
-        if (!link) return;
-        if (!board || board.empty) {
-            link.hidden = true;
-            link.removeAttribute("href");
-            return;
-        }
-        link.hidden = false;
-        link.href = "/api/execute/ops/reopen.csv";
-        link.setAttribute("download", "");
-    }
-
     function showEmpty() {
-        closeMapModal();
         qs("#rf-execute-workspace").hidden = true;
         qs("#rf-execute-error").hidden = true;
         qs("#rf-execute-empty").hidden = false;
-        var link = qs("#rf-execute-export");
-        if (link) link.hidden = true;
     }
 
     function showError(message) {
-        closeMapModal();
         qs("#rf-execute-workspace").hidden = true;
         qs("#rf-execute-empty").hidden = true;
         var box = qs("#rf-execute-error");
@@ -387,83 +544,11 @@
         );
     }
 
-    function gpsHeard(iso) {
-        if (!iso) return "";
-        var when = new Date(iso);
-        if (isNaN(when.getTime())) return "";
-        return when.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-        });
-    }
-
-    function showGpsLegend(on) {
-        document.querySelectorAll(".rf-ex-gps-legend").forEach(function (el) {
-            el.hidden = !on;
-        });
-    }
-
-    function renderGpsStatus() {
-        var el = qs("#rf-execute-gps-status");
-        if (!el) return;
-        var positions = (gpsOverlay && gpsOverlay.positions) || [];
-        var sos = (gpsOverlay && gpsOverlay.sos) || [];
-        var available = !!(gpsOverlay && gpsOverlay.ok);
-        showGpsLegend(available);
-        el.classList.toggle("is-sos", sos.length > 0);
-        if (!available) {
-            el.hidden = true;
-            el.textContent = "";
-            return;
-        }
-        if (!positions.length && !sos.length) {
-            el.hidden = false;
-            el.textContent = "GPS  No units yet";
-            return;
-        }
-        var parts = positions.map(function (row) {
-            var bits = [row.device_id || "unit"];
-            bits.push(row.stale ? "stale" : "live");
-            var heard = gpsHeard(row.received_at);
-            if (heard) bits.push(heard);
-            return bits.join(" · ");
-        });
-        if (sos.length) {
-            parts.push("SOS " + sos.length);
-        }
-        el.hidden = false;
-        el.textContent = "GPS  " + parts.join("   ");
-    }
-
-    function loadGpsOverlay() {
-        return fetch("/api/execute/gps/overlay", { credentials: "same-origin" })
-            .then(function (resp) {
-                if (!resp.ok) return null;
-                return resp.json();
-            })
-            .then(function (data) {
-                gpsOverlay = data;
-                renderGpsStatus();
-                paintStatusMap(mapFocusLocId, { preserveView: true });
-            })
-            .catch(function () {
-                gpsOverlay = null;
-                renderGpsStatus();
-            });
-    }
-
     function applyBoard(data) {
         board = data;
         lastRefreshAt = Date.now();
         render();
         loadGpsOverlay();
-        if (board.clock && board.clock.paused && !unpausing) {
-            unpausing = true;
-            putClock({ paused: false, jump_to_now: true }).then(function () {
-                unpausing = false;
-            });
-        }
     }
 
     function loadBoard() {
@@ -478,18 +563,10 @@
                     showEmpty();
                     return;
                 }
-                if (pack.resp.status === 404) {
-                    showError(
-                        pack.data.detail ||
-                            "Locations report JSON is missing. Re-run analysis."
-                    );
-                    return;
-                }
                 if (!pack.resp.ok) {
                     showError(pack.data.detail || "Could not load Operations.");
                     return;
                 }
-                resetColumnExpand();
                 applyBoard(pack.data);
             })
             .catch(function () {
@@ -497,43 +574,23 @@
             });
     }
 
-    function collectGuns() {
-        var guns = {};
-        document.querySelectorAll("[data-gun]").forEach(function (input) {
-            if (input.value) guns[input.getAttribute("data-gun")] = input.value;
-        });
-        return guns;
-    }
-
-    function putClock(payload) {
-        return fetch("/api/execute/ops/clock", {
-            method: "PUT",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        })
+    function loadGpsOverlay() {
+        return fetch("/api/execute/gps/overlay", { credentials: "same-origin" })
             .then(function (resp) {
-                return resp.json().then(function (data) {
-                    if (!resp.ok) throw new Error(data.detail || "Clock update failed");
-                    applyBoard(data);
-                });
+                if (!resp.ok) return null;
+                return resp.json();
             })
-            .catch(function (err) {
-                showError(err.message || "Clock update failed");
+            .then(function (data) {
+                gpsOverlay = data;
+                renderResources();
+                renderStripCounts();
+                renderAttention();
+                paintStatusMap(selectedLocId, { preserveView: true });
+                followIfNeeded();
+            })
+            .catch(function () {
+                gpsOverlay = null;
             });
-    }
-
-    function findStrip(locId) {
-        var cols = (board && board.columns) || {};
-        var lists = [cols.closed, cols.reopen_next, cols.reopened];
-        var id = Number(locId);
-        for (var i = 0; i < lists.length; i++) {
-            var rows = lists[i] || [];
-            for (var j = 0; j < rows.length; j++) {
-                if (Number(rows[j].loc_id) === id) return rows[j];
-            }
-        }
-        return null;
     }
 
     function postReopen(locId) {
@@ -556,10 +613,6 @@
         })
             .then(function (resp) {
                 return resp.json().then(function (data) {
-                    if (resp.status === 409) {
-                        pendingReopenId = null;
-                        return loadBoard();
-                    }
                     if (!resp.ok) {
                         throw new Error(data.detail || "Reopen failed. Try again.");
                     }
@@ -578,9 +631,35 @@
             });
     }
 
-    function mapModalOpen() {
-        var el = qs("#rf-execute-map-modal");
-        return !!(el && !el.hidden);
+    function postClose(locId) {
+        if (pendingReopenId) return Promise.resolve();
+        pendingReopenId = Number(locId);
+        reopenError = null;
+        render();
+        return fetch("/api/execute/ops/close", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ loc_id: Number(locId) }),
+        })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) {
+                        throw new Error(data.detail || "Close failed. Try again.");
+                    }
+                    pendingReopenId = null;
+                    reopenError = null;
+                    applyBoard(data);
+                });
+            })
+            .catch(function (err) {
+                pendingReopenId = null;
+                reopenError = {
+                    locId: Number(locId),
+                    message: err.message || "Close failed. Try again.",
+                };
+                render();
+            });
     }
 
     function stripLatLon(strip) {
@@ -590,43 +669,9 @@
         return [lat, lon];
     }
 
-    function statusColor(status) {
-        return STATUS_COLORS[status] || STATUS_COLORS.closed;
-    }
-
-    function statusTitle(status) {
-        if (status === "reopen_next") return "Reopen next";
-        if (status === "reopened") return "Reopened";
-        return "Closed";
-    }
-
-    function markerPopupHtml(strip) {
-        var status = strip.status || "closed";
-        var timeLine =
-            status === "reopened"
-                ? "Actual " + (strip.reopened_at || "—")
-                : "est. " + (strip.loc_end || "—");
-        var meta = metaLine(strip);
-        return (
-            '<div class="rf-ex-map-popup">' +
-            '<div class="rf-ex-map-popup-id">' +
-            esc(strip.loc_id) +
-            " · " +
-            esc(strip.loc_label) +
-            "</div>" +
-            "<div>" +
-            esc(statusTitle(status)) +
-            " · " +
-            esc(timeLine) +
-            "</div>" +
-            (meta ? '<div class="rf-ex-map-popup-meta">' + meta + "</div>" : "") +
-            "</div>"
-        );
-    }
-
-    function filteredPins() {
+    function visiblePins() {
         return allStrips()
-            .filter(stripMatches)
+            .filter(locationVisible)
             .map(function (strip) {
                 var latlng = stripLatLon(strip);
                 if (!latlng) return null;
@@ -638,12 +683,17 @@
     function ensureMapInstance(fallbackLatLng) {
         if (mapInstance) return mapInstance;
         if (typeof window.initMap === "function") {
-            mapInstance = window.initMap("rf-execute-map", {
-                zoomPosition: "topleft",
-            });
-            if (typeof window.enableBasemapToggle === "function") {
-                window.enableBasemapToggle(mapInstance);
+            mapInstance = window.initMap("rf-execute-map");
+            if (mapInstance.zoomControl) {
+                mapInstance.zoomControl.remove();
             }
+            if (window.L && window.L.control) {
+                window.L.control
+                    .zoom({ position: "bottomright" })
+                    .addTo(mapInstance);
+            }
+            bindBasemap(mapInstance);
+            bindMapViewSync(mapInstance);
             return mapInstance;
         }
         if (window.L) {
@@ -651,11 +701,17 @@
                 fallbackLatLng || [45.95, -66.64],
                 14
             );
-            if (typeof window.createCartoVoyagerLayer === "function") {
-                window.createCartoVoyagerLayer().addTo(mapInstance);
-            }
+            bindMapViewSync(mapInstance);
         }
         return mapInstance;
+    }
+
+    function bindMapViewSync(map) {
+        if (!map || map._rfViewBound) return;
+        map._rfViewBound = true;
+        map.on("moveend", function () {
+            renderFocusedList();
+        });
     }
 
     function paintCourseLayer(map) {
@@ -663,13 +719,14 @@
             map.removeLayer(courseLayer);
             courseLayer = null;
         }
+        if (!layers.courses) return null;
         var courses = (board && board.courses) || {};
         var group = window.L.featureGroup();
         Object.keys(courses).forEach(function (raceId) {
             var geo = courses[raceId];
             if (!geo) return;
             window.L.geoJSON(geo, {
-                style: { color: "#2563eb", weight: 3, opacity: 0.7 },
+                style: { color: "#38bdf8", weight: 3, opacity: 0.9 },
             }).addTo(group);
         });
         if (group.getLayers().length) {
@@ -677,6 +734,57 @@
             courseLayer = group;
         }
         return courseLayer;
+    }
+
+    function bindBasemap(map) {
+        var toggle = qs("#basemap-toggle");
+        if (!map || !toggle) return;
+        if (window.L && window.L.DomEvent) {
+            window.L.DomEvent.disableClickPropagation(toggle);
+            window.L.DomEvent.disableScrollPropagation(toggle);
+        }
+        toggle.style.display = "flex";
+        function applyPanelTheme(key) {
+            var page = qs("#rf-execute-page");
+            if (!page) return;
+            var light = key === "carto" || key === "satellite";
+            page.classList.toggle("rf-ex-theme-light", light);
+            page.classList.toggle("rf-ex-theme-dark", !light);
+        }
+        function setBasemap(key) {
+            if (typeof window.switchTileLayer === "function") {
+                window.switchTileLayer(map, key);
+            }
+            var dark = qs("#btn-dark");
+            var street = qs("#btn-street");
+            var sat = qs("#btn-satellite");
+            if (dark) dark.classList.toggle("active", key === "cartoDark");
+            if (street) street.classList.toggle("active", key === "carto");
+            if (sat) sat.classList.toggle("active", key === "satellite");
+            applyPanelTheme(key);
+        }
+        var dark = qs("#btn-dark");
+        var street = qs("#btn-street");
+        var sat = qs("#btn-satellite");
+        if (dark && !dark.dataset.bound) {
+            dark.addEventListener("click", function () {
+                setBasemap("cartoDark");
+            });
+            dark.dataset.bound = "1";
+        }
+        if (street && !street.dataset.bound) {
+            street.addEventListener("click", function () {
+                setBasemap("carto");
+            });
+            street.dataset.bound = "1";
+        }
+        if (sat && !sat.dataset.bound) {
+            sat.addEventListener("click", function () {
+                setBasemap("satellite");
+            });
+            sat.dataset.bound = "1";
+        }
+        setBasemap("cartoDark");
     }
 
     function ensureGpsPane(map) {
@@ -687,34 +795,43 @@
     }
 
     function gpsPopupHtml(row, kind) {
-        var label = kind === "sos" ? "SOS" : row.stale ? "Stale GPS" : "GPS";
-        var heard = gpsHeard(row.received_at);
+        var label =
+            kind === "sos"
+                ? "SOS"
+                : row.stale
+                  ? "last seen"
+                  : "live";
         return (
             '<div class="rf-ex-map-popup">' +
             '<div class="rf-ex-map-popup-id">' +
-            esc(row.device_id || "") +
+            esc(row.display_name || row.device_id || "") +
             "</div>" +
             "<div>" +
             esc(label) +
-            (heard ? " · " + esc(heard) : "") +
-            "</div>" +
-            "</div>"
+            (gpsHeard(row.received_at)
+                ? " · " + esc(gpsHeard(row.received_at))
+                : "") +
+            "</div></div>"
         );
     }
 
     function addGpsChip(group, row, kind) {
         if (row.lat == null || row.lon == null || !window.L) return;
-        var text =
-            kind === "sos"
-                ? "SOS · " + (row.device_id || "")
-                : row.device_id || "GPS";
+        var name = row.display_name || row.device_id || "unnamed";
         var cls = "rf-ex-gps-marker";
         if (kind === "sos") cls += " is-sos";
         else if (row.stale) cls += " is-stale";
+        var html =
+            '<div class="' +
+            cls +
+            '">' +
+            (kind === "sos" ? "SOS · " : "") +
+            esc(name) +
+            "</div>";
         var icon = window.L.divIcon({
             className: "rf-ex-gps-icon",
-            html: '<div class="' + cls + '">' + esc(text) + "</div>",
-            iconSize: [140, 26],
+            html: html,
+            iconSize: [150, 26],
             iconAnchor: kind === "sos" ? [16, 36] : [16, 13],
         });
         window.L.marker([row.lat, row.lon], {
@@ -723,6 +840,9 @@
             keyboard: false,
         })
             .bindPopup(gpsPopupHtml(row, kind), { maxWidth: 240 })
+            .on("click", function () {
+                selectDevice(row.device_id);
+            })
             .addTo(group);
     }
 
@@ -734,21 +854,80 @@
         if (!gpsOverlay || !window.L) return;
         ensureGpsPane(map);
         var group = window.L.featureGroup();
-        (gpsOverlay.positions || []).forEach(function (row) {
-            addGpsChip(group, row, "position");
-        });
-        (gpsOverlay.sos || []).forEach(function (row) {
-            addGpsChip(group, row, "sos");
-        });
+        var drawn = {};
+        if (layers.resources) {
+            (gpsOverlay.positions || []).forEach(function (row) {
+                drawn[row.device_id] = true;
+                addGpsChip(
+                    group,
+                    row,
+                    layers.sos && row.sos ? "sos" : "position"
+                );
+            });
+        }
+        if (layers.sos) {
+            (gpsOverlay.sos || []).forEach(function (row) {
+                if (drawn[row.device_id]) return;
+                addGpsChip(group, row, "sos");
+            });
+        }
         if (group.getLayers().length) {
             group.addTo(map);
             map._rfGpsLayer = group;
         }
     }
 
+    function paintTurnarounds(map) {
+        if (map._rfTurnLayer) {
+            map.removeLayer(map._rfTurnLayer);
+            map._rfTurnLayer = null;
+        }
+        if (!layers.turnarounds || !window.L) return;
+        var pins = (board && board.turnarounds) || [];
+        var group = window.L.featureGroup();
+        pins.forEach(function (pin) {
+            if (pin.lat == null || pin.lon == null) return;
+            window.L.marker([pin.lat, pin.lon], {
+                icon: window.L.divIcon({
+                    className: "rf-ex-gps-icon",
+                    html: '<div class="rf-ex-turn-marker"></div>',
+                    iconSize: [14, 12],
+                    iconAnchor: [7, 12],
+                }),
+                keyboard: false,
+            })
+                .bindPopup(esc(pin.label || "Turn-around"))
+                .addTo(group);
+        });
+        if (group.getLayers().length) {
+            group.addTo(map);
+            map._rfTurnLayer = group;
+        }
+    }
+
+    function markerPopupHtml(strip) {
+        var status = strip.status || "closed";
+        var timeLine =
+            status === "reopened"
+                ? "Actual " + (strip.reopened_at || "—")
+                : "est. " + (strip.loc_end || "—");
+        return (
+            '<div class="rf-ex-map-popup">' +
+            '<div class="rf-ex-map-popup-id">' +
+            esc(strip.loc_id) +
+            " · " +
+            esc(strip.loc_label) +
+            "</div><div>" +
+            esc(statusTitle(status)) +
+            " · " +
+            esc(timeLine) +
+            "</div></div>"
+        );
+    }
+
     function paintStatusMap(focusId, options) {
         options = options || {};
-        var pins = filteredPins();
+        var pins = visiblePins();
         var courses = (board && board.courses) || {};
         var hasCourses = Object.keys(courses).some(function (id) {
             return !!courses[id];
@@ -756,18 +935,23 @@
         var empty = qs("#rf-execute-map-empty");
         var mapEl = qs("#rf-execute-map");
         var legend = qs("#rf-execute-map-legend");
-        var hasPins = pins.length > 0;
         var hasGps = !!(
             gpsOverlay &&
             ((gpsOverlay.positions && gpsOverlay.positions.length) ||
                 (gpsOverlay.sos && gpsOverlay.sos.length))
         );
-        var hasGeo = hasPins || hasCourses || hasGps;
+        var hasGeo =
+            pins.length > 0 ||
+            hasCourses ||
+            hasGps ||
+            ((board && board.turnarounds) || []).length > 0;
         if (empty) empty.hidden = hasGeo;
         if (mapEl) mapEl.hidden = !hasGeo;
-        if (legend) legend.hidden = !(hasPins || hasGps);
+        if (legend) legend.hidden = !hasGeo;
         if (!hasGeo) return;
-        var map = ensureMapInstance(hasPins ? pins[0].latlng : [45.95, -66.64]);
+        var map = ensureMapInstance(
+            pins.length ? pins[0].latlng : [45.95, -66.64]
+        );
         if (!map || !window.L) return;
         paintCourseLayer(map);
         if (map._rfStatusLayer) {
@@ -797,71 +981,343 @@
         });
         group.addTo(map);
         map._rfStatusLayer = group;
+        paintTurnarounds(map);
         paintGpsLayer(map);
         map.invalidateSize();
         if (options.preserveView && mapFitted) return;
-        if (focusMarker) {
-            map.setView(focusMarker.getLatLng(), 16);
-            focusMarker.openPopup();
-        } else {
-            var fit = window.L.featureGroup();
-            group.eachLayer(function (layer) {
-                fit.addLayer(layer);
-            });
-            if (map._rfGpsLayer) {
-                map._rfGpsLayer.eachLayer(function (layer) {
-                    fit.addLayer(layer);
-                });
+        if (zoneFilter && group.getLayers().length) {
+            var zoneBounds = group.getBounds();
+            if (zoneBounds.isValid()) {
+                if (zoneBounds.getNorthEast().equals(zoneBounds.getSouthWest())) {
+                    map.setView(zoneBounds.getCenter(), 15);
+                } else {
+                    map.fitBounds(zoneBounds.pad(0.2));
+                }
             }
-            if (fit.getLayers().length) {
-                map.fitBounds(fit.getBounds().pad(0.2));
-            } else if (courseLayer && courseLayer.getBounds().isValid()) {
-                map.fitBounds(courseLayer.getBounds().pad(0.15));
-            }
+        } else if (focusMarker) {
+            map.setView(focusMarker.getLatLng(), Math.max(map.getZoom(), 15));
+        } else if (courseLayer && courseLayer.getBounds().isValid()) {
+            map.fitBounds(courseLayer.getBounds().pad(0.12));
+        } else if (group.getLayers().length) {
+            map.fitBounds(group.getBounds().pad(0.2));
         }
         mapFitted = true;
     }
 
-    function closeMapModal() {
-        mapFocusLocId = null;
+    function followIfNeeded() {
+        if (!followDeviceId || !mapInstance) return;
+        var row = findResource(followDeviceId);
+        if (!row || row.lat == null || row.lon == null) return;
+        if (row.stale) return;
+        mapInstance.setView([row.lat, row.lon], Math.max(mapInstance.getZoom(), 15));
     }
 
     function selectLocation(locId) {
         selectedLocId = locId == null || locId === "" ? null : Number(locId);
-        mapFocusLocId = selectedLocId;
+        if (board) render();
         var strip = selectedLocId != null ? findStrip(selectedLocId) : null;
-        var title = qs("#rf-execute-map-title");
-        if (title) {
-            title.textContent = strip
-                ? strip.loc_id + " · " + strip.loc_label
-                : "Course map";
+        var latlng = stripLatLon(strip);
+        if (latlng && mapInstance) {
+            mapInstance.setView(latlng, Math.max(mapInstance.getZoom(), 15));
         }
-        if (board) render({ fitMap: true });
     }
 
-    function openMapModal(locId) {
-        selectLocation(locId);
+    function closeSelectedLocation() {
+        if (pendingReopenId) return;
+        selectedLocId = null;
+        reopenError = null;
+        if (board) render();
+    }
+
+    function closeSelectedResource() {
+        selectedDeviceId = null;
+        followDeviceId = null;
+        renderResources();
+    }
+
+    function selectDevice(deviceId) {
+        selectedDeviceId = deviceId || null;
+        renderResources();
+        var row = findResource(deviceId);
+        if (row && row.lat != null && mapInstance) {
+            mapInstance.setView(
+                [row.lat, row.lon],
+                Math.max(mapInstance.getZoom(), 15)
+            );
+        }
+    }
+
+    function planId() {
+        return (board && board.plan_id) || "";
+    }
+
+    function assignStatus(message, isError) {
+        var el = qs("#rf-execute-assign-status");
+        if (!el) return;
+        if (!message) {
+            el.hidden = true;
+            el.textContent = "";
+            return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+        el.style.color = isError ? "#b42318" : "";
+    }
+
+    function findAssignRow(deviceId) {
+        var i;
+        for (i = 0; i < assignRows.length; i++) {
+            if (assignRows[i].device_id === deviceId) {
+                return assignRows[i];
+            }
+        }
+        return null;
+    }
+
+    function setAssignFormMode(mode, row) {
+        var form = qs("#rf-execute-assign-form");
+        var title = qs("#rf-execute-assign-form-title");
+        var del = qs("#rf-execute-assign-delete");
+        var save = qs("#rf-execute-assign-save");
+        if (!form) return;
+        if (mode === "edit" && row) {
+            assignEditDeviceId = row.device_id;
+            form.device_id.value = row.device_id || "";
+            form.resource_name.value = row.resource_name || "";
+            form.person_name.value = row.person_name || "";
+            form.phone.value = row.phone || "";
+            form.agency.value = row.agency || "";
+            form.device_id.readOnly = true;
+            if (title) title.textContent = "Edit assignment";
+            if (save) save.textContent = "Save changes";
+            if (del) del.disabled = false;
+        } else {
+            assignEditDeviceId = null;
+            form.reset();
+            form.device_id.readOnly = false;
+            if (row && row.device_id) {
+                form.device_id.value = row.device_id;
+            }
+            if (title) title.textContent = "Add assignment";
+            if (save) save.textContent = "Save assignment";
+            if (del) del.disabled = true;
+        }
+        renderAssignLists();
+    }
+
+    function mergeUnassigned(apiRows) {
+        var assignedIds = {};
+        var seen = {};
+        var out = [];
+        assignRows.forEach(function (row) {
+            assignedIds[row.device_id] = true;
+        });
+        function add(row) {
+            var id = String((row && row.device_id) || "").trim();
+            if (!id || assignedIds[id] || seen[id]) return;
+            seen[id] = true;
+            out.push({
+                device_id: id,
+                received_at: row.received_at || "",
+                stale: !!row.stale,
+            });
+        }
+        (apiRows || []).forEach(add);
+        ((gpsOverlay && gpsOverlay.positions) || []).forEach(add);
+        ((gpsOverlay && gpsOverlay.sos) || []).forEach(add);
+        out.sort(function (a, b) {
+            return String(a.device_id).localeCompare(String(b.device_id));
+        });
+        return out;
+    }
+
+    function renderAssignLists() {
+        var box = qs("#rf-execute-assign-list");
+        var unseen = qs("#rf-execute-assign-unassigned");
+        if (box) {
+            if (!assignRows.length) {
+                box.innerHTML =
+                    '<tr><td class="rf-ex-assign-empty" colspan="4">' +
+                    "No assignments on this Day Plan yet.</td></tr>";
+            } else {
+                box.innerHTML = assignRows
+                    .map(function (row) {
+                        var selected =
+                            assignEditDeviceId === row.device_id
+                                ? " is-selected"
+                                : "";
+                        return (
+                            "<tr class=\"" +
+                            selected.trim() +
+                            "\" data-fill-device=\"" +
+                            esc(row.device_id) +
+                            "\">" +
+                            "<td>" +
+                            esc(row.resource_name || "unnamed") +
+                            "</td><td>" +
+                            esc(row.device_id) +
+                            "</td><td>" +
+                            esc(row.person_name || "—") +
+                            "</td><td>" +
+                            esc(row.agency || "—") +
+                            "</td></tr>"
+                        );
+                    })
+                    .join("");
+            }
+        }
+        if (unseen) {
+            if (!assignUnassigned.length) {
+                unseen.innerHTML =
+                    '<p class="rf-execute-empty">No unassigned devices are reporting GPS.</p>';
+            } else {
+                unseen.innerHTML = assignUnassigned
+                    .map(function (row) {
+                        var selected =
+                            !assignEditDeviceId &&
+                            qs("#rf-execute-assign-form") &&
+                            qs("#rf-execute-assign-form").device_id.value ===
+                                row.device_id
+                                ? " is-selected"
+                                : "";
+                        var heard = gpsHeard(row.received_at);
+                        return (
+                            '<button type="button" class="rf-ex-assign-device' +
+                            selected +
+                            '" data-unassigned-device="' +
+                            esc(row.device_id) +
+                            '">' +
+                            esc(row.device_id) +
+                            (heard ? " · " + heard : "") +
+                            "</button>"
+                        );
+                    })
+                    .join("");
+            }
+        }
+    }
+
+    function loadAssignments() {
+        var id = planId();
+        if (!id) return Promise.resolve();
+        return fetch(
+            "/api/execute/plans/" + encodeURIComponent(id) + "/assignments",
+            { credentials: "same-origin" }
+        )
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (data) {
+                assignRows = data.assignments || [];
+                assignUnassigned = mergeUnassigned(data.unassigned || []);
+                renderAssignLists();
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Could not load assignments.", true);
+            });
+    }
+
+    function openAssignments() {
+        var panel = qs("#rf-execute-assign");
+        var plan = qs("#rf-execute-assign-plan");
+        if (panel) panel.hidden = false;
+        if (plan) {
+            plan.textContent = [board && board.name, board && board.calendar_date]
+                .filter(Boolean)
+                .join(" · ");
+        }
+        assignStatus("");
+        setAssignFormMode("add");
+        return loadAssignments();
+    }
+
+    function saveAssignment(ev) {
+        ev.preventDefault();
+        var id = planId();
+        var form = qs("#rf-execute-assign-form");
+        if (!id || !form) return;
+        var body = {
+            device_id: form.device_id.value,
+            resource_name: form.resource_name.value,
+            person_name: form.person_name.value,
+            phone: form.phone.value,
+            agency: form.agency.value,
+        };
+        fetch("/api/execute/plans/" + encodeURIComponent(id) + "/assignments", {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) throw new Error(data.detail || "Save failed.");
+                    return data;
+                });
+            })
+            .then(function () {
+                assignStatus("Saved for this Day Plan.");
+                assignEditDeviceId = body.device_id;
+                return loadAssignments()
+                    .then(loadGpsOverlay)
+                    .then(function () {
+                        var row = findAssignRow(body.device_id);
+                        if (row) setAssignFormMode("edit", row);
+                    });
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Save failed.", true);
+            });
+    }
+
+    function deleteCurrentAssignment() {
+        var id = planId();
+        var form = qs("#rf-execute-assign-form");
+        if (!id || !form || !form.device_id.value || !assignEditDeviceId) {
+            return;
+        }
+        fetch(
+            "/api/execute/plans/" +
+                encodeURIComponent(id) +
+                "/assignments/" +
+                encodeURIComponent(form.device_id.value),
+            { method: "DELETE", credentials: "same-origin" }
+        )
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) throw new Error(data.detail || "Remove failed.");
+                    return data;
+                });
+            })
+            .then(function () {
+                assignStatus("Removed from this Day Plan.");
+                setAssignFormMode("add");
+                return loadAssignments().then(loadGpsOverlay);
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Remove failed.", true);
+            });
     }
 
     function onClick(ev) {
-        if (ev.target.closest("[data-map-close]")) {
-            ev.preventDefault();
-            closeMapModal();
+        var stripBtn = ev.target.closest(".rf-ex-strip-btn[data-col]");
+        if (stripBtn) {
+            var col = stripBtn.getAttribute("data-col");
+            focusedCol = focusedCol === col ? "" : col;
+            render();
             return;
         }
-        if (ev.target.closest("#rf-execute-map-open")) {
-            ev.preventDefault();
-            openMapModal(null);
+        if (ev.target.closest("#rf-execute-sos-count")) {
+            var first = ((gpsOverlay && gpsOverlay.sos) || [])[0];
+            if (first) selectDevice(first.device_id);
             return;
         }
-        var toggle = ev.target.closest("[data-toggle-col]");
-        if (toggle) {
-            ev.preventDefault();
-            var col = toggle.getAttribute("data-toggle-col");
-            if (Object.prototype.hasOwnProperty.call(expanded, col)) {
-                expanded[col] = !expanded[col];
-                render();
-            }
+        if (ev.target.closest("[data-close-location]")) {
+            closeSelectedLocation();
+            return;
+        }
+        if (ev.target.closest("[data-close-resource]")) {
+            closeSelectedResource();
             return;
         }
         var reopen = ev.target.closest("[data-reopen]");
@@ -869,21 +1325,69 @@
             postReopen(reopen.getAttribute("data-reopen"));
             return;
         }
-        if (ev.target.id === "rf-ex-accept-guns") {
-            putClock({
-                guns_accepted: true,
-                guns: (board.clock && board.clock.analysis_guns) || collectGuns(),
+        var markClosed = ev.target.closest("[data-mark-closed]");
+        if (markClosed) {
+            postClose(markClosed.getAttribute("data-mark-closed"));
+            return;
+        }
+        var locEl = ev.target.closest("[data-loc-id]");
+        if (locEl) {
+            selectLocation(locEl.getAttribute("data-loc-id"));
+            return;
+        }
+        var deviceEl = ev.target.closest("[data-device]");
+        if (deviceEl) {
+            selectDevice(deviceEl.getAttribute("data-device"));
+            return;
+        }
+        var locate = ev.target.closest("[data-locate-device]");
+        if (locate) {
+            selectDevice(locate.getAttribute("data-locate-device"));
+            return;
+        }
+        var follow = ev.target.closest("[data-follow-device]");
+        if (follow) {
+            var did = follow.getAttribute("data-follow-device");
+            followDeviceId = followDeviceId === did ? null : did;
+            selectDevice(did);
+            followIfNeeded();
+            renderResources();
+            return;
+        }
+        if (ev.target.id === "rf-execute-assign-open") {
+            openAssignments();
+            return;
+        }
+        if (ev.target.id === "rf-execute-assign-close") {
+            qs("#rf-execute-assign").hidden = true;
+            return;
+        }
+        if (ev.target.id === "rf-execute-assign-new") {
+            assignStatus("");
+            setAssignFormMode("add");
+            return;
+        }
+        if (ev.target.id === "rf-execute-assign-delete") {
+            deleteCurrentAssignment();
+            return;
+        }
+        var unseen = ev.target.closest("[data-unassigned-device]");
+        if (unseen) {
+            assignStatus("");
+            setAssignFormMode("add", {
+                device_id: unseen.getAttribute("data-unassigned-device"),
             });
             return;
         }
-        if (ev.target.id === "rf-ex-save-guns") {
-            putClock({ guns_accepted: true, guns: collectGuns() });
-            return;
-        }
-        var stripEl = ev.target.closest(".rf-ex-strip[data-loc-id]");
-        if (stripEl) {
-            ev.preventDefault();
-            selectLocation(stripEl.getAttribute("data-loc-id"));
+        var fill = ev.target.closest("[data-fill-device]");
+        if (fill) {
+            assignStatus("");
+            setAssignFormMode(
+                "edit",
+                findAssignRow(fill.getAttribute("data-fill-device")) || {
+                    device_id: fill.getAttribute("data-fill-device"),
+                }
+            );
         }
     }
 
@@ -914,13 +1418,24 @@
         }, 1000);
     }
 
+    function bindLayers() {
+        document.querySelectorAll("[data-layer]").forEach(function (input) {
+            input.addEventListener("change", function (ev) {
+                var key = ev.target.getAttribute("data-layer");
+                if (Object.prototype.hasOwnProperty.call(layers, key)) {
+                    layers[key] = !!ev.target.checked;
+                    if (board) render();
+                }
+            });
+        });
+    }
+
     function bind() {
         var root = qs("#rf-execute-page");
         if (!root) return;
         root.addEventListener("click", onClick);
-        document.addEventListener("keydown", function (ev) {
-            if (ev.key === "Escape") closeMapModal();
-        });
+        var form = qs("#rf-execute-assign-form");
+        if (form) form.addEventListener("submit", saveAssignment);
         var refreshBtn = qs("#rf-execute-refresh");
         if (refreshBtn) {
             refreshBtn.addEventListener("click", function () {
@@ -931,14 +1446,17 @@
         if (zoneSel) {
             zoneSel.addEventListener("change", function (ev) {
                 zoneFilter = String(ev.target.value || "");
-                resetColumnExpand();
+                if (board) render({ fitMap: true });
+            });
+        }
+        var search = qs("#rf-execute-search");
+        if (search) {
+            search.addEventListener("input", function (ev) {
+                filterText = String(ev.target.value || "").trim().toLowerCase();
                 if (board) render();
             });
         }
-        qs("#rf-execute-search").addEventListener("input", function (ev) {
-            filterText = String(ev.target.value || "").trim().toLowerCase();
-            if (board) render();
-        });
+        bindLayers();
         startTick();
         if (gpsTimer) clearInterval(gpsTimer);
         gpsTimer = setInterval(function () {

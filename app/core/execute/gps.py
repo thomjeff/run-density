@@ -248,7 +248,8 @@ def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT DISTINCT ON (device_id)
-                device_id, lat, lon, fix_time, received_at, alarm
+                device_id, lat, lon, fix_time, received_at, alarm,
+                speed, heading
             FROM execute_gps_fixes
             WHERE plan_id = %s
             ORDER BY device_id, received_at DESC
@@ -265,6 +266,8 @@ def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
                 "fix_time": row[3],
                 "received_at": row[4],
                 "alarm": row[5] or "",
+                "speed": float(row[6]) if row[6] is not None else None,
+                "heading": float(row[7]) if row[7] is not None else None,
             }
         )
     return out
@@ -294,6 +297,37 @@ def list_sos(plan_id: str) -> List[Dict[str, Any]]:
             }
         )
     return out
+
+
+def _resource_view(
+    row: Mapping[str, Any],
+    assigned: Mapping[str, Mapping[str, Any]],
+    *,
+    stale: Optional[bool],
+) -> Dict[str, Any]:
+    device_id = str(row.get("device_id") or "")
+    card = assigned.get(device_id) or {}
+    resource_name = str(card.get("resource_name") or "").strip()
+    view: Dict[str, Any] = {
+        "device_id": device_id,
+        "lat": row["lat"],
+        "lon": row["lon"],
+        "fix_time": _iso(row.get("fix_time")),
+        "received_at": _iso(row.get("received_at")),
+        "unknown": False,
+        "resource_name": resource_name,
+        "unnamed": not resource_name,
+        "person_name": str(card.get("person_name") or ""),
+        "phone": str(card.get("phone") or ""),
+        "agency": str(card.get("agency") or ""),
+        "speed": row.get("speed"),
+        "heading": row.get("heading"),
+        "display_name": resource_name or device_id or "unnamed",
+    }
+    if stale is not None:
+        view["stale"] = stale
+        view["status_label"] = "last seen" if stale else "live"
+    return view
 
 
 def _iso(value: Any) -> str:
@@ -350,32 +384,38 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
             "sos": [],
         }
     clock = now or _now()
+    assigned = {}
+    try:
+        from app.core.execute.assignments import list_assignments
+
+        for item in list_assignments(plan_id):
+            assigned[item["device_id"]] = item
+    except Exception:
+        assigned = {}
     positions = []
     for row in latest_fixes(plan_id):
         stale = _stale(row.get("received_at"), clock)
         positions.append(
-            {
-                "device_id": row["device_id"],
-                "lat": row["lat"],
-                "lon": row["lon"],
-                "fix_time": _iso(row.get("fix_time")),
-                "received_at": _iso(row.get("received_at")),
-                "stale": stale,
-                "unknown": False,
-            }
+            _resource_view(row, assigned, stale=stale)
         )
     sos_rows = []
+    seen_sos = set()
     for row in list_sos(plan_id):
-        sos_rows.append(
-            {
-                "device_id": row["device_id"],
-                "lat": row["lat"],
-                "lon": row["lon"],
-                "fix_time": _iso(row.get("fix_time")),
-                "received_at": _iso(row.get("received_at")),
-                "alarm": row.get("alarm") or "sos",
-            }
-        )
+        device_id = str(row.get("device_id") or "")
+        if not device_id or device_id in seen_sos:
+            continue
+        seen_sos.add(device_id)
+        view = _resource_view(row, assigned, stale=None)
+        view["alarm"] = row.get("alarm") or "sos"
+        view["attention"] = "new"
+        sos_rows.append(view)
+    sos_ids = {str(row.get("device_id") or "") for row in sos_rows}
+    for item in positions:
+        if item["device_id"] in sos_ids:
+            item["sos"] = True
+            item["attention"] = "new"
+        else:
+            item["sos"] = False
     return {
         "ok": True,
         "empty": False,

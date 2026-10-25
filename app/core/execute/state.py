@@ -231,3 +231,50 @@ def record_reopen(
         "already_reopened": not primary_new,
         "reopened_at": stamp,
     }
+
+
+def record_close(
+    state: MutableMapping[str, Any],
+    *,
+    loc_id: int,
+    at_hhmm: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Remove the reopen stamp so the location is no longer Reopened."""
+    stamp = at_hhmm or wall_hhmm()
+    reopened = state.setdefault("reopened", {})
+    activity = state.setdefault("activity", [])
+    primary = parse_optional_id(loc_id)
+    if primary is None:
+        return {"applied": [], "already_closed": True, "closed_at": stamp}
+    if str(primary) not in reopened:
+        return {"applied": [], "already_closed": True, "closed_at": stamp}
+    applied: List[int] = []
+    linked_applied: List[int] = []
+    for item_key, entry in list(reopened.items()):
+        if not isinstance(entry, Mapping):
+            continue
+        lid = parse_optional_id(entry.get("loc_id") or item_key)
+        if lid is None:
+            continue
+        if lid == primary or entry.get("linked_from") == primary:
+            del reopened[item_key]
+            applied.append(lid)
+            if lid != primary:
+                linked_applied.append(lid)
+    if applied:
+        activity.append(
+            {
+                "at": stamp,
+                "action": "close",
+                "loc_id": primary,
+                "linked_loc_ids": linked_applied,
+                "operator": None,
+            }
+        )
+    state["reopened"] = reopened
+    state["activity"] = activity
+    return {
+        "applied": applied,
+        "already_closed": not applied,
+        "closed_at": stamp,
+    }

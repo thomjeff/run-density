@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS execute_gps_sos (
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     alarm TEXT NOT NULL DEFAULT 'sos'
 );
+
+CREATE TABLE IF NOT EXISTS execute_device_assignments (
+    plan_id UUID NOT NULL REFERENCES execute_plans (plan_id),
+    device_id TEXT NOT NULL,
+    resource_name TEXT NOT NULL DEFAULT '',
+    person_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    agency TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (plan_id, device_id)
+);

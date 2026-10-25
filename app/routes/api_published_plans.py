@@ -9,6 +9,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from app.core.execute.assignments import (
+    AssignmentError,
+    assignment_roster,
+    delete_assignment,
+    upsert_assignment,
+)
 from app.core.execute.published_plan import (
     PublishedPlanError,
     activate_published_plan,
@@ -21,6 +27,7 @@ from app.core.execute.published_plan import (
     map_snapshot,
     operations_board,
     operations_reopen_csv,
+    record_operations_close,
     record_operations_reopen,
     restore_published_plan,
     update_operations_clock,
@@ -43,11 +50,23 @@ class ReopenBody(BaseModel):
     linked_loc_ids: List[int] = Field(default_factory=list)
 
 
+class CloseBody(BaseModel):
+    loc_id: int
+
+
 class ClockBody(BaseModel):
     guns: Optional[dict] = None
     guns_accepted: Optional[bool] = None
     paused: Optional[bool] = None
     jump_to_now: bool = False
+
+
+class AssignmentBody(BaseModel):
+    device_id: str = Field(..., min_length=1)
+    resource_name: str = Field(..., min_length=1)
+    person_name: str = ""
+    phone: str = ""
+    agency: str = ""
 
 
 def _guard(request: Request) -> None:
@@ -133,6 +152,61 @@ async def get_active_context(request: Request):
     return active_day_context()
 
 
+@router.get("/api/execute/plans/{plan_id}/assignments")
+async def get_plan_assignments(request: Request, plan_id: str):
+    _guard(request)
+    try:
+        rows = assignment_roster(plan_id)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    assigned = [row for row in rows if row.get("assigned")]
+    unassigned = [row for row in rows if not row.get("assigned")]
+    return {
+        "ok": True,
+        "plan_id": plan_id,
+        "assignments": assigned,
+        "unassigned": unassigned,
+    }
+
+
+@router.put("/api/execute/plans/{plan_id}/assignments")
+async def put_plan_assignment(
+    request: Request,
+    plan_id: str,
+    body: AssignmentBody,
+):
+    _guard(request)
+    try:
+        row = upsert_assignment(plan_id, body.model_dump())
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except AssignmentError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from exc
+    return {"ok": True, "plan_id": plan_id, "assignment": row}
+
+
+@router.delete("/api/execute/plans/{plan_id}/assignments/{device_id}")
+async def delete_plan_assignment(
+    request: Request,
+    plan_id: str,
+    device_id: str,
+):
+    _guard(request)
+    try:
+        delete_assignment(plan_id, device_id)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except AssignmentError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from exc
+    return {"ok": True, "plan_id": plan_id, "device_id": device_id}
+
+
 @router.get("/api/execute/ops/board")
 async def get_ops_board(request: Request):
     _guard(request)
@@ -147,6 +221,15 @@ async def post_ops_reopen(request: Request, body: ReopenBody):
             body.loc_id,
             body.linked_loc_ids,
         )
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/api/execute/ops/close")
+async def post_ops_close(request: Request, body: CloseBody):
+    _guard(request)
+    try:
+        return record_operations_close(body.loc_id)
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
 

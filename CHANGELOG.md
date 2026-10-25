@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Execute Operations command surface (#928)
+- Operations is a full-map command surface. Resources stay a name list; the selected tile holds person, phone, agency, speed, and coordinates
+- Reopen counts stay in the header strip. The location list opens only when a state is selected. Cases and missing participants stay on their own pages
+- Day Plan assignments bind a device id to name, person, phone, and agency for that day only. Operations opens Device assignments from the Resources panel, with a labelled table, add/edit form, and unassigned GPS devices
+- SOS is an icon and a New latch. It does not create a Case or reopen a location
+- Stale resources say last seen. Confirm reopen stays a human action after sweep comms. Mark closed undoes a mistaken reopen
+- Locations (Closed / Reopen next / Reopened) sit under Devices on the left rail. Panels follow Dark and Light; Satellite keeps light panels
+- The leftover three-column board and gun-override copy are gone from Operations
+
 ### Execute leftover cleanup (#924)
 - Combined leftover `/api/execute/board|clock|state|reopen` routes are gone. Operations keeps `/api/execute/ops/*`
 - Participants and Incidents use the active `plan_id` only. Stores write `plan_id` and still read leftover `run_id`

@@ -75,9 +75,14 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'data-col="closed"' in execute
     assert 'data-col="reopen_next"' in execute
     assert 'data-col="reopened"' in execute
+    assert "rf-execute-strip" in execute
+    assert "rf-execute-resource-list" in execute
+    assert "rf-execute-attention" in execute
+    assert "Confirm reopen after sweep reports on TMR" not in execute
     assert "Clock suggests order. Radio decides." not in execute
+    assert "Use planned start times for this run" not in execute
     assert "{% block title %}Operations{% endblock %}" in execute
-    assert "<h2>Operations</h2>" in execute
+    assert "Operations" in execute
     assert 'id="rf-execute-refresh"' in execute
     assert 'class="course-map-action-btn"' in execute
     assert 'id="rf-execute-next-refresh"' in execute
@@ -89,8 +94,8 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'id="rf-execute-jump"' not in execute
     assert 'id="rf-execute-zone"' in execute
     assert "All Zones" in execute
-    assert 'id="rf-execute-export"' in execute
-    assert "Export CSV" in execute
+    assert 'id="rf-execute-export"' not in execute
+    assert "Export CSV" not in execute
     assert "Reopen CSV" not in execute
     assert 'id="rf-execute-counts"' not in execute
     assert 'placeholder="Search locations..."' in execute
@@ -99,22 +104,21 @@ def test_execute_board_has_three_columns(base_source: str):
     js = (
         REPO_ROOT / "frontend" / "static" / "js" / "execute_board.js"
     ).read_text(encoding="utf-8")
-    assert "COLUMN_PREVIEW = 10" in js
+    assert "COLUMN_PREVIEW = 10" not in js
     assert "BOARD_REFRESH_MS = 5 * 60 * 1000" in js
-    assert "Show more" in js
-    assert "Show earlier" in js
-    assert "Show less" in js
-    assert "data-toggle-col" in js
-    assert "reopen_next: false" in js
+    assert "Show more" not in js
+    assert "last seen" in js
+    assert "rf-ex-sos-icon" in js
+    assert "A clear-looking course is not clearance." not in js
     assert "STATUS_COLORS" in js
     assert "paintStatusMap" in js
     assert "zoneOptionLabel" in js
     assert '"Zone "' in js
     assert 'id="rf-execute-map-open"' not in execute
     assert "rf-execute-ops-split" not in execute
-    assert "rf-execute-ops-map" in execute
     assert 'id="rf-execute-map"' in execute
     assert "rf-ex-map-legend" in execute
+    assert "Open cases" not in execute
     assert 'href="/locations"' not in execute
 
 

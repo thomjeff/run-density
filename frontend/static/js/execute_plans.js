@@ -13,6 +13,7 @@
     };
     var plans = [];
     var activeId = null;
+    var assignPlanId = null;
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -143,9 +144,23 @@
                     id
                 );
                 appendAction(actions, "archive", "Archive Day Plan", "archive", id);
+                appendAction(
+                    actions,
+                    "locations",
+                    "Assignments for this Day Plan",
+                    "assign",
+                    id
+                );
             } else {
                 appendAction(actions, "activate", "Activate Day Plan", "activate", id);
                 appendAction(actions, "archive", "Archive Day Plan", "archive", id);
+                appendAction(
+                    actions,
+                    "locations",
+                    "Assignments for this Day Plan",
+                    "assign",
+                    id
+                );
             }
             tr.appendChild(actions);
             tbody.appendChild(tr);
@@ -216,7 +231,148 @@
                 return loadPlans();
             });
         }
+        if (action === "assign") {
+            return openAssignments(planId);
+        }
         return Promise.resolve();
+    }
+
+    function assignStatus(message, isError) {
+        var el = qs("#rf-plans-assign-status");
+        if (!el) return;
+        if (!message) {
+            el.hidden = true;
+            el.textContent = "";
+            return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+        el.style.color = isError ? "#b42318" : "";
+    }
+
+    function fillAssignForm(row) {
+        var form = qs("#rf-plans-assign-form");
+        if (!form) return;
+        form.device_id.value = row.device_id || "";
+        form.resource_name.value = row.resource_name || "";
+        form.person_name.value = row.person_name || "";
+        form.phone.value = row.phone || "";
+        form.agency.value = row.agency || "";
+    }
+
+    function renderAssignList(rows) {
+        var box = qs("#rf-plans-assign-list");
+        if (!box) return;
+        if (!rows || !rows.length) {
+            box.innerHTML = "<p class=\"card-help\">No assignments yet.</p>";
+            return;
+        }
+        box.innerHTML = rows
+            .map(function (row) {
+                return (
+                    '<button type="button" class="rf-plans-assign-row" data-fill-device="' +
+                    esc(row.device_id) +
+                    '" data-fill-name="' +
+                    esc(row.resource_name || "") +
+                    '" data-fill-person="' +
+                    esc(row.person_name || "") +
+                    '" data-fill-phone="' +
+                    esc(row.phone || "") +
+                    '" data-fill-agency="' +
+                    esc(row.agency || "") +
+                    '"><span>' +
+                    esc(row.device_id) +
+                    "</span><span>" +
+                    esc(row.resource_name || "unnamed") +
+                    "</span><span>" +
+                    esc(row.person_name || "") +
+                    "</span></button>"
+                );
+            })
+            .join("");
+    }
+
+    function openAssignments(planId) {
+        assignPlanId = planId;
+        var panel = qs("#rf-plans-assign");
+        var title = qs("#rf-plans-assign-title");
+        var row = plans.filter(function (item) {
+            return item.plan_id === planId;
+        })[0];
+        if (title) {
+            title.textContent =
+                "Assignments · " +
+                ((row && (row.name || row.calendar_date)) || "Day Plan");
+        }
+        if (panel) panel.hidden = false;
+        assignStatus("");
+        return jsonFetch(
+            "/api/execute/plans/" + encodeURIComponent(planId) + "/assignments"
+        )
+            .then(function (data) {
+                renderAssignList(data.assignments || []);
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Could not load assignments.", true);
+            });
+    }
+
+    function savePlanAssignment(ev) {
+        ev.preventDefault();
+        var form = qs("#rf-plans-assign-form");
+        if (!form || !assignPlanId) return;
+        var body = {
+            device_id: form.device_id.value,
+            resource_name: form.resource_name.value,
+            person_name: form.person_name.value,
+            phone: form.phone.value,
+            agency: form.agency.value,
+        };
+        return jsonFetch(
+            "/api/execute/plans/" +
+                encodeURIComponent(assignPlanId) +
+                "/assignments",
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            }
+        )
+            .then(function () {
+                assignStatus("Saved for this Day Plan.");
+                return openAssignments(assignPlanId);
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Save failed.", true);
+            });
+    }
+
+    function deletePlanAssignment() {
+        var form = qs("#rf-plans-assign-form");
+        if (!form || !assignPlanId || !form.device_id.value) return;
+        return fetch(
+            "/api/execute/plans/" +
+                encodeURIComponent(assignPlanId) +
+                "/assignments/" +
+                encodeURIComponent(form.device_id.value),
+            { method: "DELETE", credentials: "same-origin" }
+        )
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) {
+                        throw new Error(data.detail || "Remove failed.");
+                    }
+                    return data;
+                });
+            })
+            .then(function () {
+                form.reset();
+                assignStatus("Removed from this Day Plan.");
+                return openAssignments(assignPlanId);
+            })
+            .catch(function (err) {
+                assignStatus(err.message || "Remove failed.", true);
+            });
     }
 
     function importPackage(file) {
@@ -262,6 +418,24 @@
                 var file = fileInput.files && fileInput.files[0];
                 fileInput.value = "";
                 importPackage(file);
+            });
+        }
+        var form = qs("#rf-plans-assign-form");
+        if (form) form.addEventListener("submit", savePlanAssignment);
+        var del = qs("#rf-plans-assign-delete");
+        if (del) del.addEventListener("click", deletePlanAssignment);
+        var list = qs("#rf-plans-assign-list");
+        if (list) {
+            list.addEventListener("click", function (ev) {
+                var fill = ev.target.closest("[data-fill-device]");
+                if (!fill) return;
+                fillAssignForm({
+                    device_id: fill.getAttribute("data-fill-device"),
+                    resource_name: fill.getAttribute("data-fill-name"),
+                    person_name: fill.getAttribute("data-fill-person"),
+                    phone: fill.getAttribute("data-fill-phone"),
+                    agency: fill.getAttribute("data-fill-agency"),
+                });
             });
         }
         loadPlans();
