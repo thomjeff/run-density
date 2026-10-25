@@ -170,6 +170,10 @@ def test_operator_js_does_not_call_leftover_board():
         .replace("/api/execute/ops/reopen.csv", "")
         .replace("/api/execute/ops/reopen", "")
         .replace("/api/execute/ops/close", "")
+        .replace("/api/execute/ops/session", "")
+        .replace("/api/execute/ops/audit", "")
+        .replace("/api/execute/ops/sos/ack", "")
+        .replace("/api/execute/ops/sos/clear", "")
     )
     assert "/api/execute/board" not in stripped
     assert "/api/execute/clock" not in stripped

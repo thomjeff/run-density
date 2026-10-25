@@ -11,6 +11,7 @@ COMBINED_AUTH = "rf_auth"
 COMBINED_TS = "rf_auth_ts"
 EXECUTE_AUTH = "rf_auth_execute"
 EXECUTE_TS = "rf_auth_execute_ts"
+EXECUTE_NAME = "rf_auth_execute_name"
 
 HeaderList = List[Tuple[bytes, bytes]]
 
@@ -29,13 +30,16 @@ def _split_cookies(raw: bytes) -> List[Tuple[bytes, bytes]]:
 def incoming_cookie_header(raw: bytes) -> bytes:
     """Accept Execute cookies only; map them to leftover auth names."""
     mapped = dict(_split_cookies(raw))
+    parts = []
     auth = mapped.get(EXECUTE_AUTH.encode("ascii"))
-    if auth is None:
-        return b""
-    parts = [COMBINED_AUTH.encode("ascii") + b"=" + auth]
-    ts = mapped.get(EXECUTE_TS.encode("ascii"))
-    if ts is not None:
-        parts.append(COMBINED_TS.encode("ascii") + b"=" + ts)
+    if auth is not None:
+        parts.append(COMBINED_AUTH.encode("ascii") + b"=" + auth)
+        ts = mapped.get(EXECUTE_TS.encode("ascii"))
+        if ts is not None:
+            parts.append(COMBINED_TS.encode("ascii") + b"=" + ts)
+    name = mapped.get(EXECUTE_NAME.encode("ascii"))
+    if name is not None:
+        parts.append(EXECUTE_NAME.encode("ascii") + b"=" + name)
     return b"; ".join(parts)
 
 

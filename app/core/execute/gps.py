@@ -241,6 +241,12 @@ def insert_sos(
             ),
         )
         conn.commit()
+    try:
+        from app.core.execute.attention import latch_new_sos
+
+        latch_new_sos(plan_id, fix["device_id"], received_at)
+    except Exception:
+        pass
 
 
 def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
@@ -398,6 +404,13 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
         positions.append(
             _resource_view(row, assigned, stale=stale)
         )
+    attention = {}
+    try:
+        from app.core.execute.attention import attention_map
+
+        attention = attention_map(plan_id)
+    except Exception:
+        attention = {}
     sos_rows = []
     seen_sos = set()
     for row in list_sos(plan_id):
@@ -405,15 +418,27 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
         if not device_id or device_id in seen_sos:
             continue
         seen_sos.add(device_id)
+        state = attention.get(device_id) or {}
+        status = str(state.get("status") or "new")
+        if status == "cleared":
+            continue
+        if status not in ("new", "acknowledged"):
+            status = "new"
         view = _resource_view(row, assigned, stale=None)
         view["alarm"] = row.get("alarm") or "sos"
-        view["attention"] = "new"
+        view["attention"] = status
+        view["acknowledged_by"] = state.get("acknowledged_by") or ""
+        view["acknowledged_at"] = state.get("acknowledged_at") or ""
         sos_rows.append(view)
     sos_ids = {str(row.get("device_id") or "") for row in sos_rows}
+    sos_status = {
+        str(row.get("device_id") or ""): row.get("attention")
+        for row in sos_rows
+    }
     for item in positions:
         if item["device_id"] in sos_ids:
             item["sos"] = True
-            item["attention"] = "new"
+            item["attention"] = sos_status.get(item["device_id"]) or "new"
         else:
             item["sos"] = False
     return {

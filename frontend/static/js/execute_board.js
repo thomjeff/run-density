@@ -21,6 +21,8 @@
     var assignRows = [];
     var assignUnassigned = [];
     var assignEditDeviceId = null;
+    var operatorName = "";
+    var auditRows = [];
     var BOARD_REFRESH_MS = 5 * 60 * 1000;
     var GPS_REFRESH_MS = 10 * 1000;
     var STATUS_COLORS = {
@@ -36,6 +38,14 @@
         reopen: true,
         water: false,
         all: false,
+    };
+    var LAYER_CHIP_LABELS = {
+        courses: "Courses",
+        turnarounds: "Turn-arounds",
+        resources: "Resources",
+        sos: "SOS",
+        reopen: "Reopen set",
+        water: "Water",
     };
 
     function qs(sel, root) {
@@ -165,6 +175,71 @@
             hour: "2-digit",
             minute: "2-digit",
         });
+    }
+
+    function phoneDigits(phone) {
+        var digits = String(phone || "").replace(/\D/g, "");
+        if (digits.length === 11 && digits.charAt(0) === "1") {
+            return digits.slice(1);
+        }
+        return digits;
+    }
+
+    function formatPhone(phone) {
+        var digits = phoneDigits(phone);
+        if (digits.length === 10) {
+            return (
+                "(" +
+                digits.slice(0, 3) +
+                ") " +
+                digits.slice(3, 6) +
+                "-" +
+                digits.slice(6)
+            );
+        }
+        return String(phone || "").trim();
+    }
+
+    function phoneHrefNumber(phone) {
+        var nanp = phoneDigits(phone);
+        if (nanp.length === 10) return "+1" + nanp;
+        var raw = String(phone || "")
+            .replace(/[^\d+]/g, "")
+            .replace(/(?!^)\+/g, "");
+        return /\d/.test(raw) ? raw : "";
+    }
+
+    function phoneIconSvg(kind) {
+        if (kind === "sms") {
+            return (
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
+            );
+        }
+        return (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+        );
+    }
+
+    function phoneLink(phone) {
+        var shown = formatPhone(phone);
+        var hrefNum = phoneHrefNumber(phone);
+        if (!hrefNum) return esc(shown);
+        return (
+            '<span class="rf-ex-phone">' +
+            '<span class="rf-ex-phone-num">' +
+            esc(shown) +
+            "</span>" +
+            '<a class="rf-ex-phone-icon" href="tel:' +
+            esc(hrefNum) +
+            '" aria-label="Call">' +
+            phoneIconSvg("tel") +
+            "</a>" +
+            '<a class="rf-ex-phone-icon" href="sms:' +
+            esc(hrefNum) +
+            '" aria-label="Text">' +
+            phoneIconSvg("sms") +
+            "</a></span>"
+        );
     }
 
     function formatSpeed(speed) {
@@ -325,7 +400,7 @@
                 ? "<dt>Person</dt><dd>" + esc(selected.person_name) + "</dd>"
                 : "") +
             (selected.phone
-                ? "<dt>Phone</dt><dd>" + esc(selected.phone) + "</dd>"
+                ? "<dt>Phone</dt><dd>" + phoneLink(selected.phone) + "</dd>"
                 : "") +
             (selected.agency
                 ? "<dt>Agency</dt><dd>" + esc(selected.agency) + "</dd>"
@@ -457,8 +532,95 @@
     function renderAttention() {
         var box = qs("#rf-execute-attention");
         if (!box) return;
-        box.hidden = true;
-        box.innerHTML = "";
+        var rows = ((gpsOverlay && gpsOverlay.sos) || []).filter(function (row) {
+            return row.attention === "new" || row.attention === "acknowledged";
+        });
+        if (!rows.length) {
+            box.hidden = true;
+            box.innerHTML = "";
+            return;
+        }
+        box.hidden = false;
+        box.innerHTML =
+            '<h3 class="rf-ex-section-title">Attention</h3>' +
+            rows
+                .map(function (row) {
+                    var isNew = row.attention !== "acknowledged";
+                    var status = isNew ? "New" : "Acknowledged";
+                    var who = row.acknowledged_by
+                        ? " by " + row.acknowledged_by
+                        : "";
+                    var actions = isNew
+                        ? '<button type="button" class="btn btn-sm" data-sos-ack="' +
+                          esc(row.device_id) +
+                          '">Acknowledge</button>'
+                        : '<button type="button" class="btn btn-sm" data-sos-clear="' +
+                          esc(row.device_id) +
+                          '">Clear</button>';
+                    return (
+                        '<div class="rf-ex-att' +
+                        (isNew ? " is-new" : "") +
+                        '"><div class="rf-ex-att-head"><span>' +
+                        esc(row.display_name || row.device_id) +
+                        " " +
+                        sosIcon() +
+                        '</span><span class="rf-ex-att-status">' +
+                        status +
+                        who +
+                        "</span></div>" +
+                        '<div class="rf-ex-att-actions">' +
+                        actions +
+                        "</div></div>"
+                    );
+                })
+                .join("");
+    }
+
+    function auditLabel(row) {
+        if (row.action === "sos_acknowledge") return "Acknowledged SOS";
+        if (row.action === "sos_clear") return "Cleared SOS from attention";
+        if (row.action === "reopen") return "Confirmed reopen";
+        if (row.action === "close") return "Marked closed";
+        if (row.action === "assignment_upsert") return "Saved assignment";
+        if (row.action === "assignment_delete") return "Removed assignment";
+        return row.action || "Action";
+    }
+
+    function renderAudit() {
+        var box = qs("#rf-execute-audit");
+        if (!box) return;
+        if (!auditRows.length) {
+            box.hidden = false;
+            box.innerHTML =
+                '<h3 class="rf-ex-section-title">Activity</h3>' +
+                '<p class="rf-ex-audit-empty">No activity yet.</p>';
+            return;
+        }
+        box.hidden = false;
+        box.innerHTML =
+            '<h3 class="rf-ex-section-title">Activity</h3>' +
+            '<ol class="rf-ex-audit-list">' +
+            auditRows
+                .map(function (row) {
+                    var target = row.device_id || row.loc_id || "";
+                    return (
+                        "<li><strong>" +
+                        esc(row.actor || "") +
+                        "</strong> · " +
+                        esc(auditLabel(row)) +
+                        (target ? " · " + esc(target) : "") +
+                        "</li>"
+                    );
+                })
+                .join("") +
+            "</ol>";
+    }
+
+    function renderOperator() {
+        var input = qs("#rf-execute-operator");
+        if (input && operatorName && input.value !== operatorName) {
+            input.value = operatorName;
+        }
     }
 
     function render(options) {
@@ -476,6 +638,9 @@
         renderFocusedList();
         renderSelectedLocation();
         renderAttention();
+        renderAudit();
+        renderOperator();
+        updateLayersChip();
         syncZoneSelect();
         qs("#rf-execute-workspace").hidden = false;
         qs("#rf-execute-empty").hidden = true;
@@ -549,6 +714,8 @@
         lastRefreshAt = Date.now();
         render();
         loadGpsOverlay();
+        loadSession();
+        loadAudit();
     }
 
     function loadBoard() {
@@ -585,11 +752,87 @@
                 renderResources();
                 renderStripCounts();
                 renderAttention();
+                renderAudit();
                 paintStatusMap(selectedLocId, { preserveView: true });
                 followIfNeeded();
             })
             .catch(function () {
                 gpsOverlay = null;
+            });
+    }
+
+    function loadSession() {
+        return fetch("/api/execute/ops/session", { credentials: "same-origin" })
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (data) {
+                operatorName = data.operator || "";
+                renderOperator();
+            })
+            .catch(function () {
+                operatorName = "";
+            });
+    }
+
+    function loadAudit() {
+        return fetch("/api/execute/ops/audit", { credentials: "same-origin" })
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (data) {
+                auditRows = data.audit || [];
+                renderAudit();
+            })
+            .catch(function () {
+                auditRows = [];
+            });
+    }
+
+    function saveOperator(ev) {
+        ev.preventDefault();
+        var input = qs("#rf-execute-operator");
+        if (!input) return;
+        fetch("/api/execute/ops/session", {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operator: input.value }),
+        })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) {
+                        throw new Error(data.detail || "Could not save name.");
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                operatorName = data.operator || "";
+                renderOperator();
+            })
+            .catch(function () {
+                return loadSession();
+            });
+    }
+
+    function postSosAction(path, deviceId) {
+        return fetch(path, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId }),
+        })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) {
+                        throw new Error(data.detail || "SOS action failed.");
+                    }
+                    return data;
+                });
+            })
+            .then(function () {
+                return Promise.all([loadGpsOverlay(), loadAudit()]);
             });
     }
 
@@ -680,18 +923,32 @@
             .filter(Boolean);
     }
 
+    function dockMapChrome(map) {
+        if (!map || !window.L || map._rfChromeDocked) return;
+        if (map.zoomControl) {
+            map.zoomControl.remove();
+        }
+        if (window.L.control) {
+            window.L.control.zoom({ position: "bottomright" }).addTo(map);
+        }
+        var tools = qs("#rf-execute-map-tools");
+        if (tools && window.L.Control) {
+            var Chrome = window.L.Control.extend({
+                options: { position: "bottomright" },
+                onAdd: function () {
+                    return tools;
+                },
+            });
+            map.addControl(new Chrome());
+        }
+        map._rfChromeDocked = true;
+    }
+
     function ensureMapInstance(fallbackLatLng) {
         if (mapInstance) return mapInstance;
         if (typeof window.initMap === "function") {
             mapInstance = window.initMap("rf-execute-map");
-            if (mapInstance.zoomControl) {
-                mapInstance.zoomControl.remove();
-            }
-            if (window.L && window.L.control) {
-                window.L.control
-                    .zoom({ position: "bottomright" })
-                    .addTo(mapInstance);
-            }
+            dockMapChrome(mapInstance);
             bindBasemap(mapInstance);
             bindMapViewSync(mapInstance);
             return mapInstance;
@@ -701,6 +958,7 @@
                 fallbackLatLng || [45.95, -66.64],
                 14
             );
+            dockMapChrome(mapInstance);
             bindMapViewSync(mapInstance);
         }
         return mapInstance;
@@ -811,7 +1069,9 @@
             (gpsHeard(row.received_at)
                 ? " · " + esc(gpsHeard(row.received_at))
                 : "") +
-            "</div></div>"
+            "</div>" +
+            (row.phone ? "<div>" + phoneLink(row.phone) + "</div>" : "") +
+            "</div>"
         );
     }
 
@@ -1260,6 +1520,7 @@
                 assignEditDeviceId = body.device_id;
                 return loadAssignments()
                     .then(loadGpsOverlay)
+                    .then(loadAudit)
                     .then(function () {
                         var row = findAssignRow(body.device_id);
                         if (row) setAssignFormMode("edit", row);
@@ -1292,7 +1553,7 @@
             .then(function () {
                 assignStatus("Removed from this Day Plan.");
                 setAssignFormMode("add");
-                return loadAssignments().then(loadGpsOverlay);
+                return loadAssignments().then(loadGpsOverlay).then(loadAudit);
             })
             .catch(function (err) {
                 assignStatus(err.message || "Remove failed.", true);
@@ -1328,6 +1589,22 @@
         var markClosed = ev.target.closest("[data-mark-closed]");
         if (markClosed) {
             postClose(markClosed.getAttribute("data-mark-closed"));
+            return;
+        }
+        var sosAck = ev.target.closest("[data-sos-ack]");
+        if (sosAck) {
+            postSosAction(
+                "/api/execute/ops/sos/ack",
+                sosAck.getAttribute("data-sos-ack")
+            );
+            return;
+        }
+        var sosClear = ev.target.closest("[data-sos-clear]");
+        if (sosClear) {
+            postSosAction(
+                "/api/execute/ops/sos/clear",
+                sosClear.getAttribute("data-sos-clear")
+            );
             return;
         }
         var locEl = ev.target.closest("[data-loc-id]");
@@ -1418,16 +1695,69 @@
         }, 1000);
     }
 
+    function setLayersOpen(open) {
+        var panel = qs("#rf-execute-layers-panel");
+        var btn = qs("#rf-execute-layers-open");
+        if (!panel || !btn) return;
+        panel.hidden = !open;
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    function updateLayersChip() {
+        var chip = qs("#rf-execute-layers-chip");
+        if (!chip) return;
+        var hidden = Object.keys(LAYER_CHIP_LABELS).filter(function (key) {
+            return !layers[key];
+        });
+        var text = "";
+        if (layers.all) {
+            text = "All on";
+        } else if (hidden.length === 1) {
+            text = LAYER_CHIP_LABELS[hidden[0]] + " off";
+        } else if (hidden.length > 1) {
+            text = String(hidden.length) + " hidden";
+        }
+        chip.textContent = text;
+        chip.hidden = !text;
+    }
+
     function bindLayers() {
+        var tools = qs("#rf-execute-map-tools");
+        if (tools && window.L && window.L.DomEvent) {
+            window.L.DomEvent.disableClickPropagation(tools);
+            window.L.DomEvent.disableScrollPropagation(tools);
+        }
+        var root = qs("#rf-execute-layers");
+        var btn = qs("#rf-execute-layers-open");
+        if (root && btn && !root.dataset.bound) {
+            root.addEventListener("click", function (ev) {
+                ev.stopPropagation();
+            });
+            btn.addEventListener("click", function (ev) {
+                ev.stopPropagation();
+                setLayersOpen(btn.getAttribute("aria-expanded") !== "true");
+            });
+            document.addEventListener("click", function () {
+                setLayersOpen(false);
+            });
+            document.addEventListener("keydown", function (ev) {
+                if (ev.key === "Escape") setLayersOpen(false);
+            });
+            root.dataset.bound = "1";
+        }
         document.querySelectorAll("[data-layer]").forEach(function (input) {
+            if (input.dataset.bound) return;
+            input.dataset.bound = "1";
             input.addEventListener("change", function (ev) {
                 var key = ev.target.getAttribute("data-layer");
                 if (Object.prototype.hasOwnProperty.call(layers, key)) {
                     layers[key] = !!ev.target.checked;
+                    updateLayersChip();
                     if (board) render();
                 }
             });
         });
+        updateLayersChip();
     }
 
     function bind() {
@@ -1436,6 +1766,10 @@
         root.addEventListener("click", onClick);
         var form = qs("#rf-execute-assign-form");
         if (form) form.addEventListener("submit", saveAssignment);
+        var operatorForm = qs("#rf-execute-operator-form");
+        if (operatorForm) {
+            operatorForm.addEventListener("submit", saveOperator);
+        }
         var refreshBtn = qs("#rf-execute-refresh");
         if (refreshBtn) {
             refreshBtn.addEventListener("click", function () {

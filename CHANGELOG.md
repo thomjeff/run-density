@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Execute accountable attention (#928 Milestone 2)
+- Operators set a session display name after login. Acknowledge and clear SOS record who and when
+- Clearing SOS removes the interrupt and keeps history. Activity logs Confirm reopen, assignment changes, and SOS actions
+- Attention shows New vs Acknowledged. Resolved is not an SOS state
+
 ### Execute Operations command surface (#928)
 - Operations is a full-map command surface. Resources stay a name list; the selected tile holds person, phone, agency, speed, and coordinates
 - Reopen counts stay in the header strip. The location list opens only when a state is selected. Cases and missing participants stay on their own pages

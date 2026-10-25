@@ -416,6 +416,7 @@ def test_assignment_routes_on_execute_app(tmp_path, monkeypatch):
     from app.execute_app import app as execute_app
 
     client = TestClient(execute_app)
+    client.cookies.set("rf_auth_execute_name", "JT")
     listed = client.get(f"/api/execute/plans/{sun}/assignments")
     assert listed.status_code == 200
     saved = client.put(
@@ -492,3 +493,17 @@ def test_command_surface_copy_and_no_gun_override():
     assert "rf-ex-theme-light" in css
     assert "applyPanelTheme" in js
     assert 'key === "satellite"' in js
+    assert "/api/execute/ops/session" in js
+    assert "Acknowledge" in js
+    assert "Resolved" not in js
+    assert "tel:" in js
+    assert "sms:" in js
+    assert "rf-ex-phone-icon" in js
+    assert 'id="rf-execute-layers-open"' in html
+    assert 'id="rf-execute-layers-chip"' in html
+    assert "On the map" in html
+    assert "How to read marks" in html
+    assert "updateLayersChip" in js
+    assert "--rf-ex-chip" in css
+    assert "dockMapChrome" in js
+    assert "leaflet-bottom.leaflet-right" in css

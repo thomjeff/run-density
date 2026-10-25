@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=928m">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=928w">
 {% endblock %}
 
 {% block content %}
@@ -47,6 +47,11 @@
             </div>
             <button type="button" class="rf-ex-sos-count" id="rf-execute-sos-count" hidden>SOS 0</button>
             <p id="rf-execute-plan-label" class="rf-execute-plan-label"></p>
+            <form id="rf-execute-operator-form" class="rf-ex-operator-form">
+                <label class="rf-ex-section-title" for="rf-execute-operator">Operator</label>
+                <input id="rf-execute-operator" name="operator" maxlength="40" placeholder="Name or initials" autocomplete="nickname">
+                <button type="submit" class="btn btn-sm">Save</button>
+            </form>
         </header>
 
         <aside class="rf-ex-rail" id="rf-execute-resources-rail" aria-label="Resources and locations">
@@ -78,33 +83,51 @@
                 </div>
                 <div id="rf-execute-board" class="rf-execute-focused"></div>
             </section>
+            <section id="rf-execute-audit" class="rf-ex-audit" aria-label="Activity"></section>
         </aside>
 
         <div id="rf-execute-resource-tile" class="rf-execute-tile" hidden></div>
-        <div id="rf-execute-attention" class="rf-ex-attention" hidden></div>
+        <aside class="rf-ex-attention-rail" aria-label="Attention">
+            <section id="rf-execute-attention" class="rf-ex-attention" hidden></section>
+        </aside>
         <div id="rf-execute-selected" class="rf-execute-tile rf-ex-loc-card" hidden></div>
 
-        <div class="rf-ex-map-tools">
-            <details id="rf-execute-layers">
-                <summary>Layers</summary>
-                <div class="rf-execute-layers" aria-label="Map layers">
-                    <label><input type="checkbox" data-layer="courses" checked> Courses</label>
-                    <label><input type="checkbox" data-layer="turnarounds" checked> Turn-arounds</label>
-                    <label><input type="checkbox" data-layer="resources" checked> Resources</label>
-                    <label><input type="checkbox" data-layer="sos" checked> SOS</label>
-                    <label><input type="checkbox" data-layer="reopen" checked> Reopen set</label>
-                    <label><input type="checkbox" data-layer="water"> Water / services</label>
-                    <label><input type="checkbox" data-layer="all"> All locations</label>
+        <div class="rf-ex-map-tools" id="rf-execute-map-tools">
+            <div class="rf-ex-layers" id="rf-execute-layers">
+                <div class="rf-ex-layers-panel" id="rf-execute-layers-panel" hidden>
+                    <p class="rf-ex-layers-group">On the map</p>
+                    <div class="rf-execute-layers" aria-label="Map layers">
+                        <label><input type="checkbox" data-layer="courses" checked> Courses</label>
+                        <label><input type="checkbox" data-layer="turnarounds" checked> Turn-arounds</label>
+                        <label><input type="checkbox" data-layer="resources" checked> Resources</label>
+                        <label><input type="checkbox" data-layer="sos" checked> SOS</label>
+                        <label><input type="checkbox" data-layer="reopen" checked> Reopen set</label>
+                        <label><input type="checkbox" data-layer="water"> Water / services</label>
+                        <label><input type="checkbox" data-layer="all"> All locations</label>
+                    </div>
+                    <p class="rf-ex-layers-group">How to read marks</p>
+                    <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
+                        <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
+                        <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
+                        <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> Live</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Last seen</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
+                    </ul>
                 </div>
-                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
-                    <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
-                    <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
-                    <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> Live</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Last seen</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
-                </ul>
-            </details>
+                <button type="button" class="rf-ex-layers-btn" id="rf-execute-layers-open"
+                    aria-expanded="false" aria-controls="rf-execute-layers-panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3 3 8l9 5 9-5-9-5z"/>
+                        <path d="m3 12 9 5 9-5"/>
+                        <path d="m3 16 9 5 9-5"/>
+                    </svg>
+                    Layers
+                    <span class="rf-ex-layers-chip" id="rf-execute-layers-chip" hidden></span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -175,5 +198,5 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_board.js?v=928m"></script>
+<script src="/static/js/execute_board.js?v=928w"></script>
 {% endblock %}
