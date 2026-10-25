@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence
 
-from app.core.locations.report_json import parse_optional_id
 from app.core.execute.times import analysis_guns_hhmm, wall_hhmm
+from app.core.locations.report_json import parse_optional_id
 from app.utils.constants import DISPLAY_TIMEZONE
 
 SCHEMA_VERSION = 1
@@ -78,11 +78,8 @@ def normalize_state(
         elif analysis_guns:
             clock["analysis_guns"] = dict(analysis_guns)
         if isinstance(clock_in.get("guns"), Mapping):
-            clock["guns"] = {
-                str(k).lower(): str(v)
-                for k, v in clock_in["guns"].items()
-                if v
-            }
+            items = clock_in["guns"].items()
+            clock["guns"] = {str(k).lower(): str(v) for k, v in items if v}
         clock["paused"] = bool(clock_in.get("paused"))
         paused_at = clock_in.get("paused_at")
         clock["paused_at"] = str(paused_at) if paused_at else None
@@ -99,7 +96,7 @@ def normalize_state(
                 "reopened_at": entry.get("reopened_at"),
                 "operator": None,
                 "primary_loc_id": parse_optional_id(
-                    entry.get("primary_loc_id")
+                    entry.get("primary_loc_id"),
                 ),
                 "linked_from": parse_optional_id(entry.get("linked_from")),
             }
@@ -160,9 +157,8 @@ def apply_clock_update(
         cleaned = {str(k).lower(): str(v) for k, v in guns.items() if v}
         clock["guns"] = cleaned
         analysis = clock.get("analysis_guns") or {}
-        clock["guns_source"] = (
-            "override" if cleaned != dict(analysis) else "analysis"
-        )
+        source = "override" if cleaned != dict(analysis) else "analysis"
+        clock["guns_source"] = source
         clock["guns_accepted"] = True
     if payload.get("jump_to_now"):
         clock["paused"] = False
@@ -230,4 +226,51 @@ def record_reopen(
         "applied": applied,
         "already_reopened": not primary_new,
         "reopened_at": stamp,
+    }
+
+
+def record_close(
+    state: MutableMapping[str, Any],
+    *,
+    loc_id: int,
+    at_hhmm: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Remove the reopen stamp so the location is no longer Reopened."""
+    stamp = at_hhmm or wall_hhmm()
+    reopened = state.setdefault("reopened", {})
+    activity = state.setdefault("activity", [])
+    primary = parse_optional_id(loc_id)
+    if primary is None:
+        return {"applied": [], "already_closed": True, "closed_at": stamp}
+    if str(primary) not in reopened:
+        return {"applied": [], "already_closed": True, "closed_at": stamp}
+    applied: List[int] = []
+    linked_applied: List[int] = []
+    for item_key, entry in list(reopened.items()):
+        if not isinstance(entry, Mapping):
+            continue
+        lid = parse_optional_id(entry.get("loc_id") or item_key)
+        if lid is None:
+            continue
+        if lid == primary or entry.get("linked_from") == primary:
+            del reopened[item_key]
+            applied.append(lid)
+            if lid != primary:
+                linked_applied.append(lid)
+    if applied:
+        activity.append(
+            {
+                "at": stamp,
+                "action": "close",
+                "loc_id": primary,
+                "linked_loc_ids": linked_applied,
+                "operator": None,
+            }
+        )
+    state["reopened"] = reopened
+    state["activity"] = activity
+    return {
+        "applied": applied,
+        "already_closed": not applied,
+        "closed_at": stamp,
     }

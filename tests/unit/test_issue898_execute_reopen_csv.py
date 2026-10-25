@@ -105,13 +105,11 @@ def test_leftover_reopen_csv_route_is_gone():
     assert client.get("/api/execute/reopen").status_code == 404
 
 
-def test_execute_js_points_at_reopen_csv():
-    js = (
+def test_execute_ops_reopen_csv_route_stays():
+    routes = (
         Path(__file__).resolve().parents[2]
-        / "frontend"
-        / "static"
-        / "js"
-        / "execute_board.js"
+        / "app"
+        / "routes"
+        / "api_published_plans.py"
     ).read_text(encoding="utf-8")
-    assert "/api/execute/ops/reopen.csv" in js
-    assert "syncExportLink" in js
+    assert '/api/execute/ops/reopen.csv' in routes

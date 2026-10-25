@@ -5,10 +5,34 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from app.core.execute.assignments import (
+    AssignmentError,
+    assignment_roster,
+    delete_assignment,
+    upsert_assignment,
+)
+from app.core.execute.attention import (
+    AttentionError,
+    acknowledge_sos,
+    clear_sos_attention,
+    list_audit,
+    record_audit,
+)
+from app.core.execute.operator import (
+    OperatorError,
+    operator_from_request,
+    require_operator,
+    set_operator_cookie,
+)
 from app.core.execute.published_plan import (
     PublishedPlanError,
     activate_published_plan,
@@ -21,6 +45,7 @@ from app.core.execute.published_plan import (
     map_snapshot,
     operations_board,
     operations_reopen_csv,
+    record_operations_close,
     record_operations_reopen,
     restore_published_plan,
     update_operations_clock,
@@ -43,11 +68,31 @@ class ReopenBody(BaseModel):
     linked_loc_ids: List[int] = Field(default_factory=list)
 
 
+class CloseBody(BaseModel):
+    loc_id: int
+
+
 class ClockBody(BaseModel):
     guns: Optional[dict] = None
     guns_accepted: Optional[bool] = None
     paused: Optional[bool] = None
     jump_to_now: bool = False
+
+
+class AssignmentBody(BaseModel):
+    device_id: str = Field(..., min_length=1)
+    resource_name: str = Field(..., min_length=1)
+    person_name: str = ""
+    phone: str = ""
+    agency: str = ""
+
+
+class OperatorBody(BaseModel):
+    operator: str = Field(..., min_length=1)
+
+
+class SosBody(BaseModel):
+    device_id: str = Field(..., min_length=1)
 
 
 def _guard(request: Request) -> None:
@@ -57,6 +102,11 @@ def _guard(request: Request) -> None:
 
 def _fail(exc: PublishedPlanError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+def _actor_fail(exc: Exception) -> HTTPException:
+    status = getattr(exc, "status_code", 400)
+    return HTTPException(status_code=status, detail=str(exc))
 
 
 @router.post("/api/execute/plans/import")
@@ -133,6 +183,138 @@ async def get_active_context(request: Request):
     return active_day_context()
 
 
+@router.get("/api/execute/plans/{plan_id}/assignments")
+async def get_plan_assignments(request: Request, plan_id: str):
+    _guard(request)
+    try:
+        rows = assignment_roster(plan_id)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    assigned = [row for row in rows if row.get("assigned")]
+    unassigned = [row for row in rows if not row.get("assigned")]
+    return {
+        "ok": True,
+        "plan_id": plan_id,
+        "assignments": assigned,
+        "unassigned": unassigned,
+    }
+
+
+@router.put("/api/execute/plans/{plan_id}/assignments")
+async def put_plan_assignment(
+    request: Request,
+    plan_id: str,
+    body: AssignmentBody,
+):
+    _guard(request)
+    try:
+        actor = require_operator(request)
+        row = upsert_assignment(plan_id, body.model_dump())
+        record_audit(
+            plan_id,
+            action="assignment_upsert",
+            actor=actor,
+            device_id=row["device_id"],
+            detail={"resource_name": row.get("resource_name") or ""},
+        )
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except (AssignmentError, OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
+    return {"ok": True, "plan_id": plan_id, "assignment": row}
+
+
+@router.delete("/api/execute/plans/{plan_id}/assignments/{device_id}")
+async def delete_plan_assignment(
+    request: Request,
+    plan_id: str,
+    device_id: str,
+):
+    _guard(request)
+    try:
+        actor = require_operator(request)
+        delete_assignment(plan_id, device_id)
+        record_audit(
+            plan_id,
+            action="assignment_delete",
+            actor=actor,
+            device_id=device_id,
+        )
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except (AssignmentError, OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
+    return {"ok": True, "plan_id": plan_id, "device_id": device_id}
+
+
+@router.get("/api/execute/ops/session")
+async def get_ops_session(request: Request):
+    _guard(request)
+    return {
+        "ok": True,
+        "operator": operator_from_request(request),
+    }
+
+
+@router.put("/api/execute/ops/session")
+async def put_ops_session(request: Request, body: OperatorBody):
+    _guard(request)
+    try:
+        from app.core.execute.operator import clean_operator
+
+        name = clean_operator(body.operator)
+        response = JSONResponse({"ok": True, "operator": name})
+        set_operator_cookie(response, name, request)
+        return response
+    except OperatorError as exc:
+        raise _actor_fail(exc) from exc
+
+
+@router.get("/api/execute/ops/audit")
+async def get_ops_audit(request: Request):
+    _guard(request)
+    plan_id = active_plan_id()
+    if not plan_id:
+        return {"ok": True, "plan_id": None, "audit": []}
+    return {
+        "ok": True,
+        "plan_id": plan_id,
+        "audit": list_audit(plan_id),
+    }
+
+
+@router.post("/api/execute/ops/sos/ack")
+async def post_sos_ack(request: Request, body: SosBody):
+    _guard(request)
+    plan_id = active_plan_id()
+    if not plan_id:
+        raise HTTPException(status_code=400, detail="No Day Plan is active.")
+    try:
+        actor = require_operator(request)
+        row = acknowledge_sos(plan_id, body.device_id, actor)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except (OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
+    return {"ok": True, "plan_id": plan_id, "attention": row}
+
+
+@router.post("/api/execute/ops/sos/clear")
+async def post_sos_clear(request: Request, body: SosBody):
+    _guard(request)
+    plan_id = active_plan_id()
+    if not plan_id:
+        raise HTTPException(status_code=400, detail="No Day Plan is active.")
+    try:
+        actor = require_operator(request)
+        row = clear_sos_attention(plan_id, body.device_id, actor)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except (OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
+    return {"ok": True, "plan_id": plan_id, "attention": row}
+
+
 @router.get("/api/execute/ops/board")
 async def get_ops_board(request: Request):
     _guard(request)
@@ -143,12 +325,41 @@ async def get_ops_board(request: Request):
 async def post_ops_reopen(request: Request, body: ReopenBody):
     _guard(request)
     try:
-        return record_operations_reopen(
+        actor = require_operator(request)
+        board = record_operations_reopen(
             body.loc_id,
             body.linked_loc_ids,
         )
+        record_audit(
+            board.get("plan_id") or active_plan_id() or "",
+            action="reopen",
+            actor=actor,
+            loc_id=body.loc_id,
+        )
+        return board
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
+    except (OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
+
+
+@router.post("/api/execute/ops/close")
+async def post_ops_close(request: Request, body: CloseBody):
+    _guard(request)
+    try:
+        actor = require_operator(request)
+        board = record_operations_close(body.loc_id)
+        record_audit(
+            board.get("plan_id") or active_plan_id() or "",
+            action="close",
+            actor=actor,
+            loc_id=body.loc_id,
+        )
+        return board
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    except (OperatorError, AttentionError) as exc:
+        raise _actor_fail(exc) from exc
 
 
 @router.put("/api/execute/ops/clock")

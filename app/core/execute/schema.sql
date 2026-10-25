@@ -57,3 +57,40 @@ CREATE TABLE IF NOT EXISTS execute_gps_sos (
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     alarm TEXT NOT NULL DEFAULT 'sos'
 );
+
+CREATE TABLE IF NOT EXISTS execute_device_assignments (
+    plan_id UUID NOT NULL REFERENCES execute_plans (plan_id),
+    device_id TEXT NOT NULL,
+    resource_name TEXT NOT NULL DEFAULT '',
+    person_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    agency TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (plan_id, device_id)
+);
+
+CREATE TABLE IF NOT EXISTS execute_sos_attention (
+    plan_id UUID NOT NULL REFERENCES execute_plans (plan_id),
+    device_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'new',
+    sos_received_at TIMESTAMPTZ,
+    acknowledged_at TIMESTAMPTZ,
+    acknowledged_by TEXT NOT NULL DEFAULT '',
+    cleared_at TIMESTAMPTZ,
+    cleared_by TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (plan_id, device_id)
+);
+
+CREATE TABLE IF NOT EXISTS execute_action_audit (
+    id BIGSERIAL PRIMARY KEY,
+    plan_id UUID NOT NULL REFERENCES execute_plans (plan_id),
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    device_id TEXT,
+    loc_id INTEGER,
+    detail JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS execute_action_audit_plan
+    ON execute_action_audit (plan_id, at DESC);

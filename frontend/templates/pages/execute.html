@@ -4,14 +4,12 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=925d">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=928w">
 {% endblock %}
 
 {% block content %}
-<div id="rf-execute-page" class="rf-execute-page">
-    <div class="page-header">
-        <h2>Operations</h2>
-    </div>
+<div id="rf-execute-page" class="rf-execute-page rf-execute-command rf-ex-theme-dark">
+    <h2 class="visually-hidden">Operations</h2>
 
     <div id="rf-execute-empty" class="rf-execute-empty-page" hidden>
         <h3>No Day Plan is active</h3>
@@ -24,79 +22,173 @@
     </div>
 
     <div id="rf-execute-workspace" hidden>
-        <div class="rf-execute-toolbar">
+        <div id="rf-execute-map" class="rf-execute-map" role="application" aria-label="Operations map">
+            <div id="basemap-toggle" aria-label="Basemap style">
+                <button type="button" id="btn-dark" class="active">Dark</button>
+                <button type="button" id="btn-street">Light</button>
+                <button type="button" id="btn-satellite">Satellite</button>
+            </div>
+        </div>
+        <p id="rf-execute-map-empty" class="rf-execute-map-empty" hidden>No map coordinates for this location.</p>
+
+        <header class="rf-ex-bar">
             <div class="rf-execute-status" aria-live="polite">
                 <span id="rf-execute-clock-time" class="rf-execute-clock-time">—</span>
-                <span class="rf-execute-status-rule" aria-hidden="true">|</span>
-                <span class="rf-execute-next-refresh">
-                    Refresh in
-                    <span id="rf-execute-next-refresh" class="rf-execute-next-refresh-time">05:00</span>
-                </span>
                 <button type="button" class="course-map-action-btn" id="rf-execute-refresh" title="Refresh" aria-label="Refresh">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M21 12a9 9 0 1 1-3-6.7"/>
                         <polyline points="21 3 21 9 15 9"/>
                     </svg>
                 </button>
+                <span class="rf-execute-next-refresh">
+                    Refresh in
+                    <span id="rf-execute-next-refresh" class="rf-execute-next-refresh-time">05:00</span>
+                </span>
             </div>
-            <div class="rf-execute-filters">
-                <select id="rf-execute-zone" class="form-select form-select-sm" aria-label="Zone">
-                    <option value="">All Zones</option>
-                </select>
-                <input type="search" id="rf-execute-search" class="form-control form-control-sm" placeholder="Search locations..." aria-label="Search locations">
-            </div>
-            <div class="rf-execute-toolbar-end">
-                <a id="rf-execute-export" class="btn btn-sm rf-execute-export" href="#" hidden>Export CSV</a>
-            </div>
-        </div>
+            <button type="button" class="rf-ex-sos-count" id="rf-execute-sos-count" hidden>SOS 0</button>
+            <p id="rf-execute-plan-label" class="rf-execute-plan-label"></p>
+            <form id="rf-execute-operator-form" class="rf-ex-operator-form">
+                <label class="rf-ex-section-title" for="rf-execute-operator">Operator</label>
+                <input id="rf-execute-operator" name="operator" maxlength="40" placeholder="Name or initials" autocomplete="nickname">
+                <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+        </header>
 
-        <div id="rf-execute-guns" class="rf-execute-guns" hidden></div>
-
-        <p id="rf-execute-gps-status" class="rf-execute-gps-status" hidden></p>
-
-        <div class="card rf-execute-ops-map">
-            <div class="rf-execute-ops-map-head">
-                <h3 id="rf-execute-map-title">Course map</h3>
-                <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
-                    <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
-                    <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
-                    <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> GPS</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Stale GPS</li>
-                    <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
-                </ul>
-            </div>
-            <div id="rf-execute-map" class="rf-execute-map" role="application" aria-label="Operations map">
-                <div id="basemap-toggle" aria-label="Basemap style">
-                    <button type="button" id="btn-street" class="active">Street</button>
-                    <button type="button" id="btn-satellite">Satellite</button>
+        <aside class="rf-ex-rail" id="rf-execute-resources-rail" aria-label="Resources and locations">
+            <section class="rf-ex-resources">
+                <h3 class="rf-ex-section-title">Resources</h3>
+                <div id="rf-execute-resources" class="rf-execute-resource-list"></div>
+                <button type="button" class="rf-ex-section-title rf-ex-assign-open" id="rf-execute-assign-open">
+                    Devices
+                </button>
+            </section>
+            <section id="rf-execute-reopen-drawer" class="rf-ex-locations" aria-label="Locations">
+                <h3 class="rf-ex-section-title">Locations</h3>
+                <div id="rf-execute-strip" class="rf-execute-strip" role="tablist" aria-label="Reopen states">
+                    <button type="button" class="rf-ex-strip-btn" data-col="closed" aria-pressed="false">
+                        Closed <span data-count="closed">0</span>
+                    </button>
+                    <button type="button" class="rf-ex-strip-btn is-next" data-col="reopen_next" aria-pressed="false">
+                        Reopen next <span data-count="reopen_next">0</span>
+                    </button>
+                    <button type="button" class="rf-ex-strip-btn is-done" data-col="reopened" aria-pressed="false">
+                        Reopened <span data-count="reopened">0</span>
+                    </button>
                 </div>
-            </div>
-            <p id="rf-execute-map-empty" class="text-secondary small mb-0" hidden>No map coordinates for this location.</p>
-        </div>
+                <div class="rf-execute-filters">
+                    <select id="rf-execute-zone" class="form-select form-select-sm" aria-label="Zone">
+                        <option value="">All Zones</option>
+                    </select>
+                    <input type="search" id="rf-execute-search" class="form-control form-control-sm" placeholder="Search locations..." aria-label="Search locations">
+                </div>
+                <div id="rf-execute-board" class="rf-execute-focused"></div>
+            </section>
+            <section id="rf-execute-audit" class="rf-ex-audit" aria-label="Activity"></section>
+        </aside>
 
-        <div id="rf-execute-board" class="rf-execute-board">
-            <section class="rf-execute-col" data-col="closed">
-                <header class="rf-execute-col-head">
-                    <span>Closed</span>
-                    <span class="rf-execute-col-count">0</span>
-                </header>
-                <div class="rf-execute-col-body"></div>
+        <div id="rf-execute-resource-tile" class="rf-execute-tile" hidden></div>
+        <aside class="rf-ex-attention-rail" aria-label="Attention">
+            <section id="rf-execute-attention" class="rf-ex-attention" hidden></section>
+        </aside>
+        <div id="rf-execute-selected" class="rf-execute-tile rf-ex-loc-card" hidden></div>
+
+        <div class="rf-ex-map-tools" id="rf-execute-map-tools">
+            <div class="rf-ex-layers" id="rf-execute-layers">
+                <div class="rf-ex-layers-panel" id="rf-execute-layers-panel" hidden>
+                    <p class="rf-ex-layers-group">On the map</p>
+                    <div class="rf-execute-layers" aria-label="Map layers">
+                        <label><input type="checkbox" data-layer="courses" checked> Courses</label>
+                        <label><input type="checkbox" data-layer="turnarounds" checked> Turn-arounds</label>
+                        <label><input type="checkbox" data-layer="resources" checked> Resources</label>
+                        <label><input type="checkbox" data-layer="sos" checked> SOS</label>
+                        <label><input type="checkbox" data-layer="reopen" checked> Reopen set</label>
+                        <label><input type="checkbox" data-layer="water"> Water / services</label>
+                        <label><input type="checkbox" data-layer="all"> All locations</label>
+                    </div>
+                    <p class="rf-ex-layers-group">How to read marks</p>
+                    <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
+                        <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
+                        <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
+                        <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> Live</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Last seen</li>
+                        <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
+                    </ul>
+                </div>
+                <button type="button" class="rf-ex-layers-btn" id="rf-execute-layers-open"
+                    aria-expanded="false" aria-controls="rf-execute-layers-panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3 3 8l9 5 9-5-9-5z"/>
+                        <path d="m3 12 9 5 9-5"/>
+                        <path d="m3 16 9 5 9-5"/>
+                    </svg>
+                    Layers
+                    <span class="rf-ex-layers-chip" id="rf-execute-layers-chip" hidden></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rf-execute-assign" class="rf-execute-assign" hidden>
+        <div class="rf-execute-assign-card">
+            <header>
+                <div>
+                    <h3>Device assignments</h3>
+                    <p id="rf-execute-assign-plan" class="rf-ex-assign-plan"></p>
+                </div>
+                <button type="button" class="btn btn-sm" id="rf-execute-assign-close">Close</button>
+            </header>
+            <p>
+                Resource name, person, phone, and agency belong to this Day Plan
+                only. Device id is the phone that reports GPS.
+            </p>
+            <section class="rf-ex-assign-section" aria-labelledby="rf-execute-assign-existing-title">
+                <h4 id="rf-execute-assign-existing-title">Existing assignments</h4>
+                <div class="rf-ex-assign-table-wrap">
+                    <table class="rf-ex-assign-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Resource</th>
+                                <th scope="col">Device id</th>
+                                <th scope="col">Person</th>
+                                <th scope="col">Agency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rf-execute-assign-list"></tbody>
+                    </table>
+                </div>
             </section>
-            <section class="rf-execute-col" data-col="reopen_next">
-                <header class="rf-execute-col-head">
-                    <span>Reopen next</span>
-                    <span class="rf-execute-col-count">0</span>
-                </header>
-                <div class="rf-execute-col-body"></div>
+            <section class="rf-ex-assign-section" aria-labelledby="rf-execute-assign-unassigned-title">
+                <h4 id="rf-execute-assign-unassigned-title">Unassigned devices</h4>
+                <p>Already reporting GPS on this Day Plan. Select one to assign it.</p>
+                <div id="rf-execute-assign-unassigned" class="rf-ex-assign-unassigned"></div>
             </section>
-            <section class="rf-execute-col" data-col="reopened">
-                <header class="rf-execute-col-head">
-                    <span>Reopened</span>
-                    <span class="rf-execute-col-count">0</span>
-                </header>
-                <div class="rf-execute-col-body"></div>
+            <section class="rf-ex-assign-section" aria-labelledby="rf-execute-assign-form-title">
+                <div class="rf-ex-assign-form-head">
+                    <h4 id="rf-execute-assign-form-title">Add assignment</h4>
+                    <button type="button" class="btn btn-sm" id="rf-execute-assign-new">
+                        Add assignment
+                    </button>
+                </div>
+                <form id="rf-execute-assign-form" class="rf-execute-assign-form">
+                    <label>Device id <input name="device_id" required autocomplete="off"></label>
+                    <label>Resource <input name="resource_name" required placeholder="10K Lead" autocomplete="off"></label>
+                    <label>Person <input name="person_name" autocomplete="off"></label>
+                    <label>Phone <input name="phone" autocomplete="off"></label>
+                    <label>Agency / role <input name="agency" autocomplete="off"></label>
+                    <div class="rf-execute-assign-actions">
+                        <button type="submit" class="btn btn-sm btn-primary" id="rf-execute-assign-save">
+                            Save assignment
+                        </button>
+                        <button type="button" class="btn btn-sm" id="rf-execute-assign-delete" disabled>
+                            Remove assignment
+                        </button>
+                    </div>
+                </form>
             </section>
+            <p id="rf-execute-assign-status" hidden></p>
         </div>
     </div>
 </div>
@@ -106,5 +198,5 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_board.js?v=925e"></script>
+<script src="/static/js/execute_board.js?v=928w"></script>
 {% endblock %}

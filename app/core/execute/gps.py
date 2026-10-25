@@ -241,6 +241,12 @@ def insert_sos(
             ),
         )
         conn.commit()
+    try:
+        from app.core.execute.attention import latch_new_sos
+
+        latch_new_sos(plan_id, fix["device_id"], received_at)
+    except Exception:
+        pass
 
 
 def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
@@ -248,7 +254,8 @@ def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT DISTINCT ON (device_id)
-                device_id, lat, lon, fix_time, received_at, alarm
+                device_id, lat, lon, fix_time, received_at, alarm,
+                speed, heading
             FROM execute_gps_fixes
             WHERE plan_id = %s
             ORDER BY device_id, received_at DESC
@@ -265,6 +272,8 @@ def latest_fixes(plan_id: str) -> List[Dict[str, Any]]:
                 "fix_time": row[3],
                 "received_at": row[4],
                 "alarm": row[5] or "",
+                "speed": float(row[6]) if row[6] is not None else None,
+                "heading": float(row[7]) if row[7] is not None else None,
             }
         )
     return out
@@ -294,6 +303,37 @@ def list_sos(plan_id: str) -> List[Dict[str, Any]]:
             }
         )
     return out
+
+
+def _resource_view(
+    row: Mapping[str, Any],
+    assigned: Mapping[str, Mapping[str, Any]],
+    *,
+    stale: Optional[bool],
+) -> Dict[str, Any]:
+    device_id = str(row.get("device_id") or "")
+    card = assigned.get(device_id) or {}
+    resource_name = str(card.get("resource_name") or "").strip()
+    view: Dict[str, Any] = {
+        "device_id": device_id,
+        "lat": row["lat"],
+        "lon": row["lon"],
+        "fix_time": _iso(row.get("fix_time")),
+        "received_at": _iso(row.get("received_at")),
+        "unknown": False,
+        "resource_name": resource_name,
+        "unnamed": not resource_name,
+        "person_name": str(card.get("person_name") or ""),
+        "phone": str(card.get("phone") or ""),
+        "agency": str(card.get("agency") or ""),
+        "speed": row.get("speed"),
+        "heading": row.get("heading"),
+        "display_name": resource_name or device_id or "unnamed",
+    }
+    if stale is not None:
+        view["stale"] = stale
+        view["status_label"] = "last seen" if stale else "live"
+    return view
 
 
 def _iso(value: Any) -> str:
@@ -350,32 +390,54 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
             "sos": [],
         }
     clock = now or _now()
+    assigned = {}
+    try:
+        from app.core.execute.assignments import list_assignments
+
+        for item in list_assignments(plan_id):
+            assigned[item["device_id"]] = item
+    except Exception:
+        assigned = {}
     positions = []
     for row in latest_fixes(plan_id):
         stale = _stale(row.get("received_at"), clock)
-        positions.append(
-            {
-                "device_id": row["device_id"],
-                "lat": row["lat"],
-                "lon": row["lon"],
-                "fix_time": _iso(row.get("fix_time")),
-                "received_at": _iso(row.get("received_at")),
-                "stale": stale,
-                "unknown": False,
-            }
-        )
+        positions.append(_resource_view(row, assigned, stale=stale))
+    attention = {}
+    try:
+        from app.core.execute.attention import attention_map
+
+        attention = attention_map(plan_id)
+    except Exception:
+        attention = {}
     sos_rows = []
+    seen_sos = set()
     for row in list_sos(plan_id):
-        sos_rows.append(
-            {
-                "device_id": row["device_id"],
-                "lat": row["lat"],
-                "lon": row["lon"],
-                "fix_time": _iso(row.get("fix_time")),
-                "received_at": _iso(row.get("received_at")),
-                "alarm": row.get("alarm") or "sos",
-            }
-        )
+        device_id = str(row.get("device_id") or "")
+        if not device_id or device_id in seen_sos:
+            continue
+        seen_sos.add(device_id)
+        state = attention.get(device_id) or {}
+        status = str(state.get("status") or "new")
+        if status == "cleared":
+            continue
+        if status not in ("new", "acknowledged"):
+            status = "new"
+        view = _resource_view(row, assigned, stale=None)
+        view["alarm"] = row.get("alarm") or "sos"
+        view["attention"] = status
+        view["acknowledged_by"] = state.get("acknowledged_by") or ""
+        view["acknowledged_at"] = state.get("acknowledged_at") or ""
+        sos_rows.append(view)
+    sos_ids = {str(row.get("device_id") or "") for row in sos_rows}
+    sos_status = {}
+    for row in sos_rows:
+        sos_status[str(row.get("device_id") or "")] = row.get("attention")
+    for item in positions:
+        if item["device_id"] in sos_ids:
+            item["sos"] = True
+            item["attention"] = sos_status.get(item["device_id"]) or "new"
+        else:
+            item["sos"] = False
     return {
         "ok": True,
         "empty": False,

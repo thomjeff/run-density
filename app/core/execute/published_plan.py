@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from uuid import UUID
 
 from app.core.execute.board import assemble_board
+from app.core.execute.layers import turnaround_pins
 from app.core.execute.report import (
     build_reopen_rows,
     csv_columns,
@@ -25,6 +26,7 @@ from app.core.execute.report import (
 from app.core.execute.state import (
     apply_clock_update,
     normalize_state,
+    record_close,
     record_reopen,
 )
 from app.core.execute.times import wall_hhmmss
@@ -526,7 +528,13 @@ def operations_board(
                 "reopen_next": [],
                 "reopened": [],
             },
+            "counts": {
+                "closed": 0,
+                "reopen_next": 0,
+                "reopened": 0,
+            },
             "courses": {},
+            "turnarounds": [],
         }
     loaded = load_imported_plan(plan_id, root)
     manifest = loaded["manifest"]
@@ -558,6 +566,16 @@ def operations_board(
     board["courses"] = loaded.get("courses") or {}
     board["source_run_id"] = manifest.get("source_run_id") or ""
     board["weekday_code"] = day
+    columns = board.get("columns") or {}
+    board["counts"] = {
+        "closed": len(columns.get("closed") or []),
+        "reopen_next": len(columns.get("reopen_next") or []),
+        "reopened": len(columns.get("reopened") or []),
+    }
+    board["turnarounds"] = turnaround_pins(
+        locations,
+        loaded.get("courses") or {},
+    )
     return board
 
 
@@ -585,6 +603,29 @@ def record_operations_reopen(
         loc_id=int(loc_id),
         linked_loc_ids=linked_loc_ids or [],
     )
+    save_operational_state(plan_id, state, root)
+    return operations_board(plan_id, root=root, state=state)
+
+
+def record_operations_close(
+    loc_id: int,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    plan_id = active_plan_id(root)
+    if not plan_id:
+        raise PublishedPlanError("Activate a Day Plan on Execute → Plans.")
+    loaded = load_imported_plan(plan_id, root)
+    manifest = loaded["manifest"]
+    day = manifest.get("weekday_code") or weekday_code_for_date(
+        manifest["calendar_date"]
+    )
+    state = load_operational_state(
+        plan_id,
+        day=day,
+        manifest=manifest,
+        root=root,
+    )
+    record_close(state, loc_id=int(loc_id))
     save_operational_state(plan_id, state, root)
     return operations_board(plan_id, root=root, state=state)
 

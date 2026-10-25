@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 {% include 'partials/race_config_page_styles.html' %}
-<link rel="stylesheet" href="/static/css/execute_plans.css?v=920b">
+<link rel="stylesheet" href="/static/css/execute_plans.css?v=928a">
 {% endblock %}
 
 {% block content %}
@@ -46,11 +46,34 @@
             Activate a plan to open it on Operations, Participants, and Incidents.
         </p>
     </div>
+
+    <div id="rf-plans-assign" class="content-card rf-plans-assign" hidden>
+        <div class="card-header">
+            <h3 class="card-title" id="rf-plans-assign-title">Assignments</h3>
+        </div>
+        <p class="card-help">
+            Device id is the phone. Resource name, person, phone, and agency
+            belong to this Day Plan only.
+        </p>
+        <p id="rf-plans-assign-status" class="card-help" hidden></p>
+        <div id="rf-plans-assign-list"></div>
+        <form id="rf-plans-assign-form" class="rf-plans-assign-form">
+            <label>Device id <input name="device_id" required autocomplete="off"></label>
+            <label>Resource <input name="resource_name" required placeholder="10K Lead" autocomplete="off"></label>
+            <label>Person <input name="person_name" autocomplete="off"></label>
+            <label>Phone <input name="phone" autocomplete="off"></label>
+            <label>Agency / role <input name="agency" autocomplete="off"></label>
+            <div class="rf-plans-assign-actions">
+                <button type="submit" class="course-btn primary">Save assignment</button>
+                <button type="button" class="course-btn" id="rf-plans-assign-delete">Remove</button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="/static/js/table_actions.js?v=920b"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_plans.js?v=922d"></script>
+<script src="/static/js/execute_plans.js?v=928a"></script>
 {% endblock %}

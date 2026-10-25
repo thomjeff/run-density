@@ -6,6 +6,11 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core.execute.operator import (
+    clean_operator,
+    clear_operator_cookie,
+    set_operator_cookie,
+)
 from app.utils.auth import (
     clear_session_response,
     create_session_response,
@@ -52,9 +57,17 @@ async def password_page(request: Request):
 
 
 @router.post("/login")
-async def login(request: Request, password: str = Form(...)):
+async def login(
+    request: Request,
+    password: str = Form(...),
+    operator: str = Form(""),
+):
     if validate_password(password):
-        return create_session_response("/execute/plans", request)
+        response = create_session_response("/execute/plans", request)
+        name = clean_operator(operator)
+        if name:
+            set_operator_cookie(response, name, request)
+        return response
     return templates.TemplateResponse(
         request=request,
         name="pages/password.html",
@@ -69,7 +82,9 @@ async def login(request: Request, password: str = Form(...)):
 
 @router.get("/logout")
 async def logout(request: Request):
-    return clear_session_response("/", request)
+    response = clear_session_response("/", request)
+    clear_operator_cookie(response, request)
+    return response
 
 
 @router.get("/health")
