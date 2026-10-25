@@ -59,9 +59,7 @@ def _require_imported(plan_id: str, root: Optional[Path] = None) -> str:
     pid = assert_uuid(plan_id)
     registry = load_registry(root)
     if pid not in (registry.get("plans") or {}):
-        raise PublishedPlanError(
-            f"Published plan {pid} is not imported."
-        )
+        raise PublishedPlanError(f"Published plan {pid} is not imported.")
     return pid
 
 
@@ -267,9 +265,7 @@ def acknowledge_sos(
     if not did:
         raise AttentionError("device_id is required.")
     if not actor:
-        raise AttentionError(
-            "Set a session display name before this action."
-        )
+        raise AttentionError("Set a session display name before this action.")
     current = _load(pid, root).get(did) or _empty_row(did)
     if current.get("status") == CLEARED:
         raise AttentionError("This SOS is no longer in attention.")
@@ -300,9 +296,7 @@ def clear_sos_attention(
     if not did:
         raise AttentionError("device_id is required.")
     if not actor:
-        raise AttentionError(
-            "Set a session display name before this action."
-        )
+        raise AttentionError("Set a session display name before this action.")
     current = _load(pid, root).get(did) or _empty_row(did)
     when = _iso(_now())
     current["status"] = CLEARED
@@ -359,9 +353,7 @@ def record_audit(
         raise AttentionError("Unknown audit action.")
     name = clean_operator(actor)
     if not name:
-        raise AttentionError(
-            "Set a session display name before this action."
-        )
+        raise AttentionError("Set a session display name before this action.")
     row = {
         "plan_id": pid,
         "action": action,

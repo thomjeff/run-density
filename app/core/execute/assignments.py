@@ -55,9 +55,7 @@ def _require_imported(plan_id: str, root: Optional[Path] = None) -> str:
     pid = assert_uuid(plan_id)
     registry = load_registry(root)
     if pid not in (registry.get("plans") or {}):
-        raise PublishedPlanError(
-            f"Published plan {pid} is not imported."
-        )
+        raise PublishedPlanError(f"Published plan {pid} is not imported.")
     return pid
 
 
@@ -198,10 +196,7 @@ def upsert_assignment(
     if using_postgres() and root is None:
         _upsert_db(pid, row)
         return row
-    current = {
-        item["device_id"]: item
-        for item in _from_file(pid, root)
-    }
+    current = {item["device_id"]: item for item in _from_file(pid, root)}
     current[row["device_id"]] = row
     _save_file(pid, list(current.values()), root)
     return row
@@ -221,11 +216,7 @@ def delete_assignment(
     if using_postgres() and root is None:
         _delete_db(pid, did)
         return
-    kept = [
-        item
-        for item in _from_file(pid, root)
-        if item["device_id"] != did
-    ]
+    kept = [item for item in _from_file(pid, root) if item["device_id"] != did]
     _save_file(pid, kept, root)
 
 

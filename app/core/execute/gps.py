@@ -401,9 +401,7 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
     positions = []
     for row in latest_fixes(plan_id):
         stale = _stale(row.get("received_at"), clock)
-        positions.append(
-            _resource_view(row, assigned, stale=stale)
-        )
+        positions.append(_resource_view(row, assigned, stale=stale))
     attention = {}
     try:
         from app.core.execute.attention import attention_map
@@ -431,10 +429,9 @@ def overlay(*, now: Optional[datetime] = None) -> Dict[str, Any]:
         view["acknowledged_at"] = state.get("acknowledged_at") or ""
         sos_rows.append(view)
     sos_ids = {str(row.get("device_id") or "") for row in sos_rows}
-    sos_status = {
-        str(row.get("device_id") or ""): row.get("attention")
-        for row in sos_rows
-    }
+    sos_status = {}
+    for row in sos_rows:
+        sos_status[str(row.get("device_id") or "")] = row.get("attention")
     for item in positions:
         if item["device_id"] in sos_ids:
             item["sos"] = True

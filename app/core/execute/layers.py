@@ -69,9 +69,7 @@ def turnaround_pins(
     for race_id, geo in (courses or {}).items():
         if not isinstance(geo, Mapping):
             continue
-        pins.extend(
-            _course_turnarounds(str(race_id), geo, seen)
-        )
+        pins.extend(_course_turnarounds(str(race_id), geo, seen))
     return pins
 
 
@@ -135,8 +133,6 @@ def _line_coords(geometry: Any) -> List[List[float]]:
         for part in coords:
             if not isinstance(part, list):
                 continue
-            flat.extend(
-                c for c in part if isinstance(c, list) and len(c) >= 2
-            )
+            flat.extend(c for c in part if isinstance(c, list) and len(c) >= 2)
         return flat
     return []

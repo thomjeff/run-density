@@ -30,9 +30,7 @@ def clean_operator(value: object) -> str:
 def require_operator(request: Request) -> str:
     name = clean_operator(request.cookies.get(OPERATOR_COOKIE))
     if not name:
-        raise OperatorError(
-            "Set a session display name before this action."
-        )
+        raise OperatorError("Set a session display name before this action.")
     return name
 
 
