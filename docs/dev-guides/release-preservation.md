@@ -17,7 +17,7 @@ Until an approved image split, Runflow remains one combined Docker image. That i
 | Release commit | `d12621d71a0e33e90f2820fb8d04b96d77d59dad` |
 | GitHub release | https://github.com/thomjeff/run-density/releases/tag/v3.1.0 |
 | Combined entry point | `Dockerfile` → `gunicorn … app.main:app` |
-| Compose workflow | `docker-compose.yml` service `app` (`make dev` / `make build`) |
+| Compose workflow | `docker-compose.yml` service `create` (`make create`) |
 | Skinny Locations image | Separate `Dockerfile.cloud` → `app.cloud_app:app` |
 
 There is **no published combined `v3.1.0` image** in Artifact Registry or Docker Hub. The last-known-good combined application is the **git tag**. After a local verify build, treat the image ID (`sha256:…`) as the immutable digest for that host/architecture. Do not retag or push over any existing published image, including skinny `runflow-cloud:*`.
@@ -38,7 +38,7 @@ git archive v3.1.0 | docker build -t runflow:v3.1.0-verify -
 Or:
 
 ```bash
-VERIFY_REF=v3.1.0 IMAGE_TAG=runflow:v3.1.0-verify make verify-image
+VERIFY_REF=v3.1.0 IMAGE_TAG=runflow:v3.1.0-verify ./scripts/verify_combined_image.sh
 ```
 
 Optional local archive (do not commit the tarball):
@@ -54,7 +54,7 @@ docker save -o /tmp/runflow-v3.1.0-verify.tar runflow:v3.1.0-verify
 ```bash
 git fetch --tags origin
 git rev-parse v3.1.0^{commit}   # must be d12621d71a0e33e90f2820fb8d04b96d77d59dad
-VERIFY_REF=v3.1.0 IMAGE_TAG=runflow:v3.1.0-verify VERIFY_PORT=18080 make verify-image
+VERIFY_REF=v3.1.0 IMAGE_TAG=runflow:v3.1.0-verify VERIFY_PORT=18080 ./scripts/verify_combined_image.sh
 ```
 
 To run the release interactively without touching the current `main` checkout:
@@ -83,17 +83,17 @@ The image **build** copies only committed `app/`, `data/`, `config/`, `frontend/
 ```bash
 git checkout main
 git pull origin main
-make build          # docker-compose build → current Dockerfile
-make dev            # docker-compose up --build; http://localhost:8080
+make create         # Create (Build + Plan) on http://localhost:8080
+make execute        # optional: Execute + Postgres on http://localhost:8081
 ```
 
-Equivalent without Compose tag reuse:
+Equivalent committed-tree verify (no Compose bind-mounts):
 
 ```bash
-IMAGE_TAG=runflow:dev-$(git rev-parse --short HEAD) make verify-image
+IMAGE_TAG=runflow:dev-$(git rev-parse --short HEAD) ./scripts/verify_combined_image.sh
 ```
 
-`make dev` bind-mounts source for hot reload. That is the daily authoring workflow. A `git archive` verify build is what proves the **committed** tree still produces the combined image.
+`make create` bind-mounts source for hot reload. That is the daily authoring workflow. A `git archive` verify build is what proves the **committed** tree still produces the combined Create image.
 
 ---
 
@@ -104,8 +104,7 @@ IMAGE_TAG=runflow:dev-$(git rev-parse --short HEAD) make verify-image
 3. Use a **development image tag**, never `v3.1.0`:
 
    ```bash
-   IMAGE_TAG=runflow:dev-feat-917-$(git rev-parse --short HEAD) make verify-image
-   make smoke
+   IMAGE_TAG=runflow:dev-feat-917-$(git rev-parse --short HEAD) ./scripts/verify_combined_image.sh
    ```
 
 4. Open a pull request. Do not merge automatically. Do not rebase or force-push `main` or the `v3.1.0` tag.
@@ -141,7 +140,7 @@ If a later `main` or feature branch fails:
    ```
 
 2. Or load a local `docker save` archive if you made one after verify.
-3. For the skinny Locations cloud service only, continue using `make cloud-build` / `cloud-release` against a known `RUN_ID`. Do not replace that workflow with a feature-branch Execute image.
+3. Skinny Locations Cloud Run Make targets were removed in #935. `Dockerfile.cloud` remains until volunteer location sheets in Execute (#936) replace that path. Do not deploy a feature-branch Execute image as the skinny Locations service.
 
 Do not move tag `v3.1.0`. If a later release is needed, cut `v3.1.1` or `v3.2.0`.
 
@@ -151,20 +150,19 @@ Do not move tag `v3.1.0`. If a later release is needed, cut `v3.1.1` or `v3.2.0`
 
 | Area | What must keep working | Automated coverage today |
 | --- | --- | --- |
-| Combined image | `Dockerfile` + Compose + `app.main:app` start | `tests/unit/test_combined_image_preservation.py`; `make verify-image` |
+| Combined image | `Dockerfile` + Compose service `create` + `app.main:app` start | `tests/unit/test_combined_image_preservation.py`; `scripts/verify_combined_image.sh` |
 | Build | Legs, courses, runners, packages; Build owns location edits | `test_issue904_build_plan_ownership.py`, config-package / legs / runners unit tests |
-| Plan | Analysis launch, Overview / Density / Flow / Junctions / Motion / Progression / Locations | `test_issue798_phase1_routers.py`, analysis / density / flow / progression unit tests; `make e2e` locally |
+| Plan | Analysis launch, Overview / Density / Flow / Junctions / Motion / Progression / Locations | `test_issue798_phase1_routers.py`, analysis / density / flow / progression unit tests; Create UI or Postman |
 | Execute | Reopen, Participants, Incidents | `test_issue893_execute_board.py`, `test_issue911_participants.py`, `test_issue912_incidents.py`, `test_issue914_incidents.py` |
 | Workspace chrome | Build / Plan / Execute nav | `test_issue878_workspace_nav.py` |
-| Skinny cloud | Read-only Locations (`Dockerfile.cloud`) | Docs + `make cloud-build`; **no automated startup test** |
-| Local Docker | `make dev` on port 8080 | `make verify-image`; CI combined-image workflow |
+| Skinny cloud | Read-only Locations (`Dockerfile.cloud`) | Docs only; Make wrappers removed in #935; **no automated startup test** |
+| Local Docker | `make create` on port 8080; `make execute` on port 8081 | CI combined-image workflow |
 
 **Gaps (do not paper over by changing product code):**
 
 - GitHub Actions `code-quality.yaml` lints **changed `app/` Python files** (flake8 / black / isort). Whole-tree `app/` flake8 still fails on pre-existing style debt and is not the PR gate.
-- Combined-image verify (`.github/workflows/combined-image-verify.yaml`) builds, starts, and regresses the combined image on every PR.
-- `make e2e` is local-only and long; CI runs a unit/regression subset, not the full sat+sun analysis.
-- CONTRIBUTING.md still mentions `make test` / `make e2e-local`; `make smoke` is the current smoke target (`make test` aliases it).
+- Combined-image verify (`.github/workflows/combined-image-verify.yaml`) builds, starts, and regresses the combined Create image on every PR via `scripts/verify_combined_image.sh`.
+- Saturday/Sunday `tests/e2e.py` is archived under `tests/archive/`. CI runs a unit/regression subset.
 - No registry-hosted combined `v3.1.0` digest yet.
 - Skinny cloud image is not built on every PR.
 

@@ -42,42 +42,17 @@ The `/locsheets` index page remains behind password auth.
 
 ---
 
-## Build, Push, Deploy (Makefile)
+## Build, Push, Deploy
 
-### 1) Build (only step that needs run_id)
-```
-make cloud-build RUN_ID=<run_id>
-```
+Makefile `cloud-*` targets were removed in **#935**. `:8081` is now local Execute (`make execute`). `Dockerfile.cloud` and this image remain until volunteer location sheets in Execute (**#936**) replace this path.
 
-### 2) Push (uses latest.json run_id)
+To build the skinny image by hand:
+
 ```
-make cloud-push
+docker build -f Dockerfile.cloud -t runflow-cloud:local .
 ```
 
-### 3) Deploy (uses latest.json run_id + cloud.env password)
-```
-make cloud-deploy
-```
-
-### 4) Stop and Clean
-```
-make cloud-stop
-make cloud-clean
-```
-
----
-
-## Local Smoke Test
-
-Run the cloud UI locally on port 8081:
-```
-make cloud-run
-```
-
-Then open:
-```
-http://localhost:8081/
-```
+Do not bind it to host port 8081 while Execute is running.
 
 ---
 

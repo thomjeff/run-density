@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Create / Execute local environments (#935)
+- Local Make targets are `create` and `execute` (plus `stop-create` / `stop-execute`). Create is Build + Plan on `:8080`; Execute is race day on `:8081` with Postgres
+- Compose service `app` is now `create` (`runflow-create`). Create no longer launches under coverage
+- Removed Make wrappers for e2e, smoke, test, build, verify-image, and cloud deploy. Combined-image CI calls `scripts/verify_combined_image.sh` directly. `Dockerfile.cloud` stays
+- Archived `tests/e2e.py` under `tests/archive/` (not collected)
+
 ### Execute accountable attention (#928 Milestone 2)
 - Operators set a session display name after login. Acknowledge and clear SOS record who and when
 - Clearing SOS removes the interrupt and keeps history. Activity logs Confirm reopen, assignment changes, and SOS actions

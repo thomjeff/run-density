@@ -153,9 +153,10 @@ result = create_full_analysis_pipeline(...)  # NO!
 ```
 
 **Test Infrastructure:**
-- Use `tests/v2/e2e.py` for E2E tests
-- Use `make e2e` to run tests
-- All tests must use the API endpoint
+- Run a new plan from the Create UI or Postman
+- Unit tests: `docker exec runflow-create python -m pytest tests/unit -q`
+- Combined-image CI: `scripts/verify_combined_image.sh`
+- Do not revive `tests/archive/e2e.py`
 
 ### 4. FAIL-FAST BEHAVIOR (Issue #553)
 
@@ -287,9 +288,8 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 
 ### Testing
 
-- `tests/v2/e2e.py` - E2E test suite (use `make e2e`)
-- `tests/v2/test_*.py` - Unit and integration tests
-- All tests must use API endpoint, never call internal modules directly
+- `tests/unit/` - unit and regression tests
+- `tests/archive/e2e.py` - deprecated Saturday/Sunday runner (not a Make target)
 
 ---
 
@@ -327,7 +327,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 3. **Review Rules** - Confirm all critical rules
 4. **Plan Changes** - Small, testable commits
 5. **Write Code** - Follow patterns, use helpers
-6. **Test** - Use `make e2e` or `pytest tests/v2/e2e.py`
+6. **Test** - Create UI / Postman for a plan; `pytest tests/unit` for regressions
 7. **Commit** - Small, focused commits with clear messages
 8. **Ask for Review** - Don't merge without user approval
 

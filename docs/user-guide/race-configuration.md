@@ -225,7 +225,7 @@ Runner files are **immutable datasets** in `runflow/org/runners/{dataset_id}/`. 
 After a race, import **chip-timed** finisher data as `{event}_runners.csv` files:
 
 1. Export results from Race Roster as an Excel workbook (one sheet per event).
-2. Run the conversion script (once per results file). From the repo root, either use a local Python env with `requirements.txt` installed, or the dev container (`make dev`):
+2. Run the conversion script (once per results file). From the repo root, either use a local Python env with `requirements.txt` installed, or Create (`make create`):
 
    ```bash
    python scripts/build_raceroster_runner_csvs.py \
@@ -235,7 +235,7 @@ After a race, import **chip-timed** finisher data as `{event}_runners.csv` files
    ```
 
    ```bash
-   docker exec run-density-dev python scripts/build_raceroster_runner_csvs.py \
+   docker exec runflow-create python scripts/build_raceroster_runner_csvs.py \
      --xlsx "/app/cursor/FM2026 Results.xlsx" \
      --out-dir /app/cursor \
      --events 10k,half,full

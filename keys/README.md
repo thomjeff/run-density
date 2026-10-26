@@ -42,8 +42,8 @@ GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json
 ### 4. Restart Container
 
 ```bash
-make stop-docker
-make dev-docker
+make stop-create
+make create
 ```
 
 ## Validation
@@ -52,12 +52,12 @@ After starting the container with GCS enabled:
 
 1. **Check container logs** for GCS initialization:
    ```bash
-   docker logs run-density-dev | grep -i "cloud storage\|gcs"
+   docker logs runflow-create | grep -i "cloud storage\|gcs"
    ```
 
 2. **Verify environment variables**:
    ```bash
-   docker exec run-density-dev printenv | grep -E "GCS_UPLOAD|GOOGLE_CLOUD_PROJECT|GOOGLE_APPLICATION_CREDENTIALS"
+   docker exec runflow-create printenv | grep -E "GCS_UPLOAD|GOOGLE_CLOUD_PROJECT|GOOGLE_APPLICATION_CREDENTIALS"
    ```
 
 3. **Test GCS upload** by running E2E tests or generating a report and checking GCS bucket for uploaded files.

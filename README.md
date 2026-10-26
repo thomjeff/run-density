@@ -22,81 +22,24 @@ It provides comprehensive reporting with Markdown and CSV outputs, and is contai
 - **Heatmap Visualizations**: PNG heatmaps for race segments
 - **Exports**: Allow-listed report and data-file ZIPs from Overview
 - **RESTful API**: FastAPI with configurable analysis parameters
-- **Web UI**: Tabler Plan/Build/Execute chrome at http://localhost:8080
+- **Web UI**: Create (Build + Plan) at http://localhost:8080; Execute at http://localhost:8081
 
 ## Quick Start (Local Development)
 
 ### Docker Development (Local-Only)
 
-**Issue #466:** Simplified to 3 core commands for local-only Docker development.
+Two environments. **Create** is Build + Plan (author a race). **Execute** is race day. Both can run at once. They do not share a filesystem; publish a Day Plan ZIP from Create and import it in Execute.
 
-Start the development container:
 ```bash
-make dev
+make create          # Build + Plan on http://localhost:8080 (hot reload)
+make execute         # Execute + Postgres on http://localhost:8081
+make stop-create     # Create only
+make stop-execute    # Execute and Postgres only
 ```
 
-The container runs on `http://localhost:8080` with hot-reload enabled.
+Execute copies code at image build time. Run `make execute` again after Execute backend or frontend changes.
 
-Run end-to-end tests:
-```bash
-# v1 E2E tests (legacy)
-make e2e-local
-
-# v2 E2E tests (recommended)
-make e2e-v2
-```
-
-**v2 E2E Testing:**
-- Base URL configurable via `BASE_URL` env var or `--base-url` pytest option
-- Default: `http://localhost:8080`
-- Tests three scenarios: Saturday-only, Sunday-only, Mixed-day
-- Golden file regression testing with normalization for Markdown, CSV, JSON, GeoJSON, and Parquet
-- Day isolation validation to ensure no cross-day contamination
-
-Run smoke tests:
-```bash
-make test
-```
-
-Stop the container:
-```bash
-make stop
-```
-
-**📖 Full Documentation:** See [`docs/README.md`](docs/README.md) for complete documentation index.
-
-### Legacy venv Development (Deprecated)
-
-> **⚠️ Deprecated:** This workflow will be removed in a future version. Use Docker development instead.
-
-<details>
-<summary>Click to expand legacy venv instructions</summary>
-
-Create and activate a Python virtual environment:
-```bash
-python3 -m venv test_env
-source test_env/bin/activate
-pip install -U pip
-pip install -r requirements.txt
-```
-
-Run locally:
-```bash
-make run-local
-```
-
-Health checks:
-```bash
-curl -fsS http://localhost:8081/health | jq .
-curl -fsS http://localhost:8081/ready | jq .
-```
-
-Smoke test locally:
-```bash
-make smoke-local
-```
-
-</details>
+**📖 Full Documentation:** See [`docs/README.md`](docs/README.md) and [`docs/dev-guides/docker-dev.md`](docs/dev-guides/docker-dev.md).
 
 ## Web UI Features
 
@@ -111,7 +54,8 @@ make smoke-local
 - Served at `/heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png`
 
 ### Access the Web UI
-- **Local (Docker)**: http://localhost:8080 (password gate, then Plan Overview)
+- **Create (Build + Plan)**: http://localhost:8080
+- **Execute (race day)**: http://localhost:8081
 
 ## Report Generation
 
@@ -169,32 +113,18 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ## Makefile Commands
 
-### Core Commands
-- `make dev` – start Docker container on `http://localhost:8080` with hot-reload
-- `make e2e` – run sat+sun E2E in a single run_id (fast sat/sun sanity)
-- `make e2e-full` – run full v2 E2E suite (all scenarios, ~30 min)
-- `make e2e-sat` – run Saturday-only E2E (~2 min)
-- `make e2e-sun` – run Sunday-only E2E (~2 min)
-- `make validate-output` – validate latest run outputs
-- `make validate-all` – validate outputs for all runs in index.json
+- `make create` – start Create (Build + Plan) on `http://localhost:8080` with hot-reload
+- `make execute` – start Execute + Postgres on `http://localhost:8081`
+- `make stop-create` – stop Create only
+- `make stop-execute` – stop Execute and Postgres only
 - `make prune-runs KEEP=n` – prune old run_ids, keeping last n
-- `make stop` – stop and remove Docker container
-- `make build` – build Docker image (no start)
-- `make smoke` – combined-image route regression (requires `run-density-dev`)
-- `make verify-image` – `git archive` build + HTTP smoke of the combined image
-
-### Legacy Aliases (Backward Compatibility)
-- `make dev-docker` – alias for `make dev`
-- `make e2e-local-docker` – alias for `make e2e-local`
-- `make smoke-docker` – alias for `make test`
-- `make stop-docker` – alias for `make stop`
-- `make build-docker` – alias for `make build`  
+- `make ai-prompt RUN_ID=...` – generate an AI prompt for a run_id  
 
 ---
 
 ## Code Quality
 
-Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the existing `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan / Execute routes. See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
+Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the Create `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan / leftover Execute routes. See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
 
 ### Quality Checks (On Pull Requests)
 The CI pipeline runs automated checks on all Python code changes:
@@ -215,25 +145,7 @@ All checks must pass before code can be merged to main.
 
 ## Testing
 
-### Local Testing
-Run end-to-end tests locally using Docker:
-
-```bash
-# Start container
-make dev
-
-# Run E2E tests
-make e2e-local
-
-# Run smoke tests
-make test
-```
-
-### Test Coverage
-- **E2E Tests**: Full workflow validation with `e2e.py`
-- **Smoke Tests**: Health checks and API endpoint validation
-- **Output Validation**: Automated integrity checks (Issue #467)
-- **Code Quality**: Automated linting and formatting checks
+Run a new plan from the Create UI or Postman. Unit and combined-image regression run in GitHub Actions on every PR. The old Saturday/Sunday `tests/e2e.py` runner is archived under `tests/archive/` and is not a Make target.
 
 ---
 
@@ -249,10 +161,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 ```bash
 git clone https://github.com/thomjeff/run-density.git
 cd run-density
-make dev           # Start container
-make test          # Run smoke tests
-make e2e-local     # Run E2E tests
-make validate-output  # Validate output integrity
+make create        # Start Create (Build + Plan) on :8080
+make execute       # Start Execute on :8081 (optional)
 ```
 
 ---

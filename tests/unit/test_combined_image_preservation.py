@@ -82,6 +82,8 @@ def test_compose_still_builds_combined_image():
     text = (_repo_root() / "docker-compose.yml").read_text(encoding="utf-8")
     assert "dockerfile: Dockerfile" in text
     assert "app.main:app" in text
+    assert "container_name: runflow-create" in text
+    assert "run-density-dev" not in text
     assert "sqlalchemy" not in text.lower()
 
 

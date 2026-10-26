@@ -30,7 +30,7 @@ postman/
 │   └── Runflow-v2-StartTime-Manipulation.postman_collection.json  # Start-time manipulation tests
 └── environments/
     ├── Local.postman_environment.json            # Local development (localhost:8080)
-    ├── Docker.postman_environment.json          # Docker Compose (app:8080)
+    ├── Docker.postman_environment.json          # Docker Compose (create:8080)
     └── Cloud.postman_environment.json           # Cloud Run (production URL)
 ```
 
@@ -147,14 +147,14 @@ For local development:
 }
 ```
 
-**Usage:** When running `make dev` locally
+**Usage:** When running `make create` locally
 
 ### Docker Environment (`Docker.postman_environment.json`)
 
 For Docker Compose network:
 ```json
 {
-  "base_url": "http://app:8080",
+  "base_url": "http://create:8080",
   "data_dir": "/app/runflow/config/sample"
 }
 ```
@@ -373,8 +373,8 @@ jobs:
 | Aspect | Postman | E2E Tests (pytest) |
 |--------|---------|---------------------|
 | **Purpose** | Manual testing, API exploration | Automated testing, CI/CD |
-| **Location** | `postman/collections/` | `tests/v2/e2e.py` |
-| **Execution** | Postman UI or Newman CLI | `make e2e` or `pytest` |
+| **Location** | `postman/collections/` | `tests/unit/` |
+| **Execution** | Postman UI or Newman CLI | `pytest` / GitHub Actions |
 | **Validation** | Postman test scripts | Python assertions |
 | **Use Case** | Quick API testing, debugging | Regression testing, validation |
 

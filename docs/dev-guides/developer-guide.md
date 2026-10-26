@@ -18,22 +18,22 @@ This guide provides essential information for developers working on the Runflow 
 
 **Quick Start:**
 ```bash
-make dev      # Start development container
-make test     # Run smoke tests
-make e2e      # Run E2E tests
-make stop     # Stop container
+make create       # Start Create (Build + Plan) on :8080
+make execute      # Start Execute + Postgres on :8081
+make stop-create
+make stop-execute
 ```
 
-**See:** `docs/dev-guides/docker-dev.md` for complete Docker workflow guide.
+**See:** `docs/dev-guides/docker-dev.md` for the Docker workflow.
 
 ### Key Commands
 
 | Command | Purpose |
 |---------|---------|
-| `make dev` | Start container with hot-reload |
-| `make test` | Quick smoke tests (< 5 seconds) |
-| `make e2e` | Full E2E test suite |
-| `make stop` | Stop and remove container |
+| `make create` | Start Create (Build + Plan) with hot-reload on `:8080` |
+| `make execute` | Start Execute + Postgres on `:8081` |
+| `make stop-create` | Stop Create only |
+| `make stop-execute` | Stop Execute and Postgres only |
 
 ### Container Structure
 
@@ -302,12 +302,8 @@ flow_file = get_flow_file(analysis_config=analysis_config)
 
 ### Quick Reference
 
-**E2E Tests:**
-```bash
-make e2e          # Run sat+sun E2E test
-make e2e-full     # Run all E2E test scenarios
-pytest tests/v2/e2e.py -v
-```
+**Plans:**
+Run a new plan from the Create UI or Postman. The old Saturday/Sunday runner is `tests/archive/e2e.py` (not a Make target).
 
 **Unit Tests:**
 ```bash
@@ -316,7 +312,7 @@ pytest tests/v2/test_validation.py -v
 ```
 
 **Test Organization:**
-- `tests/v2/e2e.py` - End-to-end tests
+- `tests/archive/e2e.py` - deprecated Saturday/Sunday runner
 - `tests/v2/test_*.py` - Unit and integration tests
 - `tests/v2/golden/` - Golden file baselines for regression
 
@@ -608,10 +604,10 @@ cat runflow/$(cat runflow/latest.json | jq -r '.run_id')/analysis.json | jq
 
 ```bash
 # View container logs
-docker logs run-density-dev --tail 100
+docker logs runflow-create --tail 100
 
 # Filter for errors
-docker logs run-density-dev | grep -i "error\|exception"
+docker logs runflow-create | grep -i "error\|exception"
 ```
 
 ### Verify File Paths

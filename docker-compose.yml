@@ -1,17 +1,15 @@
 services:
-  app:
+  create:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: run-density-dev
+    container_name: runflow-create
     ports:
       - "8080:8080"
     volumes:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
-      - ./coverage.rc:/app/coverage.rc
-      - ./app/sitecustomize.py:/app/sitecustomize.py
-      # Bind mount tests directory for v2 testing
+      # Bind mount tests directory
       - ./tests:/app/tests
       # Combined-image contract files (Epic #916 release preservation)
       - ./Dockerfile:/app/Dockerfile:ro
@@ -44,7 +42,6 @@ services:
       # Container-specific environment variables (not in dev.env)
       - PORT=8080
       - PYTHONPATH=/app
-      - COVERAGE_PROCESS_START=/app/coverage.rc
       - MPLBACKEND=Agg
       # Issue #798 Phase 4: host prefix for path rewrite inside the container
       - RUNFLOW_ROOT_HOST=${RUNFLOW_ROOT:-./runflow}
@@ -53,13 +50,12 @@ services:
       # - GCS_UPLOAD=${GCS_UPLOAD}
       # - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       # - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-    # Override CMD for coverage-enabled dev mode with --parallel-mode to capture server process
-    command: python -m coverage run --parallel-mode --rcfile=/app/coverage.rc -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
     stdin_open: true
     tty: true
     # Issue #503: Memory and CPU limits for performance optimization
-    # NOTE: deploy.* is ignored by docker-compose (non-swarm).
-    # Use mem_limit/cpus to enforce local limits with `make dev`.
+    # NOTE: deploy.* is ignored by Compose (non-swarm).
+    # Use mem_limit/cpus to enforce local limits with `make create`.
     mem_limit: 10g
     mem_reservation: 8g
     cpus: "3.0"
@@ -118,4 +114,3 @@ services:
 volumes:
   execute-db-data:
   execute-runtime-data:
-

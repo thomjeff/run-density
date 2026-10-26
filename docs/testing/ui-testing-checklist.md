@@ -183,16 +183,16 @@ This document provides a systematic approach to testing local Docker deployments
 ### Docker Logs Monitoring
 ```bash
 # Check container logs for errors
-docker logs run-density-dev | grep -iE "error|exception|failed"
+docker logs runflow-create | grep -iE "error|exception|failed"
 
 # Check for warnings
-docker logs run-density-dev | grep -i "warning"
+docker logs runflow-create | grep -i "warning"
 
 # View recent logs
-docker logs run-density-dev --tail 50
+docker logs runflow-create --tail 50
 
 # Follow logs in real-time
-docker logs run-density-dev --follow
+docker logs runflow-create --follow
 ```
 
 ### API Testing
@@ -219,7 +219,7 @@ curl -s "http://localhost:8080/api/flow/segments?day=sat" | jq .
 curl -s http://localhost:8080/api/segments/geojson | jq .
 
 # Latest run_id
-docker exec run-density-dev cat /app/runflow/latest.json | jq .
+docker exec runflow-create cat /app/runflow/latest.json | jq .
 
 # List reports / export ZIP
 curl -s "http://localhost:8080/api/reports/list?run_id={uuid}" | jq .
@@ -271,7 +271,7 @@ A deployment is considered successful when:
 
 ### Common Issues
 1. **Page not loading**: Check Docker container status (`docker ps`)
-2. **Missing data**: Verify E2E run completed successfully (`make e2e-local` or `make e2e-coverage-lite DAY=both`)
+2. **Missing data**: Verify a plan ran from the Create UI or Postman
 3. **Heatmap not loading**: Check `runflow/<uuid>/<day>/ui/heatmaps/` directory (note: includes day subdirectory)
 4. **Reports missing**: Verify reports in `runflow/<uuid>/<day>/reports/` directory
 5. **Flags not showing**: Check `runflow/<uuid>/<day>/ui/flags.json`
@@ -279,11 +279,11 @@ A deployment is considered successful when:
 7. **404 on heatmaps**: Verify static file mount at `/heatmaps/` is working (check `main.py` mount configuration)
 
 ### Debugging Steps
-1. Check Docker logs: `docker logs run-density-dev --tail 100`
+1. Check Docker logs: `docker logs runflow-create --tail 100`
 2. Verify container is running: `docker ps`
 3. Check browser console for JavaScript errors
 4. Verify API endpoints: `curl http://localhost:8080/health`
-5. Check latest run_id: `docker exec run-density-dev cat /app/runflow/latest.json`
+5. Check latest run_id: `docker exec runflow-create cat /app/runflow/latest.json`
 
 ---
 

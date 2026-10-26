@@ -55,8 +55,8 @@ postman/
 **Files:** `postman/environments/*.json`
 
 **Environments:**
-- **Local** - `http://localhost:8080` (for `make dev`)
-- **Docker** - `http://app:8080` (for Docker Compose network)
+- **Local** - `http://localhost:8080` (for `make create`)
+- **Docker** - `http://create:8080` (for Docker Compose network)
 - **Cloud** - Production URL (configurable)
 
 **Variables:**
@@ -124,7 +124,7 @@ See `postman/README.md` for complete documentation.
 | Aspect | Postman | E2E Tests (pytest) |
 |--------|---------|---------------------|
 | **Location** | `postman/collections/` | `tests/v2/e2e.py` |
-| **Execution** | Postman UI or Newman CLI | `make e2e` or `pytest` |
+| **Execution** | Postman UI or Newman CLI | `pytest` / GitHub Actions |
 | **Use Case** | Manual testing, API exploration | Automated regression testing |
 | **Validation** | Postman test scripts | Python assertions |
 | **CI/CD** | Newman + GitHub Actions | pytest + Makefile |
@@ -196,7 +196,7 @@ POST /runflow/v2/analyze
 ### Immediate
 
 1. ✅ Import collection into Postman
-2. ✅ Test locally with `make dev`
+2. ✅ Test locally with `make create`
 3. ✅ Verify all test cases pass
 4. ✅ Share with team
 

@@ -1,8 +1,7 @@
 # Contributing to Run-Density
 
 **Version:** 1.0  
-**Last Updated:** 2025-11-11  
-**Architecture:** v1.8.4 (Post-Phase 2)
+**Last Updated:** 2026-10-26
 
 Thank you for your interest in contributing to Run-Density! This guide will help you get started with local development, testing, and contributing code.
 
@@ -24,26 +23,22 @@ Thank you for your interest in contributing to Run-Density! This guide will help
 git clone https://github.com/thomjeff/run-density.git
 cd run-density
 
-# 2. Start development container
-make dev
+# 2. Start Create (Build + Plan)
+make create
 
-# 3. Verify setup
-make test         # Run smoke tests (< 5 seconds)
-make e2e-local    # Run full E2E tests (~ 2-3 minutes)
-make validate-output  # Verify output integrity
+# 3. Optional: start Execute (race day)
+make execute
 
 # 4. Access UI
-open http://localhost:8080/dashboard
+open http://localhost:8080/dashboard   # Create
+open http://localhost:8081             # Execute
 ```
 
 ### Verify Everything Works
 
-✅ **Success Criteria:**
-- Docker container starts without errors
-- UI loads at http://localhost:8080
-- All smoke tests pass (`make test`)
-- E2E tests complete successfully (`make e2e-local`)
-- Validation passes (`make validate-output`)
+- Create starts without errors and the UI loads at http://localhost:8080
+- Execute (if started) loads at http://localhost:8081
+- Run a plan from the Create UI or Postman; GitHub Actions runs combined-image verify on the PR
 
 ---
 
@@ -94,23 +89,17 @@ All outputs go to `runflow/<uuid>/`:
 
 ### 3. Test Your Changes
 
-**Required Before Committing:**
+**Before committing:**
 
 ```bash
-# 1. Smoke tests (< 5 seconds)
-make test
+# Create logs
+docker logs runflow-create --tail 100
 
-# 2. Full E2E tests (~ 2-3 minutes)
-make e2e-local
-
-# 3. Output validation
-make validate-output
-
-# 4. Check logs for errors
-docker logs run-density-dev | grep -iE "error|failed"
+# Optional Execute logs
+docker logs runflow-execute --tail 100
 ```
 
-**All tests must pass** before committing.
+Run a plan from the Create UI or Postman when the change affects analysis. Combined-image and lint checks run in GitHub Actions on the PR.
 
 ---
 
@@ -159,18 +148,20 @@ gh pr create --title "Your Feature Title" --body "Description"
 
 ## 🧪 Testing & Validation
 
-### Available Test Commands
+### Local environments
 
-| Command | Purpose | Duration |
-|---------|---------|----------|
-| `make test` | Smoke tests (health checks + API validation) | < 5s |
-| `make e2e-local` | Full E2E tests | ~ 2-3 min |
-| `make validate-output` | Validate latest run output integrity | ~ 1s |
-| `make validate-all` | Validate all runs in index.json | Variable |
+| Command | Purpose |
+|---------|---------|
+| `make create` | Start Create (Build + Plan) on `:8080` |
+| `make execute` | Start Execute + Postgres on `:8081` |
+| `make stop-create` | Stop Create only |
+| `make stop-execute` | Stop Execute and Postgres only |
+
+The old Saturday/Sunday runner lives at `tests/archive/e2e.py` and is not a Make target.
 
 ### What Gets Validated
 
-**Output Validation (`make validate-output`):**
+**Output Validation:**
 - ✅ File presence (all expected files exist)
 - ✅ Schema integrity (JSON, Parquet, PNG, CSV valid)
 - ✅ API consistency (APIs serve from correct run_id)
@@ -244,10 +235,10 @@ Check `runflow/{run_id}/metadata.json` for details.
 lsof -i :8080
 
 # View Docker logs
-docker logs run-density-dev
+docker logs runflow-create
 
-# Restart container
-make stop && make dev
+# Restart Create
+make stop-create && make create
 ```
 
 **2. Tests failing**
@@ -256,31 +247,28 @@ make stop && make dev
 docker ps
 
 # View recent logs
-docker logs run-density-dev --tail 100
+docker logs runflow-create --tail 100
 
 # Check latest run_id
-docker exec run-density-dev cat /app/runflow/latest.json
+docker exec runflow-create cat /app/runflow/latest.json
 ```
 
 **3. Validation failing**
 ```bash
-# Run validation manually
-make validate-output
-
 # Check metadata for details
 cat runflow/$(cat runflow/latest.json | jq -r '.run_id')/metadata.json | jq .output_verification
 
 # Check which files are missing
-docker exec run-density-dev ls -la /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/
+docker exec runflow-create ls -la /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/
 ```
 
 **4. Heatmaps not displaying**
 ```bash
 # Verify heatmaps exist
-docker exec run-density-dev ls /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/ui/heatmaps/
+docker exec runflow-create ls /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/ui/heatmaps/
 
 # Check A1 heatmap specifically
-docker exec run-density-dev file /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/ui/heatmaps/A1.png
+docker exec runflow-create file /app/runflow/$(cat runflow/latest.json | jq -r '.run_id')/ui/heatmaps/A1.png
 ```
 
 ---
@@ -289,13 +277,12 @@ docker exec run-density-dev file /app/runflow/$(cat runflow/latest.json | jq -r 
 
 ### Before Creating PR
 
-- [ ] **Tests pass**
-  - [ ] `make test` - Smoke tests pass
-  - [ ] `make e2e-local` - E2E tests pass
-  - [ ] `make validate-output` - Output validation passes (exit code 0)
+- [ ] **Checks**
+  - [ ] Create (and Execute, if touched) start locally
+  - [ ] Combined-image GitHub Action is expected to stay green
   
 - [ ] **Code quality**
-  - [ ] No errors in logs: `docker logs run-density-dev | grep -iE "error|failed"`
+  - [ ] No errors in logs: `docker logs runflow-create | grep -iE "error|failed"`
   - [ ] Code follows project conventions
   - [ ] No FutureWarnings or deprecated patterns
   
@@ -330,13 +317,10 @@ Closes #467
 ## Changes
 - Added `tests/validate_output.py` for automated validation
 - Extended `config/reporting.yml` with validation schemas
-- Added `make validate-output` command
 - Updated metadata.json with verification results
 
 ## Testing
-- ✅ `make test` - All smoke tests pass
-- ✅ `make e2e-local` - E2E tests pass
-- ✅ `make validate-output` - Validation passes
+- ✅ Create starts on :8080
 - ✅ No errors in logs
 
 ## Breaking Changes
@@ -359,17 +343,15 @@ None - backward compatible
 ### Modifying Report Generation
 
 1. Edit `app/density_report.py` or `app/flow_report.py`
-2. Run `make e2e-local` to regenerate reports
+2. Run a plan from the Create UI or Postman to regenerate reports
 3. Verify output in `runflow/<uuid>/reports/`
-4. Check `make validate-output` still passes
-5. Update schemas in `config/reporting.yml` if structure changed
+4. Update schemas in `config/reporting.yml` if structure changed
 
 ### Adding Output Validation
 
 1. Edit `config/reporting.yml` to add expected file
 2. Update `app/tests/validate_output.py` if new validation logic needed
-3. Test with `make validate-output`
-4. Update `docs/architecture/output.md`
+3. Update `docs/architecture/output.md`
 
 ---
 
@@ -381,7 +363,7 @@ None - backward compatible
 2. **Tests** - Are there appropriate tests?
 3. **Code Quality** - Is it readable and maintainable?
 4. **Documentation** - Are changes documented?
-5. **Validation** - Does `make validate-output` pass?
+5. **Validation** - Does a Create plan still produce expected outputs?
 
 ### Review Timeline
 
