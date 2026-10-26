@@ -22,7 +22,7 @@ from app.core.execute.published_plan import (
     import_published_plan,
     sha256_bytes,
 )
-from app.main import app
+from app.execute_app import app
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "issue911_participant_list.csv"

@@ -1,8 +1,7 @@
-"""Regression guards for the v3.1.0 combined Runflow image.
+"""Regression guards for the Create image (Build + Plan).
 
-The combined Dockerfile, Compose workflow, and app.main entry point must keep
-serving Build, Plan, and Execute until a later approved image split. These
-tests do not change product behavior; they fail if that contract is broken.
+Create is Dockerfile / app.main. Execute is a separate image. These tests fail
+if Create loses Build/Plan or still mounts Execute operator routes (#938).
 """
 
 from __future__ import annotations
@@ -42,6 +41,9 @@ CRITICAL_PATHS = (
     "/progression",
     "/locations",
     "/course-mapping",
+)
+
+EXECUTE_GONE_PATHS = (
     "/execute",
     "/execute/map",
     "/execute/plans",
@@ -102,13 +104,15 @@ def test_combined_requirements_have_no_database_runtime():
     assert "asyncpg" not in text
 
 
-def test_app_registers_build_plan_execute_routes():
+def test_app_registers_build_plan_not_execute_routes():
     paths = set(_collect_route_paths(app.routes))
     missing = [path for path in CRITICAL_PATHS if path not in paths]
-    assert missing == [], f"Missing combined-app routes: {missing}"
+    assert missing == [], f"Missing Create routes: {missing}"
     assert "/api/plan/plans" in paths
-    assert "/api/execute/ops/board" in paths
+    assert "/api/execute/ops/board" not in paths
     assert "/api/execute/board" not in paths
+    leftover = [path for path in EXECUTE_GONE_PATHS if path in paths]
+    assert leftover == [], f"Create still mounts Execute routes: {leftover}"
 
 
 def test_critical_routes_respond_without_500():
@@ -130,4 +134,10 @@ def test_critical_routes_respond_without_500():
         response = client.get(path, follow_redirects=False)
         assert response.status_code in (200, 302, 303), (
             f"{path} returned {response.status_code}"
+        )
+
+    for path in EXECUTE_GONE_PATHS:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 404, (
+            f"{path} returned {response.status_code}, expected 404 on Create"
         )

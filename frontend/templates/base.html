@@ -53,7 +53,6 @@
                             <div class="dropdown-menu" id="rf-workspace-menu" aria-labelledby="rf-workspace-toggle">
                                 <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="build">Build</a>
                                 <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="plan">Plan</a>
-                                <a class="dropdown-item rf-workspace-pick" href="#" data-workspace="execute">Execute</a>
                             </div>
                         </li>
                         <li class="nav-item dropdown rf-results-chrome" id="rf-runs-dropdown">
@@ -104,6 +103,7 @@
                             <a class="nav-link" href="/config?view=packages" data-rf-build-view="packages">Packages</a>
                         </li>
                         {% endif %}
+                        {% if execute_runtime|default(false) %}
                         <li class="nav-item rf-execute-chrome" id="rf-execute-plan-label" hidden>
                             <span class="nav-link disabled text-secondary" id="rf-execute-plan-name">No plan active</span>
                         </li>
@@ -119,6 +119,7 @@
                         <li class="nav-item rf-execute-chrome" hidden>
                             <a class="nav-link{% if request.url and request.url.path == '/execute/incidents' %} active{% endif %}" href="/execute/incidents" data-rf-execute-view="incidents">Incidents</a>
                         </li>
+                        {% endif %}
                         {% endif %}
                     </ul>
                 </div>
@@ -280,7 +281,7 @@
         function normalizeWorkspace(raw) {
             const v = String(raw || "").trim().toLowerCase();
             if (v === "build") return "build";
-            if (v === "execute") return "execute";
+            if (EXECUTE_RUNTIME && v === "execute") return "execute";
             if (v === "plan" || v === "results") return "plan";
             return "plan";
         }
@@ -404,7 +405,7 @@
             setStoredWorkspace(target);
             const dest = target === "build"
                 ? lastBuildPath()
-                : (target === "execute" ? lastExecutePath() : lastPlanPath());
+                : (EXECUTE_RUNTIME && target === "execute" ? lastExecutePath() : lastPlanPath());
             if (dest === currentPathWithQuery()) {
                 applyWorkspaceChrome(target);
                 return;
@@ -415,7 +416,9 @@
         function initWorkspaceControl() {
             if (CLOUD_MODE) return;
             const fromPath = workspaceFromPath(window.location.pathname);
-            const ws = fromPath || getStoredWorkspace();
+            const ws = EXECUTE_RUNTIME
+                ? "execute"
+                : normalizeWorkspace(fromPath || getStoredWorkspace());
             setStoredWorkspace(ws);
             rememberWorkspaceRoute(ws);
             applyWorkspaceChrome(ws);
@@ -427,7 +430,7 @@
                 });
             });
 
-            // Combined image: brand returns to Plan. Standalone Execute stays here.
+            // Create brand returns to Plan. Standalone Execute stays on Plans.
             const brand = document.querySelector(".navbar-brand a");
             if (brand) {
                 brand.addEventListener("click", function (ev) {
@@ -439,7 +442,7 @@
                         return;
                     }
                     const current = getStoredWorkspace();
-                    if (current === "build" || current === "execute" || isConfigRoutePath(window.location.pathname) || isExecuteRoutePath(window.location.pathname)) {
+                    if (current === "build" || isConfigRoutePath(window.location.pathname)) {
                         ev.preventDefault();
                         switchWorkspace("plan");
                     }
@@ -482,8 +485,10 @@
             const stored = getStoredWorkspace();
             const onBuild = isConfigRoutePath(window.location.pathname)
                 || (!CLOUD_MODE && stored === "build");
-            const onExecute = isExecuteRoutePath(window.location.pathname)
-                || (!CLOUD_MODE && stored === "execute");
+            const onExecute = EXECUTE_RUNTIME && (
+                isExecuteRoutePath(window.location.pathname)
+                || stored === "execute"
+            );
             const onPlan = !onBuild && !onExecute;
 
             // Issue #878: Plan page links only in Plan workspace
@@ -638,8 +643,10 @@
                 try { sessionStorage.setItem("rf_run_label_" + runId, label); } catch (e) { /* ignore */ }
             }
             localStorage.setItem("selected_run_id", runId);
-            const stayOnExecute = isExecuteRoutePath(window.location.pathname)
-                || getStoredWorkspace() === "execute";
+            const stayOnExecute = EXECUTE_RUNTIME && (
+                isExecuteRoutePath(window.location.pathname)
+                || getStoredWorkspace() === "execute"
+            );
             fetch("/api/runs/" + encodeURIComponent(runId) + "/summary", { credentials: "same-origin" })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {

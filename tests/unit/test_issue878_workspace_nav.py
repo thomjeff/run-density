@@ -21,13 +21,14 @@ def base_source() -> str:
     return BASE_HTML.read_text(encoding="utf-8")
 
 
-def test_workspace_picks_are_build_plan_execute(base_source: str):
+def test_workspace_picks_are_build_plan(base_source: str):
     assert 'data-workspace="build"' in base_source
     assert 'data-workspace="plan"' in base_source
-    assert 'data-workspace="execute"' in base_source
+    assert 'data-workspace="execute"' not in base_source
     assert 'data-workspace="results"' not in base_source
     assert "normalizeWorkspace" in base_source
     assert 'v === "plan" || v === "results"' in base_source
+    assert "{% if execute_runtime|default(false) %}" in base_source
 
 
 def test_build_nav_includes_runners_between_courses_and_packages(base_source: str):
@@ -176,7 +177,7 @@ def test_package_runners_tab_has_dataset_metrics():
     assert "P50 (Median)" in js
 
 
-def test_base_html_renders_plan_execute_chrome():
+def test_base_html_renders_plan_not_execute_chrome_on_create():
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=select_autoescape(["html", "xml"]),
@@ -195,10 +196,18 @@ def test_base_html_renders_plan_execute_chrome():
     )
     html = template.render(request=_Request(), cloud_mode=False)
     assert 'data-workspace="plan"' in html
-    assert 'data-workspace="execute"' in html
+    assert 'data-workspace="execute"' not in html
+    assert 'data-rf-execute-view="operations"' not in html
     assert 'data-rf-build-view="runners"' in html
     assert 'id="rf-878-smoke"' in html
     assert 'id="rf-tabler-open-package"' not in html
+
+    execute_html = template.render(
+        request=_Request(), cloud_mode=False, execute_runtime=True
+    )
+    assert 'data-rf-execute-view="operations"' in execute_html
+    assert 'data-workspace="plan"' not in execute_html
+    assert 'data-rf-build-view="runners"' not in execute_html
 
 
 def test_plan_nav_places_progression_between_motion_and_locations(base_source: str):

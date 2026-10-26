@@ -24,7 +24,7 @@ from app.core.execute.published_plan import (
     record_operations_reopen,
     restore_published_plan,
 )
-from app.main import app
+from app.execute_app import app
 
 
 def _zip_from_files(files: dict) -> bytes:

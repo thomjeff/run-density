@@ -21,7 +21,7 @@ from app.core.execute.published_plan import (
     validate_manifest,
 )
 from app.core.execute.state import empty_state, record_reopen
-from app.main import app
+from app.execute_app import app
 
 
 def _zip_from_files(files: dict) -> bytes:

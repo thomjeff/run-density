@@ -49,11 +49,15 @@ def test_leftover_analysis_board_routes_are_unmounted():
     execute = _route_paths(execute_app.routes)
     assert leftover.isdisjoint(combined)
     assert leftover.isdisjoint(execute)
-    assert "/api/execute/ops/board" in combined
+    assert "/api/execute/ops/board" not in combined
     assert "/api/execute/ops/board" in execute
     client = TestClient(combined_app)
     assert client.get("/api/execute/board").status_code == 404
-    assert client.get("/api/execute/ops/board").status_code in (200, 400)
+    assert client.get("/api/execute/ops/board").status_code == 404
+    assert TestClient(execute_app).get("/api/execute/ops/board").status_code in (
+        200,
+        400,
+    )
 
 
 def test_gps_ingest_and_overlay_remain_on_execute():
