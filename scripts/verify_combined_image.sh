@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build and smoke-test the combined Runflow image (Build + Plan + Execute).
+# Build and smoke-test the combined Create image (Dockerfile / app.main).
+# CI calls this script directly. It is not a Makefile target (#935).
 # Default: build the committed tree (git archive), so uncommitted files are excluded.
 set -euo pipefail
 

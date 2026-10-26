@@ -14,7 +14,7 @@ This guide provides a comprehensive overview of the testing strategy, test organ
 
 ```
         /\
-       /E2E\          ← End-to-End Tests (tests/v2/e2e.py)
+       /E2E\          ← Create UI / Postman (old runner: tests/archive/e2e.py)
       /------\
      /Integration\    ← Integration Tests (test_api.py, test_flow.py, etc.)
     /------------\
@@ -45,7 +45,7 @@ tests/
 └── v2/                          # All v2 tests
     ├── __init__.py
     ├── conftest.py              # Pytest fixtures and configuration
-    ├── e2e.py                   # End-to-end tests
+    ├── e2e.py                   # (moved to tests/archive/)
     ├── test_analysis_config.py  # analysis.json generation tests
     ├── test_analysis_json_validation.py  # analysis.json content validation
     ├── test_api.py              # API endpoint tests
@@ -85,12 +85,7 @@ tests/
 - Validates day isolation (no cross-day contamination)
 - Validates output file generation
 
-**Running:**
-```bash
-make e2e          # Run sat+sun E2E test
-make e2e-full     # Run all E2E test scenarios
-pytest tests/v2/e2e.py -v
-```
+**Running:** archived. Use the Create UI or Postman. See `tests/archive/e2e.py`.
 
 ### Unit Tests
 
@@ -204,55 +199,27 @@ pytest tests/v2/e2e.py -v
 
 ## Running Tests
 
-### Combined-image smoke (v3.1.0 preservation)
+### Combined-image verify (v3.1.0 preservation)
+
+GitHub Actions runs `scripts/verify_combined_image.sh` on every PR. Locally:
 
 ```bash
-make smoke          # pytest route/Dockerfile contract (needs run-density-dev)
-make verify-image   # git archive + docker build + HTTP smoke on port 18080
+./scripts/verify_combined_image.sh
 ```
 
-These checks prove the combined Build/Plan/Execute image still starts. They do not replace `make e2e`. See `docs/dev-guides/release-preservation.md`.
+See `docs/dev-guides/release-preservation.md`.
 
 ### Quick Start
 
 ```bash
-# Start development container
-make dev
+make create
 
-# Combined-image smoke
-make smoke
-
-# Run all tests
-pytest tests/v2/ -v
-
-# Run specific test file
+# Unit / integration tests (from Create, or a local venv)
+docker exec runflow-create python -m pytest tests/unit -q
 pytest tests/v2/test_validation.py -v
-
-# Run specific test class
-pytest tests/v2/test_validation.py::TestValidateStartTimes -v
-
-# Run specific test method
-pytest tests/v2/test_validation.py::TestValidateStartTimes::test_valid_start_times -v
 ```
 
-### E2E Tests
-
-```bash
-# Run sat+sun E2E test (recommended)
-make e2e
-
-# Run full E2E test suite
-make e2e-full
-
-# Run Saturday-only E2E test
-make e2e-sat
-
-# Run Sunday-only E2E test
-make e2e-sun
-
-# Run with coverage
-make e2e-coverage-lite DAY=both
-```
+Saturday/Sunday `tests/e2e.py` is archived under `tests/archive/` and is not a Make target. Run new plans from the Create UI or Postman.
 
 ### Test Coverage
 
@@ -366,12 +333,12 @@ def sample_payload():
 
 1. **Check container is running:**
    ```bash
-   docker ps | grep run-density-dev
+   docker ps | grep runflow-create
    ```
 
 2. **Check logs:**
    ```bash
-   docker logs run-density-dev --tail 100
+   docker logs runflow-create --tail 100
    ```
 
 3. **Run tests with verbose output:**

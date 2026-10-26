@@ -27,7 +27,7 @@ jobs:
           VERIFY_PORT: "18080"
         run: |
           chmod +x scripts/verify_combined_image.sh
-          make verify-image
+          ./scripts/verify_combined_image.sh
 
       - name: Run combined-image and v3.1.0 regression pytest
         env:

@@ -7,6 +7,9 @@ This file contains pytest hooks and fixtures shared across all v2 tests.
 import pytest
 import os
 
+# Deprecated sat/sun runner; not collected with the live suite (#935).
+collect_ignore = ["archive"]
+
 
 def pytest_addoption(parser):
     """Add custom pytest command-line options."""

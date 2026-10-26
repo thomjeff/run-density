@@ -349,7 +349,7 @@ Flow analysis validation oracle.
 
 ### 5. Path Assumptions
 ❌ **Wrong:** Assume `tests/` exists  
-✅ **Right:** Use E2E testing via `make e2e` or `pytest tests/v2/e2e.py`
+✅ **Right:** Run a plan from Create or Postman; unit tests under `tests/unit/`
 
 ---
 

@@ -238,4 +238,5 @@ def test_execute_dockerfile_is_not_app_main():
     assert "Dockerfile.execute" in compose
     assert "postgres:15" in compose
     assert "execute-db" in compose
+    assert "container_name: runflow-execute" in compose
     assert "execute-runtime-data:/app/runflow" in compose

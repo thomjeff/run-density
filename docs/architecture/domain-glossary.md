@@ -72,4 +72,4 @@
 
 - Regression: `tests/unit/test_issue798_phase3_glossary.py` asserts this doc stays present with required sections.  
 - FastAPI app title is **Runflow** (not `run-density`).  
-- Deeper renames of `bin_km` / Docker `run-density-dev` are deferred (Phases 4–6 / later).
+- Deeper renames of `bin_km` are deferred. The Create container is `runflow-create` (#935).

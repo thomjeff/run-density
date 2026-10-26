@@ -1,7 +1,7 @@
 # Run-Density Documentation
 
 **Version:** v3.1.0  
-**Last Updated:** 2026-10-22  
+**Last Updated:** 2026-10-26  
 **Architecture:** Local-only, UUID-based runflow structure, API-driven configuration where all analysis parameters are provided via API. 
 
 This documentation is organized by audience and topic for easy navigation.
@@ -55,8 +55,8 @@ This documentation is organized by audience and topic for easy navigation.
 
 **Core Commands:**
 ```bash
-make dev         # Start development container
-make e2e         # Run end-to-end tests
+make create      # Start Create (Build + Plan) on :8080
+make execute     # Start Execute on :8081
 ```
 
 ---

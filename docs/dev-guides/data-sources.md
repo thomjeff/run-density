@@ -71,7 +71,7 @@ The following diagram illustrates the data flow from artifacts through API endpo
 |-------|-----------|--------|---------|----------|
 | **Artifacts** | Schema Tests | ✅ Existing | Validate JSON/GeoJSON structure and required fields | `test_schema_resolver.py`, `test_ssot_failfast.py` |
 | **Artifacts → API** | Contract Tests | ⏳ Issue #687 | Validate API responses match source artifacts | `test_contracts_dashboard.py`, `test_contracts_segments.py` |
-| **API → UI** | E2E Tests | ✅ Existing | Validate UI rendering and user workflows | `tests/e2e.py` |
+| **API → UI** | E2E Tests | ✅ Existing | Validate UI rendering and user workflows | `tests/archive/e2e.py` (deprecated) |
 
 **Legend:**
 - ✅ **Existing**: Tests currently implemented
@@ -1277,7 +1277,7 @@ tests/
 - Issue #281 (this issue) - Documentation
 - Issue #687 - Contract test implementation
 
-**Note:** Contract tests focus on **Artifacts → API** parity. UI rendering validation is covered by E2E tests (`tests/e2e.py`).
+**Note:** Contract tests focus on **Artifacts → API** parity. UI rendering is checked in the Create UI; the old runner is `tests/archive/e2e.py`.
 
 ---
 
@@ -1290,7 +1290,7 @@ tests/
 E2E tests validate that UI pages correctly render data from API endpoints and that user workflows function correctly. These tests validate the **API → UI** layer in the data flow diagram above.
 
 **Existing Tests:**
-- `tests/e2e.py` - Comprehensive E2E test suite
+- `tests/archive/e2e.py` - deprecated Saturday/Sunday runner
 
 **Test Coverage:**
 - Analysis submission workflow
@@ -1390,7 +1390,7 @@ GET /api/dashboard/summary?run_id=abc123&day=sat
 | Artifact JSON structure | Schema Tests | `test_schema_resolver.py` | ✅ Existing |
 | Artifact GeoJSON format | Schema Tests | `test_ssot_failfast.py` | ✅ Existing |
 | API response matches artifact | Contract Tests | `tests/contract/test_*.py` | ⏳ Issue #687 |
-| UI renders correctly | E2E Tests | `tests/e2e.py` | ✅ Existing |
+| UI renders correctly | E2E Tests | `tests/archive/e2e.py` (deprecated) | ✅ Existing |
 
 ### Common Artifact Fields
 
