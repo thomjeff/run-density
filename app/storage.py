@@ -8,11 +8,11 @@ Author: Cursor AI Assistant (per ChatGPT specification)
 Architecture: Local-only filesystem approach
 """
 
-from typing import List, Optional, Dict, Any
-from pathlib import Path
 import json
-import os
 import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,102 +23,102 @@ DATASET = {
     "segments": "segments.geojson",
     "metrics": "segment_metrics.json",
     "flags": "flags.json",
-    "flow": "flow.json"
+    "flow": "flow.json",
 }
 
 
 class Storage:
     """
     Unified storage interface for local filesystem operations.
-    
+
     Environment Variables:
         DATA_ROOT: Root directory for local mode (e.g., "./data")
-    
+
     Example:
         storage = Storage(root="./data")
         meta = storage.read_json("meta.json")
     """
-    
+
     def __init__(self, root: Optional[str] = None):
         """
         Initialize storage adapter.
-        
+
         Args:
             root: Root directory for local mode
         """
         self.mode = "local"
         self.root = Path(root) if root else None
-    
+
     def _full_local(self, path: str) -> Path:
         """Get full local path from relative path."""
         assert self.root is not None, "root must be set for local mode"
         # Issue #460 Phase 5: Remove hardcoded bypass for 'reports/' to support runflow structure
         # For runflow operations, all paths are relative to self.root (e.g., /app/runflow/<uuid>/)
         # Only bypass for data/ and config/ which are truly absolute workspace paths
-        if path.startswith(('data/', 'config/')):
+        if path.startswith(("data/", "config/")):
             return Path(path).resolve()
         # All other paths are relative to self.root
         return (self.root / path).resolve()
-    
+
     def read_json(self, path: str) -> Dict[str, Any]:
         """
         Read and parse JSON file.
-        
+
         Args:
             path: Relative path to JSON file
-            
+
         Returns:
             dict: Parsed JSON content
         """
         return json.loads(self.read_text(path))
-    
+
     def read_text(self, path: str) -> str:
         """
         Read file as text.
-        
+
         Args:
             path: Relative path to file
-            
+
         Returns:
             str: File contents as UTF-8 text
         """
         return self._full_local(path).read_text(encoding="utf-8")
-    
+
     def read_bytes(self, path: str) -> bytes:
         """
         Read file as bytes (for binary files like PNGs).
-        
+
         Args:
             path: Relative path to file
-            
+
         Returns:
             bytes: File contents as raw bytes
         """
         return self._full_local(path).read_bytes()
-    
+
     def exists(self, path: str) -> bool:
         """
         Check if file exists.
-        
+
         Args:
             path: Relative path to file
-            
+
         Returns:
             bool: True if file exists
         """
         return self._full_local(path).exists()
-    
-# Phase 3 cleanup: Removed unused methods (never called):
-# - mtime() - Only 33.3% coverage (definition only), code uses stat.st_mtime directly
-# - size() - Only 33.3% coverage (definition only), code uses stat.st_size directly
-# - list_paths() - Only 10.0% coverage (definition only), never called
+
+    # Phase 3 cleanup: Removed unused methods (never called):
+    # - mtime() - Only 33.3% coverage (definition only), code uses stat.st_mtime directly
+    # - size() - Only 33.3% coverage (definition only), code uses stat.st_size directly
+    # - list_paths() - Only 10.0% coverage (definition only), never called
 
     def get_heatmap_signed_url(
         self,
         segment_id: str,
         day: Optional[str] = None,
         run_id: Optional[str] = None,
-        expiry_seconds=3600
+        expiry_seconds=3600,
     ):
         """Generate local URL for heatmap."""
         if not run_id:
@@ -135,12 +135,16 @@ class Storage:
                     logging.warning("runflow/analysis/latest.json not found for run_id")
                     run_id = None
             except Exception as e:
-                    logging.warning(f"Could not load runflow/analysis/latest.json for run_id: {e}")
-                    run_id = None
-        
+                logging.warning(
+                    f"Could not load runflow/analysis/latest.json for run_id: {e}"
+                )
+                run_id = None
+
         # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
         if not run_id:
-            logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+            logging.warning(
+                "No run_id available - cannot generate heatmap URL. Artifacts missing for current run."
+            )
             return None
         if not day:
             logging.warning("No day provided - cannot generate day-scoped heatmap URL.")
@@ -150,50 +154,50 @@ class Storage:
         # Issue #682: Updated to use runflow/analysis/{run_id}/{day} structure
         # Mounted as: /heatmaps -> /app/runflow
         return f"/heatmaps/analysis/{run_id}/{day}/ui/visualizations/{segment_id}.png"
-    
+
     # ===== Write Methods (Issue #455 - Phase 3) =====
-    
+
     def write_file(self, path: str, content: str) -> str:
         """
         Write text content to local filesystem.
-        
+
         Args:
             path: Relative path for the file
             content: Text content to write
-            
+
         Returns:
             Full path where file was written
         """
         full_path = self._full_local(path)
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(content, encoding='utf-8')
+        full_path.write_text(content, encoding="utf-8")
         return str(full_path)
-    
+
     def write_json(self, path: str, data: Dict[str, Any]) -> str:
         """
         Write JSON data to local filesystem.
-        
+
         Args:
             path: Relative path for the JSON file
             data: Dictionary to serialize as JSON
-            
+
         Returns:
             Full path where file was written
         """
         json_content = json.dumps(data, indent=2)
         full_path = self._full_local(path)
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(json_content, encoding='utf-8')
+        full_path.write_text(json_content, encoding="utf-8")
         return str(full_path)
-    
+
     def write_bytes(self, path: str, content: bytes) -> str:
         """
         Write binary content to local filesystem.
-        
+
         Args:
             path: Relative path for the file
             content: Binary content to write
-            
+
         Returns:
             Full path where file was written
         """
@@ -201,23 +205,24 @@ class Storage:
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(content)
         return str(full_path)
-    
+
     # Phase 3 cleanup: Removed unused method copy_file() - Only 16.7% coverage (definition only), never called
-    
-    def read_parquet(self, path: str) -> Optional['pd.DataFrame']:
+
+    def read_parquet(self, path: str) -> Optional[Any]:
         """
         Read parquet file from local filesystem.
-        
+
         Issue #466 Step 2: Migrated from storage_service.py for consolidation.
-        
+
         Args:
             path: Relative path to parquet file
-            
+
         Returns:
             DataFrame or None if not found
         """
         try:
             import pandas as pd
+
             full_path = self._full_local(path)
             if not full_path.exists():
                 logger.warning(f"Parquet file not found: {full_path}")
@@ -226,7 +231,7 @@ class Storage:
         except Exception as e:
             logger.error(f"Failed to read parquet {path}: {e}")
             return None
-    
+
     # Phase 3 cleanup: Removed unused methods (never called, code uses pd.read_csv() and json.loads() directly):
     # - read_csv() - Only 9.1% coverage (definition only), code uses pd.read_csv() directly
     # - read_geojson() - Only 10.0% coverage (definition only), code uses json.loads() directly
@@ -234,18 +239,19 @@ class Storage:
 
 # ===== Helper Functions =====
 
+
 def create_runflow_storage(run_id: str) -> Storage:
     """
     Create Storage instance for runflow operations (Issue #455).
-    
+
     Issue #466 Step 1: Uses centralized path resolution from app.utils.run_id.
-    
+
     Args:
         run_id: UUID for the run
-        
+
     Returns:
         Storage instance configured for runflow structure
-        
+
     Example:
         storage = create_runflow_storage("abc123xyz")
         storage.write_json("reports/Density.md", content)
@@ -253,7 +259,7 @@ def create_runflow_storage(run_id: str) -> Storage:
     """
     # Issue #466 Step 1: Use centralized path resolution
     from app.utils.run_id import get_run_directory
-    
+
     run_dir = get_run_directory(run_id)
     return Storage(root=str(run_dir))
 

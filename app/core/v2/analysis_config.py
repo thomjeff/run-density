@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 def get_data_directory() -> str:
     """
     Get the data directory path from environment variable or constant.
-    
-    Issue #553: Data directory is NOT a request parameter. It remains as a 
+
+    Issue #553: Data directory is NOT a request parameter. It remains as a
     constant/environment variable (default: "data").
-    
+
     Returns:
         str: Data directory path (default: "data")
-        
+
     Environment Variables:
         DATA_ROOT: Root directory for data files (e.g., "./data" or "gs://bucket/path")
     """
@@ -48,22 +48,22 @@ def get_data_directory() -> str:
 def count_runners_in_file(runners_file_path: Path) -> int:
     """
     Count the number of runners in a runners CSV file.
-    
+
     Issue #553: Calculate runner counts during analysis.json generation.
-    
+
     Args:
         runners_file_path: Path to runners CSV file
-        
+
     Returns:
         int: Number of runners (rows in CSV, excluding header)
-        
+
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If file is not a valid CSV
     """
     if not runners_file_path.exists():
         raise FileNotFoundError(f"Runners file not found: {runners_file_path}")
-    
+
     try:
         # Read CSV and count rows (excluding header)
         df = pd.read_csv(runners_file_path)
@@ -76,23 +76,23 @@ def generate_analysis_json(
     request_payload: Dict[str, Any],
     run_id: str,
     run_path: Path,
-    data_dir: Optional[str] = None
+    data_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate analysis.json from validated request payload.
-    
+
     Issue #553: Creates single source of truth for all analysis parameters.
     Issue #566: Includes event_summary with days, events count, and events_by_day.
-    
+
     Args:
         request_payload: Validated request payload dictionary
         run_id: Run identifier (UUID)
         run_path: Path to run directory (where analysis.json will be written)
         data_dir: Optional data directory (defaults to get_data_directory())
-        
+
     Returns:
         dict: Complete analysis.json structure
-        
+
     Structure:
         {
             "description": str,
@@ -138,24 +138,28 @@ def generate_analysis_json(
     # Get data directory (from constant/environment, not request)
     if data_dir is None:
         data_dir = get_data_directory()
-    
+
     # Extract fields from request payload
     description = request_payload.get("description")
     segments_file = request_payload.get("segments_file")
     flow_file = request_payload.get("flow_file")
     locations_file = request_payload.get("locations_file")
     events = request_payload.get("events", [])
-    event_group = request_payload.get("event_group")  # Issue #573: Optional event grouping for RES
-    enableAudit = request_payload.get("enableAudit", "n")  # Issue #635: Enable audit flag (default "n")
-    
+    event_group = request_payload.get(
+        "event_group"
+    )  # Issue #573: Optional event grouping for RES
+    enableAudit = request_payload.get(
+        "enableAudit", "n"
+    )  # Issue #635: Enable audit flag (default "n")
+
     # Generate default description if not provided
     if not description:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
         description = f"Analysis run on {timestamp}"
-    
+
     # Build data_path for file operations
     data_path = Path(data_dir)
-    
+
     # Process events and count runners
     events_list = []
     total_runners = 0
@@ -164,7 +168,7 @@ def generate_analysis_json(
     start_times_dict = {}
     runners_files_dict = {}
     gpx_files_dict = {}
-    
+
     for event in events:
         event_name = event.get("name")
         event_day = event.get("day")
@@ -172,7 +176,7 @@ def generate_analysis_json(
         event_duration_minutes = event.get("event_duration_minutes")
         runners_file = event.get("runners_file")
         gpx_file = event.get("gpx_file")
-        
+
         # Count runners for this event
         runners_file_path = data_path / runners_file
         try:
@@ -180,9 +184,9 @@ def generate_analysis_json(
         except (FileNotFoundError, ValueError) as e:
             logger.warning(f"Failed to count runners for event '{event_name}': {e}")
             event_runners_count = 0
-        
+
         total_runners += event_runners_count
-        
+
         # Build event entry
         event_entry = {
             "name": event_name,
@@ -191,19 +195,19 @@ def generate_analysis_json(
             "event_duration_minutes": event_duration_minutes,
             "runners_file": runners_file,
             "gpx_file": gpx_file,
-            "runners": event_runners_count
+            "runners": event_runners_count,
         }
         events_list.append(event_entry)
-        
+
         # Build derived structures
         event_days_set.add(event_day)
         event_names_list.append(event_name)
         start_times_dict[event_name] = start_time
-        
+
         # Build data_files structure
         runners_files_dict[event_name] = f"{data_dir}/{runners_file}"
         gpx_files_dict[event_name] = f"{data_dir}/{gpx_file}"
-    
+
     # Issue #566: Compute event_summary
     # Group events by day with count and event names
     events_by_day = {}
@@ -214,13 +218,13 @@ def generate_analysis_json(
             events_by_day[day] = {"count": 0, "events": []}
         events_by_day[day]["count"] += 1
         events_by_day[day]["events"].append(event_name)
-    
+
     event_summary = {
         "days": len(event_days_set),
         "events": len(events_list),
-        "events_by_day": events_by_day
+        "events_by_day": events_by_day,
     }
-    
+
     # Build analysis.json structure
     analysis_json = {
         "description": description,
@@ -239,90 +243,88 @@ def generate_analysis_json(
             "flow": f"{data_dir}/{flow_file}",
             "locations": f"{data_dir}/{locations_file}",
             "runners": runners_files_dict,
-            "gpx": gpx_files_dict
-        }
+            "gpx": gpx_files_dict,
+        },
     }
-    
+
     # Issue #573: Add event_group to analysis.json if provided
     if event_group is not None:
         analysis_json["event_group"] = event_group
-    
+
     # Issue #635: Add enableAudit to analysis.json (always include, default "n")
     analysis_json["enableAudit"] = enableAudit
 
     through = request_payload.get("through") or "full"
     analysis_json["through"] = str(through).strip().lower()
-    
+
     # Write to run directory
     analysis_json_path = run_path / "analysis.json"
-    with open(analysis_json_path, 'w', encoding='utf-8') as f:
+    with open(analysis_json_path, "w", encoding="utf-8") as f:
         json.dump(analysis_json, f, indent=2, ensure_ascii=False)
-    
+
     logger.info(f"Generated analysis.json at {analysis_json_path}")
-    
+
     return analysis_json
 
 
 def load_analysis_json(run_path: Path) -> Dict[str, Any]:
     """
     Load and return analysis.json from run directory.
-    
+
     Issue #553: Read single source of truth for analysis parameters.
-    
+
     Args:
         run_path: Path to run directory containing analysis.json
-        
+
     Returns:
         dict: Parsed analysis.json content
-        
+
     Raises:
         FileNotFoundError: If analysis.json doesn't exist
         json.JSONDecodeError: If analysis.json is invalid JSON
     """
     analysis_json_path = run_path / "analysis.json"
-    
+
     if not analysis_json_path.exists():
         raise FileNotFoundError(
             f"analysis.json not found at {analysis_json_path}. "
             f"Run directory may not have been initialized properly."
         )
-    
+
     try:
-        with open(analysis_json_path, 'r', encoding='utf-8') as f:
+        with open(analysis_json_path, "r", encoding="utf-8") as f:
             analysis_json = json.load(f)
-        
+
         logger.debug(f"Loaded analysis.json from {analysis_json_path}")
         return analysis_json
     except json.JSONDecodeError as e:
         raise json.JSONDecodeError(
-            f"analysis.json is not valid JSON: {e}",
-            e.doc,
-            e.pos
+            f"analysis.json is not valid JSON: {e}", e.doc, e.pos
         )
 
 
 def get_event_duration_minutes(
     event_name: str,
     analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
 ) -> int:
     """
     Get event duration in minutes from analysis.json.
-    
+
     Issue #553 Phase 4.3: Replace EVENT_DURATION_MINUTES constant with dynamic lookup.
-    
+
     Args:
         event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         int: Event duration in minutes
-        
+
     Raises:
         ValueError: If event not found in analysis.json and no fallback available
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
-        
+
     Note:
         This function enforces fail-fast behavior per Issue #553 requirements.
         No fallback to EVENT_DURATION_MINUTES constant.
@@ -334,10 +336,10 @@ def get_event_duration_minutes(
                 "Either analysis_config or run_path must be provided to get_event_duration_minutes"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Normalize event name to lowercase for lookup
     event_name_lower = event_name.lower()
-    
+
     # Search through events list for matching event
     events = analysis_config.get("events", [])
     for event in events:
@@ -353,7 +355,7 @@ def get_event_duration_minutes(
                     f"Event '{event_name}' has invalid event_duration_minutes: {duration} (must be >= 1)"
                 )
             return duration
-    
+
     # Event not found - fail fast per Issue #553 requirements
     available_events = [e.get("name", "unknown") for e in events]
     raise ValueError(
@@ -362,19 +364,21 @@ def get_event_duration_minutes(
     )
 
 
-def get_event_names(analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None) -> List[str]:
+def get_event_names(
+    analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None
+) -> List[str]:
     """
     Get list of event names from analysis.json.
-    
+
     Issue #553 Phase 4.2: Replace hardcoded event name lists with dynamic lookup.
-    
+
     Args:
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         List[str]: Sorted list of event names
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
     """
@@ -385,35 +389,35 @@ def get_event_names(analysis_config: Optional[Dict[str, Any]] = None, run_path: 
                 "Either analysis_config or run_path must be provided to get_event_names"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Return event_names from analysis.json (already sorted)
     event_names = analysis_config.get("event_names", [])
     if not event_names:
         # Fallback: extract from events list
         events = analysis_config.get("events", [])
         event_names = sorted([e.get("name", "") for e in events if e.get("name")])
-    
+
     return event_names
 
 
 def get_events_by_day(
     day: str,
     analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
 ) -> List[str]:
     """
     Get list of event names for a specific day from analysis.json.
-    
+
     Issue #553 Phase 4.2: Replace SATURDAY_EVENTS/SUNDAY_EVENTS constants with dynamic lookup.
-    
+
     Args:
         day: Day code (e.g., "sat", "sun", "fri", "mon")
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         List[str]: List of event names for the specified day
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
     """
@@ -424,42 +428,43 @@ def get_events_by_day(
                 "Either analysis_config or run_path must be provided to get_events_by_day"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Normalize day code
     day_lower = day.lower()
-    
+
     # Filter events by day
     events = analysis_config.get("events", [])
     day_events = [
-        e.get("name") for e in events
+        e.get("name")
+        for e in events
         if e.get("day", "").lower() == day_lower and e.get("name")
     ]
-    
+
     return day_events
 
 
 def get_start_time(
     event_name: str,
     analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
 ) -> int:
     """
     Get event start time in minutes from analysis.json.
-    
+
     Issue #553 Phase 5.2: Replace hardcoded start times with dynamic lookup.
-    
+
     Args:
         event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         int: Start time in minutes after midnight
-        
+
     Raises:
         ValueError: If event not found in analysis.json and no fallback available
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
-        
+
     Note:
         This function enforces fail-fast behavior per Issue #553 requirements.
         No fallback to hardcoded start times.
@@ -471,10 +476,10 @@ def get_start_time(
                 "Either analysis_config or run_path must be provided to get_start_time"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Normalize event name to lowercase for lookup
     event_name_lower = event_name.lower()
-    
+
     # Try start_times dictionary first (faster lookup)
     start_times = analysis_config.get("start_times", {})
     if event_name in start_times:
@@ -499,14 +504,14 @@ def get_start_time(
                         f"Event '{event_name}' has invalid start_time: {start_time} "
                         f"(must be integer {START_TIME_MIN_MINUTES}-{START_TIME_MAX_MINUTES})"
                     ) from e
-        
+
         # Event not found - fail fast per Issue #553 requirements
         available_events = [e.get("name", "unknown") for e in events]
         raise ValueError(
             f"Event '{event_name}' not found in analysis.json. "
             f"Available events: {available_events}"
         )
-    
+
     # Validate start_time
     try:
         return validate_start_minute(start_time, event_name=event_name)
@@ -518,21 +523,20 @@ def get_start_time(
 
 
 def get_all_start_times(
-    analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None
 ) -> Dict[str, int]:
     """
     Get all event start times from analysis.json.
-    
+
     Issue #553 Phase 5.2: Get all start times as a dictionary.
-    
+
     Args:
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         Dict[str, int]: Dictionary mapping event names to start times in minutes
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
     """
@@ -543,7 +547,7 @@ def get_all_start_times(
                 "Either analysis_config or run_path must be provided to get_all_start_times"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Return start_times dictionary from analysis.json
     start_times = analysis_config.get("start_times", {})
     if not start_times:
@@ -556,26 +560,25 @@ def get_all_start_times(
             if event_name and start_time is not None:
                 start_times[event_name] = start_time
                 start_times[event_name.lower()] = start_time
-    
+
     return start_times
 
 
 def get_segments_file(
-    analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None
 ) -> str:
     """
     Get segments file path from analysis.json.
-    
+
     Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
-    
+
     Args:
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         str: Full path to segments file (e.g., "data/segments.csv" or from data_files.segments)
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
         ValueError: If segments_file not found in analysis.json
@@ -587,12 +590,12 @@ def get_segments_file(
                 "Either analysis_config or run_path must be provided to get_segments_file"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Try data_files.segments first (full path)
     data_files = analysis_config.get("data_files", {})
     if "segments" in data_files:
         return data_files["segments"]
-    
+
     # Fallback to segments_file + data_dir
     segments_file = analysis_config.get("segments_file")
     if segments_file:
@@ -600,29 +603,27 @@ def get_segments_file(
         if not data_dir:
             raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{segments_file}"
-    
+
     raise ValueError(
-        "segments_file not found in analysis.json. "
-        "This is required per Issue #553."
+        "segments_file not found in analysis.json. " "This is required per Issue #553."
     )
 
 
 def get_flow_file(
-    analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None
 ) -> str:
     """
     Get flow file path from analysis.json.
-    
+
     Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
-    
+
     Args:
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         str: Full path to flow file (e.g., "data/flow.csv" or from data_files.flow)
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
         ValueError: If flow_file not found in analysis.json
@@ -634,12 +635,12 @@ def get_flow_file(
                 "Either analysis_config or run_path must be provided to get_flow_file"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Try data_files.flow first (full path)
     data_files = analysis_config.get("data_files", {})
     if "flow" in data_files:
         return data_files["flow"]
-    
+
     # Fallback to flow_file + data_dir
     flow_file = analysis_config.get("flow_file")
     if flow_file:
@@ -647,29 +648,27 @@ def get_flow_file(
         if not data_dir:
             raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{flow_file}"
-    
+
     raise ValueError(
-        "flow_file not found in analysis.json. "
-        "This is required per Issue #553."
+        "flow_file not found in analysis.json. " "This is required per Issue #553."
     )
 
 
 def get_locations_file(
-    analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None
 ) -> str:
     """
     Get locations file path from analysis.json.
-    
+
     Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
-    
+
     Args:
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         str: Full path to locations file (e.g., "data/locations.csv" or from data_files.locations)
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
         ValueError: If locations_file not found in analysis.json
@@ -681,12 +680,12 @@ def get_locations_file(
                 "Either analysis_config or run_path must be provided to get_locations_file"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Try data_files.locations first (full path)
     data_files = analysis_config.get("data_files", {})
     if "locations" in data_files:
         return data_files["locations"]
-    
+
     # Fallback to locations_file + data_dir
     locations_file = analysis_config.get("locations_file")
     if locations_file:
@@ -694,31 +693,30 @@ def get_locations_file(
         if not data_dir:
             raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{locations_file}"
-    
+
     raise ValueError(
-        "locations_file not found in analysis.json. "
-        "This is required per Issue #553."
+        "locations_file not found in analysis.json. " "This is required per Issue #553."
     )
 
 
 def get_runners_file(
     event_name: str,
     analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
 ) -> str:
     """
     Get runners file path for a specific event from analysis.json.
-    
+
     Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
-    
+
     Args:
         event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         str: Full path to runners file (e.g., "data/full_runners.csv" or from data_files.runners)
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
         ValueError: If event not found in analysis.json
@@ -730,10 +728,10 @@ def get_runners_file(
                 "Either analysis_config or run_path must be provided to get_runners_file"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Normalize event name to lowercase for lookup
     event_name_lower = event_name.lower()
-    
+
     # Try data_files.runners dictionary first
     data_files = analysis_config.get("data_files", {})
     runners_dict = data_files.get("runners", {})
@@ -741,7 +739,7 @@ def get_runners_file(
         return runners_dict[event_name]
     elif event_name_lower in runners_dict:
         return runners_dict[event_name_lower]
-    
+
     # Fallback: search through events list
     events = analysis_config.get("events", [])
     for event in events:
@@ -753,7 +751,7 @@ def get_runners_file(
                 if not data_dir:
                     raise ValueError("analysis.json missing required field: data_dir")
                 return f"{data_dir}/{runners_file}"
-    
+
     # Event not found - fail fast per Issue #553 requirements
     available_events = [e.get("name", "unknown") for e in events]
     raise ValueError(
@@ -765,21 +763,21 @@ def get_runners_file(
 def get_gpx_file(
     event_name: str,
     analysis_config: Optional[Dict[str, Any]] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
 ) -> str:
     """
     Get GPX file path for a specific event from analysis.json.
-    
+
     Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
-    
+
     Args:
         event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
         analysis_config: Optional pre-loaded analysis.json dict
         run_path: Optional path to run directory (will load analysis.json if config not provided)
-        
+
     Returns:
         str: Full path to GPX file (e.g., "data/full.gpx" or from data_files.gpx)
-        
+
     Raises:
         FileNotFoundError: If run_path provided but analysis.json doesn't exist
         ValueError: If event not found in analysis.json
@@ -791,10 +789,10 @@ def get_gpx_file(
                 "Either analysis_config or run_path must be provided to get_gpx_file"
             )
         analysis_config = load_analysis_json(run_path)
-    
+
     # Normalize event name to lowercase for lookup
     event_name_lower = event_name.lower()
-    
+
     # Try data_files.gpx dictionary first
     data_files = analysis_config.get("data_files", {})
     gpx_dict = data_files.get("gpx", {})
@@ -802,7 +800,7 @@ def get_gpx_file(
         return gpx_dict[event_name]
     elif event_name_lower in gpx_dict:
         return gpx_dict[event_name_lower]
-    
+
     # Fallback: search through events list
     events = analysis_config.get("events", [])
     for event in events:
@@ -814,7 +812,7 @@ def get_gpx_file(
                 if not data_dir:
                     raise ValueError("analysis.json missing required field: data_dir")
                 return f"{data_dir}/{gpx_file}"
-    
+
     # Event not found - fail fast per Issue #553 requirements
     available_events = [e.get("name", "unknown") for e in events]
     raise ValueError(

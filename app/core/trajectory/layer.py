@@ -75,12 +75,18 @@ def snapshot_to_runners_df(
     if "runner_id" in snap.columns:
         snap["runner_id"] = snap["runner_id"].astype(str)
     if fallback is not None and not fallback.empty and "distance" not in snap.columns:
-        extra = fallback.loc[:, [c for c in ("runner_id", "event", "distance") if c in fallback.columns]].copy()
+        extra = fallback.loc[
+            :, [c for c in ("runner_id", "event", "distance") if c in fallback.columns]
+        ].copy()
         if "event" in extra.columns:
             extra["event"] = extra["event"].astype(str).str.lower()
         if "runner_id" in extra.columns:
             extra["runner_id"] = extra["runner_id"].astype(str)
-        snap = snap.merge(extra, on=[c for c in ("runner_id", "event") if c in extra.columns], how="left")
+        snap = snap.merge(
+            extra,
+            on=[c for c in ("runner_id", "event") if c in extra.columns],
+            how="left",
+        )
     if "distance" not in snap.columns:
         snap["distance"] = 0.0
     if "start_offset" not in snap.columns:

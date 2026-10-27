@@ -30,7 +30,6 @@ from app.utils.constants import (
 )
 from app.utils.run_id import get_runflow_root
 
-
 PROGRESSION_MODEL_LABEL = "Modeled constant-pace from chip times — not GPS"
 
 
@@ -86,7 +85,9 @@ def _resolve_data_dir(analysis: Mapping[str, Any]) -> Path:
     return path
 
 
-def _gpx_path_for_event(analysis: Mapping[str, Any], event: str, data_dir: Path) -> Path:
+def _gpx_path_for_event(
+    analysis: Mapping[str, Any], event: str, data_dir: Path
+) -> Path:
     event_l = str(event).lower()
     gpx_map = (analysis.get("data_files") or {}).get("gpx") or {}
     raw = gpx_map.get(event_l) or gpx_map.get(event)
@@ -225,7 +226,9 @@ def _snapshot_rows(snapshot: pd.DataFrame) -> List[Dict[str, Any]]:
     for rec in snapshot.to_dict("records"):
         pace = float(rec["pace"])
         if pace <= 0:
-            raise ProgressionError(f"Non-positive pace for runner {rec.get('runner_id')}")
+            raise ProgressionError(
+                f"Non-positive pace for runner {rec.get('runner_id')}"
+            )
         offset = rec.get("start_offset", 0)
         if offset is None or (isinstance(offset, float) and pd.isna(offset)):
             offset = 0
@@ -363,9 +366,7 @@ def select_midpack(
     return {
         "id": runner_id,
         "finish_sec": int(finish_t),
-        "start_sec": int(
-            runner_start_sec(float(gun_sec), chosen["start_offset_sec"])
-        ),
+        "start_sec": int(runner_start_sec(float(gun_sec), chosen["start_offset_sec"])),
     }
 
 
@@ -463,7 +464,8 @@ def build_progression_setup(run_dir: Path, day: str) -> Dict[str, Any]:
         "model": {
             "label": PROGRESSION_MODEL_LABEL,
             "time_source": metadata.get("time_source") or MOTION_TIME_SOURCE,
-            "position_source": metadata.get("position_source") or MOTION_POSITION_SOURCE,
+            "position_source": metadata.get("position_source")
+            or MOTION_POSITION_SOURCE,
             "model_version": metadata.get("model_version") or MOTION_MODEL_VERSION,
             "interpolation_method": metadata.get("interpolation_method")
             or "along_event_gpx_polyline_by_elapsed_km",

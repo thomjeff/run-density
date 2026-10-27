@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 
 from app.core.gpx.processor import cumulative_km, parse_gpx_file
-from app.core.trajectory.crossing import arrival_at_km, runner_start_sec
 from app.core.motion.course_map import (
     compiled_course_length_km,
     event_spans,
     locate_on_course,
 )
+from app.core.trajectory.crossing import arrival_at_km, runner_start_sec
 from app.core.v2.models import Event
 from app.utils.constants import (
     MOTION_MODEL_VERSION,
@@ -125,7 +125,9 @@ def prepare_event_contexts(
         ev_runners = runners_df[runners_df["event"].astype(str).str.lower() == name]
         csv_dist = None
         if not ev_runners.empty and "distance" in ev_runners.columns:
-            csv_dist = float(pd.to_numeric(ev_runners["distance"], errors="coerce").median())
+            csv_dist = float(
+                pd.to_numeric(ev_runners["distance"], errors="coerce").median()
+            )
 
         out[name] = EventMotionContext(
             event=name,
@@ -200,7 +202,10 @@ def _runner_samples(
     for row in rows:
         t_key = int(row["t"])
         prev = by_t.get(t_key)
-        if prev is None or kind_rank[row["sample_kind"]] < kind_rank[prev["sample_kind"]]:
+        if (
+            prev is None
+            or kind_rank[row["sample_kind"]] < kind_rank[prev["sample_kind"]]
+        ):
             by_t[t_key] = row
     return [by_t[k] for k in sorted(by_t.keys())]
 
@@ -263,7 +268,9 @@ def build_motion_samples(
             raise ValueError(f"Motion: runner event '{event}' not in day events")
         rid = str(runner["runner_id"])
         pace = float(runner["pace"])
-        offset = float(runner["start_offset"] if pd.notna(runner["start_offset"]) else 0.0)
+        offset = float(
+            runner["start_offset"] if pd.notna(runner["start_offset"]) else 0.0
+        )
         all_rows.extend(
             _runner_samples(
                 runner_id=rid,
@@ -279,9 +286,9 @@ def build_motion_samples(
         raise ValueError("Motion: produced zero samples")
 
     frame = pd.DataFrame(all_rows, columns=SAMPLE_COLUMNS)
-    frame = frame.sort_values(["runner_id", "t", "sample_kind"], kind="mergesort").reset_index(
-        drop=True
-    )
+    frame = frame.sort_values(
+        ["runner_id", "t", "sample_kind"], kind="mergesort"
+    ).reset_index(drop=True)
 
     dup_mask = frame.duplicated(subset=["runner_id", "t"], keep=False)
     if bool(dup_mask.any()):
@@ -293,7 +300,8 @@ def build_motion_samples(
     diagnostics = {
         "row_count": int(len(frame)),
         "event_counts": {
-            str(k): int(v) for k, v in frame["event"].value_counts().sort_index().items()
+            str(k): int(v)
+            for k, v in frame["event"].value_counts().sort_index().items()
         },
         "min_t": int(frame["t"].min()),
         "max_t": int(frame["t"].max()),
@@ -355,7 +363,9 @@ def hash_runners_inputs(paths: Iterable[Path]) -> str:
 
 
 def hash_guns(gun_by_event: Mapping[str, int]) -> str:
-    blob = json.dumps({k: int(v) for k, v in sorted(gun_by_event.items())}, sort_keys=True)
+    blob = json.dumps(
+        {k: int(v) for k, v in sorted(gun_by_event.items())}, sort_keys=True
+    )
     return _sha256_text(blob)
 
 
@@ -398,7 +408,9 @@ def resolve_motion_package_id(
         try:
             payload = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("Motion: could not read package config.json at %s: %s", manifest, exc)
+            logger.warning(
+                "Motion: could not read package config.json at %s: %s", manifest, exc
+            )
         else:
             if isinstance(payload, Mapping):
                 cid = payload.get("config_id") or payload.get("package_id")

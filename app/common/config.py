@@ -9,12 +9,13 @@ Epic: RF-FE-002 | Issue: #279 | Step: 2
 Architecture: Option 3 - Hybrid Approach
 """
 
-from typing import Dict, Any
-from pathlib import Path
-import yaml
-import os
-import logging
 import functools
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -25,41 +26,41 @@ CONFIG_DIR = Path("config")
 def load_rulebook() -> Dict[str, Any]:
     """
     Load density_rulebook.yml with no hardcoded defaults.
-    
+
     Returns:
         dict: Parsed rulebook containing:
             - globals.los_thresholds (A-F): LOS classification thresholds
             - schemas: Segment-specific rules
             - operational rules and policies
-    
+
     Raises:
         FileNotFoundError: If density_rulebook.yml not found
         yaml.YAMLError: If YAML parsing fails
-    
+
     Example:
         >>> rulebook = load_rulebook()
         >>> los_thresholds = rulebook["globals"]["los_thresholds"]
         >>> assert "A" in los_thresholds
     """
     path = CONFIG_DIR / "density_rulebook.yml"
-    
+
     # Debug logging for Issue #354
     logger.debug(f"Loading rulebook from: {path.absolute()}")
     logger.debug(f"Current working directory: {os.getcwd()}")
     logger.debug(f"Config directory exists: {CONFIG_DIR.exists()}")
     logger.debug(f"Rulebook file exists: {path.exists()}")
-    
+
     if not path.exists():
         logger.error(f"density_rulebook.yml not found at {path.absolute()}")
         raise FileNotFoundError(
             f"density_rulebook.yml not found at {path}. "
             f"Ensure config/ directory exists with required YAML files."
         )
-    
+
     with path.open("r", encoding="utf-8") as f:
         rulebook = yaml.safe_load(f)
         # Version is nested under meta.version, not top-level
-        version = rulebook.get('meta', {}).get('version', 'unspecified')
+        version = rulebook.get("meta", {}).get("version", "unspecified")
         logger.debug(f"Successfully loaded rulebook with version: {version}")
         return rulebook
 
@@ -67,29 +68,29 @@ def load_rulebook() -> Dict[str, Any]:
 def load_reporting() -> Dict[str, Any]:
     """
     Load reporting.yml (presentation configuration).
-    
+
     Returns:
         dict: Parsed reporting config containing:
             - reporting.los_colors (A-F): Hex color codes for LOS levels
             - reporting configuration for visualization
-    
+
     Raises:
         FileNotFoundError: If reporting.yml not found
         yaml.YAMLError: If YAML parsing fails
-    
+
     Example:
         >>> reporting = load_reporting()
         >>> los_colors = reporting["reporting"]["los_colors"]
         >>> assert los_colors["A"].startswith("#")
     """
     path = CONFIG_DIR / "reporting.yml"
-    
+
     if not path.exists():
         raise FileNotFoundError(
             f"reporting.yml not found at {path}. "
             f"Ensure config/ directory exists with required YAML files."
         )
-    
+
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -97,7 +98,7 @@ def load_reporting() -> Dict[str, Any]:
 def load_captioning() -> Dict[str, Any]:
     """
     Load captioning.yml (caption thresholds and qualitative rules).
-    
+
     Returns:
         dict: Parsed captioning config containing keys like:
             - wave_gap_minutes
@@ -105,7 +106,7 @@ def load_captioning() -> Dict[str, Any]:
             - clearance_sustain_minutes
             - similarity_pct
             - spread_pct
-    
+
     Raises:
         FileNotFoundError: If captioning.yml not found
         yaml.YAMLError: If YAML parsing fails
@@ -136,11 +137,11 @@ def los_reference_rows() -> list:
             density_range = f"{lo:.2f}+"
         else:
             density_range = f"{lo:.2f} – {hi:.2f}"
-        rows.append({
-            "grade": grade,
-            "range": density_range,
-            "label": str(band.get("label") or grade),
-        })
+        rows.append(
+            {
+                "grade": grade,
+                "range": density_range,
+                "label": str(band.get("label") or grade),
+            }
+        )
     return rows
-
-

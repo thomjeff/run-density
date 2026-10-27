@@ -105,7 +105,9 @@ def run_analysis_background(
 
         logger.info("Background analysis completed for run_id: %s", run_id)
     except Exception as e:
-        logger.error("Error in background analysis for run_id %s: %s", run_id, e, exc_info=True)
+        logger.error(
+            "Error in background analysis for run_id %s: %s", run_id, e, exc_info=True
+        )
         try:
             from app.core.v2.run_progress import mark_run_failed
 
@@ -248,7 +250,10 @@ def submit_v2_analysis(
     flow_file = analysis_config.get("flow_file")
     events = load_events_from_payload(payload_dict, data_dir)
     event_days: List[str] = list(
-        {str(event.get("day") or "").strip().lower() for event in payload_dict.get("events", [])}
+        {
+            str(event.get("day") or "").strip().lower()
+            for event in payload_dict.get("events", [])
+        }
     )
     event_days = [d for d in event_days if d]
 

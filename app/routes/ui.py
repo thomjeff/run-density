@@ -12,30 +12,30 @@ Architecture: Option 3 - Hybrid Approach
 import logging
 import os
 from pathlib import Path
-
-from fastapi import APIRouter, Request, Form, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from typing import Optional
 
+from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
 from app.common.config import load_reporting, los_reference_rows
+from app.utils.auth import (
+    clear_session_response,
+    create_session_response,
+    is_session_valid,
+    require_auth,
+    validate_password,
+)
 from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
     FLOW_TYPE_CHOICES,
-    LOCATION_TYPE_CHOICES,
     LEG_MAP_NO_SNAP_LOCATION_TYPES,
+    LOCATION_TYPE_CHOICES,
     OFF_COURSE_LOCATION_TYPES,
     SEGMENT_DIRECTION_CHOICES,
     SEGMENT_SCHEMA_CHOICES,
-)
-from app.utils.auth import (
-    validate_password,
-    create_session_response,
-    clear_session_response,
-    is_session_valid,
-    require_auth
 )
 
 # Setup logger
@@ -51,39 +51,37 @@ router = APIRouter()
 
 # ===== Stub Context Helper =====
 
+
 def get_stub_meta() -> dict:
     """
     Get stub meta context for template rendering.
-    
+
     Returns:
         dict: Stub metadata for provenance badge
-        
+
     Note:
         This will be replaced in Steps 5-6 with actual meta.json loading
     """
-    return {
-        "run_timestamp": "pending",
-        "environment": "local",
-        "run_hash": "dev"
-    }
+    return {"run_timestamp": "pending", "environment": "local", "run_hash": "dev"}
 
 
 # ===== Route Handlers =====
+
 
 @router.get("/", response_class=HTMLResponse)
 async def password_page(request: Request):
     """
     Password/login page (authentication screen).
-    
+
     Issue #314: If user already has valid session, redirect to dashboard.
-    
+
     Returns:
         HTML: Password entry form, or redirects to dashboard if authenticated
     """
     # If already authenticated, redirect to dashboard
     if is_session_valid(request):
         return RedirectResponse(url="/dashboard", status_code=303)
-    
+
     meta = get_stub_meta()
     return templates.TemplateResponse(
         request=request,
@@ -96,12 +94,12 @@ async def password_page(request: Request):
 async def login(request: Request, password: str = Form(...)):
     """
     Handle password authentication and create session.
-    
+
     Issue #314: Server-side password validation with session creation.
-    
+
     Args:
         password: Password submitted from form
-        
+
     Returns:
         RedirectResponse: Redirects to dashboard on success, back to login on failure
     """
@@ -128,9 +126,9 @@ async def login(request: Request, password: str = Form(...)):
 async def logout(request: Request):
     """
     Handle logout and clear session.
-    
+
     Issue #314: Clear session cookies and redirect to password page.
-    
+
     Returns:
         RedirectResponse: Redirects to password page
     """
@@ -173,9 +171,9 @@ async def overview(request: Request):
 async def dashboard(request: Request):
     """
     Dashboard page with KPIs and summary tiles.
-    
+
     Issue #314: Requires authentication.
-    
+
     Returns:
         HTML: Dashboard with model inputs/outputs and LOS colors
     """
@@ -183,22 +181,22 @@ async def dashboard(request: Request):
     if auth_redirect:
         return auth_redirect
     meta = get_stub_meta()
-    
+
     # Load LOS colors from SSOT
     try:
         reporting_config = load_reporting()
         los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
-    except Exception as e:
+    except Exception:
         # Fallback to hardcoded colors if YAML loading fails
         los_colors = {
             "A": "#4CAF50",
-            "B": "#8BC34A", 
+            "B": "#8BC34A",
             "C": "#FFC107",
             "D": "#FF9800",
             "E": "#FF5722",
-            "F": "#F44336"
+            "F": "#F44336",
         }
-    
+
     return templates.TemplateResponse(
         request=request,
         name="pages/dashboard.html",
@@ -229,9 +227,9 @@ async def segments(request: Request):
 async def density(request: Request):
     """
     Density analysis page with segment table and detail panel.
-    
+
     Issue #314: Requires authentication.
-    
+
     Returns:
         HTML: Density metrics with heatmap and bin-level data
     """
@@ -239,28 +237,33 @@ async def density(request: Request):
     if auth_redirect:
         return auth_redirect
     meta = get_stub_meta()
-    
+
     # Load LOS colors from SSOT
     try:
         reporting_config = load_reporting()
         los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
-    except Exception as e:
+    except Exception:
         los_colors = {
-            "A": "#4CAF50", "B": "#8BC34A", "C": "#FFC107",
-            "D": "#FF9800", "E": "#FF5722", "F": "#F44336"
+            "A": "#4CAF50",
+            "B": "#8BC34A",
+            "C": "#FFC107",
+            "D": "#FF9800",
+            "E": "#FF5722",
+            "F": "#F44336",
         }
-    
+
     # Issue #460 Phase 5: Get current run_id from runflow/analysis/latest.json
     # Issue #682: Updated to use runflow/analysis/latest.json
     run_id = None
     try:
         from app.utils.metadata import get_latest_run_id
+
         run_id = get_latest_run_id()
     except (FileNotFoundError, ValueError) as e:
         logger.warning(f"Could not load run_id from runflow/analysis/latest.json: {e}")
     except Exception as e:
         logger.error(f"Error getting latest run_id: {e}")
-    
+
     return templates.TemplateResponse(
         request=request,
         name="pages/density.html",
@@ -278,9 +281,9 @@ async def density(request: Request):
 async def flow(request: Request):
     """
     Flow analysis page with temporal flow metrics table.
-    
+
     Issue #314: Requires authentication.
-    
+
     Returns:
         HTML: Event interactions and convergence analysis
     """
@@ -349,10 +352,10 @@ async def progression(request: Request):
 async def locations(request: Request):
     """
     Locations report page with course resource timing table.
-    
+
     Issue #277: Phase 3 - UI Report Page
     Issue #314: Requires authentication.
-    
+
     Returns:
         HTML: Location operational timing windows and peak flow periods
     """
@@ -380,7 +383,12 @@ async def locsheets(
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
-    from app.utils.run_id import get_run_directory, get_latest_run_id, resolve_selected_day, get_available_days
+    from app.utils.run_id import (
+        get_available_days,
+        get_latest_run_id,
+        get_run_directory,
+        resolve_selected_day,
+    )
 
     if not run_id:
         run_id = get_latest_run_id()
@@ -423,10 +431,11 @@ async def locsheets(
 @router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
 async def locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
     """Serve a single location one-pager HTML file; public (no auth) for Volunteer Local (Issue #735)."""
-    from pathlib import Path
+
     from fastapi.responses import FileResponse
 
     from app.utils.run_id import get_run_directory
+
     run_dir = get_run_directory(run_id)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
@@ -445,10 +454,10 @@ async def locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
 async def course_mapping(request: Request):
     """
     Course Mapping page: map a route/course with snap-to-road, segments, and locations.
-    
+
     Issue #732: New UI tab for course mapping. Does not replace or change existing
     Segments/Locations/Density/Flow pages (view-only for analysis results).
-    
+
     Returns:
         HTML: Course mapping workspace (map + street/satellite toggle).
     """
@@ -457,8 +466,13 @@ async def course_mapping(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     # Issue #732: Location types and course events from constants
-    location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
-    event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
+    location_types = [
+        {"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES
+    ]
+    event_choices = [
+        {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
+        for e in COURSE_EVENT_IDS
+    ]
     segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
     segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
     flow_type_choices = list(FLOW_TYPE_CHOICES)
@@ -484,12 +498,12 @@ async def course_mapping(request: Request):
 # async def bins(request: Request):
 #     """
 #     Bin-level details page with granular density and flow metrics.
-#     
+#
 #     Returns:
 #         HTML: Bin-level table with sorting, filtering, and pagination
 #     """
 #     meta = get_stub_meta()
-#     
+#
 #     # Load LOS colors from SSOT
 #     try:
 #         reporting_config = load_reporting()
@@ -498,17 +512,17 @@ async def course_mapping(request: Request):
 #         # Fallback to hardcoded colors if YAML loading fails
 #         los_colors = {
 #             "A": "#4CAF50",
-#             "B": "#8BC34A", 
+#             "B": "#8BC34A",
 #             "C": "#FFC107",
 #             "D": "#FF9800",
 #             "E": "#FF5722",
 #             "F": "#F44336"
 #         }
-#     
+#
 #     return templates.TemplateResponse(
 #         "pages/bins.html",
 #         {
-#             "request": request, 
+#             "request": request,
 #             "meta": meta,
 #             "los_colors": los_colors
 #         }
@@ -528,9 +542,9 @@ async def reports(request: Request):
 async def analysis_page(request: Request):
     """
     Analysis request page for submitting new analysis requests.
-    
+
     Issue #554: New page for submitting analysis requests via UI.
-    
+
     Returns:
         HTML: Analysis request form
     """
@@ -571,7 +585,9 @@ async def race_configuration_page(request: Request):
     if auth_redirect:
         return auth_redirect
     meta = get_stub_meta()
-    location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
+    location_types = [
+        {"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES
+    ]
     event_choices = [
         {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
         for e in COURSE_EVENT_IDS
@@ -601,9 +617,9 @@ async def race_configuration_page(request: Request):
 async def health_page(request: Request):
     """
     Health check page with system status and diagnostics.
-    
+
     Issue #314: Requires authentication.
-    
+
     Returns:
         HTML: Environment info, file status, endpoint checks
     """
@@ -622,59 +638,62 @@ async def health_page(request: Request):
 async def check_session(request: Request):
     """
     Check if current session is valid.
-    
+
     Issue #314: Frontend session check endpoint for supplementary validation.
-    
+
     Returns:
         JSON: {"authenticated": true/false}
     """
     from fastapi.responses import JSONResponse
+
     is_valid = is_session_valid(request)
     return JSONResponse(content={"authenticated": is_valid})
 
 
 @router.get("/api/data/files")
 async def get_data_files(
-    request: Request, 
+    request: Request,
     extension: Optional[str] = Query(None),
-    data_dir: Optional[str] = Query(None)
+    data_dir: Optional[str] = Query(None),
 ):
     """
     List files in the data directory, optionally filtered by extension.
-    
+
     Issue #554: API endpoint to populate file dropdowns in Analysis UI.
     Issue #680: Extended to accept optional data_dir query parameter.
-    
+
     Args:
         extension: Optional file extension filter (e.g., "csv", "gpx")
                   If not provided, returns all files
         data_dir: Optional data directory path
                If not provided, uses DATA_ROOT env var or defaults to "data"
-    
+
     Returns:
         JSON: List of file names matching the extension filter
     """
     require_auth(request)
-    
+
     try:
         from app.core.v2.analysis_config import get_data_directory
-        
+
         # Use provided data_dir or fall back to get_data_directory() (Issue #680)
         if not data_dir:
             data_dir = get_data_directory()
-        
+
         # Issue #680 / #798 Phase 4: Map host paths to container paths via path_mapper
         if data_dir:
             from app.utils.path_mapper import to_runtime_path
 
             mapped = to_runtime_path(data_dir)
             if mapped != data_dir:
-                logger.info("Mapped host path to container path: %s -> %s", data_dir, mapped)
+                logger.info(
+                    "Mapped host path to container path: %s -> %s", data_dir, mapped
+                )
             data_dir = mapped
-        
+
         # Resolve the path (handles both absolute and relative paths)
         data_path = Path(data_dir).resolve()
-        
+
         if not data_path.exists():
             # Issue #680: Provide helpful error message for Docker volume mount issues
             error_msg = f"Data directory not found: {data_dir}"
@@ -683,45 +702,41 @@ async def get_data_files(
             # Check if running in Docker and suggest volume mount
             if os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv"):
                 error_msg += ". Note: If running in Docker, ensure the directory is mounted as a volume in docker-compose.yml"
-            raise HTTPException(
-                status_code=404,
-                detail=error_msg
-            )
-        
+            raise HTTPException(status_code=404, detail=error_msg)
+
         if not data_path.is_dir():
             raise HTTPException(
                 status_code=400,
-                detail=f"Data directory path is not a directory: {data_dir} (resolved to: {data_path})"
+                detail=f"Data directory path is not a directory: {data_dir} (resolved to: {data_path})",
             )
-        
+
         # List all files in data directory
         files = []
         for file_path in data_path.iterdir():
             if file_path.is_file():
                 file_ext = file_path.suffix.lower()
                 file_name = file_path.name
-                
+
                 # Filter by extension if provided
                 if extension:
                     # Remove leading dot if present
-                    ext_filter = extension.lower().lstrip('.')
-                    if file_ext == f'.{ext_filter}':
+                    ext_filter = extension.lower().lstrip(".")
+                    if file_ext == f".{ext_filter}":
                         files.append(file_name)
                 else:
                     files.append(file_name)
-        
+
         # Sort files alphabetically
         files.sort()
-        
+
         return JSONResponse(content={"files": files})
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error listing data files: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list data files: {str(e)}"
+            status_code=500, detail=f"Failed to list data files: {str(e)}"
         )
 
 
@@ -729,119 +744,112 @@ async def get_data_files(
 async def get_config_directories(request: Request):
     """
     List config directories under runflow/config that contain runner CSV files.
-    
+
     Issue #693: Provide UI selector for baseline reuse from config directories.
-    
+
     Returns:
         JSON: List of directory names containing *_runners.csv files
     """
     require_auth(request)
-    
+
     try:
         from app.utils.run_id import get_runflow_root
-        
+
         config_root = get_runflow_root() / "config"
         if not config_root.exists():
             return JSONResponse(content={"directories": []})
-        
+
         if not config_root.is_dir():
             raise HTTPException(
-                status_code=400,
-                detail=f"Config path is not a directory: {config_root}"
+                status_code=400, detail=f"Config path is not a directory: {config_root}"
             )
-        
+
         directories = []
         for dir_path in config_root.iterdir():
             if dir_path.is_dir():
-                has_runners = any(path.is_file() for path in dir_path.glob("*_runners.csv"))
+                has_runners = any(
+                    path.is_file() for path in dir_path.glob("*_runners.csv")
+                )
                 if has_runners:
                     directories.append(dir_path.name)
-        
+
         directories.sort()
         return JSONResponse(content={"directories": directories})
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error listing config directories: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list config directories: {str(e)}"
+            status_code=500, detail=f"Failed to list config directories: {str(e)}"
         )
 
 
 @router.get("/api/config/files")
-async def get_config_files(
-    request: Request,
-    config_dir: str = Query(...)
-):
+async def get_config_files(request: Request, config_dir: str = Query(...)):
     """
     List runner CSV files in a specific config directory.
-    
+
     Issue #693: Populate Create Files runner list from selected config directory.
-    
+
     Args:
         config_dir: Config directory name under runflow/config
-    
+
     Returns:
         JSON: List of runner CSV files in the directory
     """
     require_auth(request)
-    
+
     try:
         from app.utils.run_id import get_runflow_root
-        
+
         if not config_dir or config_dir.strip() == "":
-            raise HTTPException(
-                status_code=400,
-                detail="config_dir is required"
-            )
-        
+            raise HTTPException(status_code=400, detail="config_dir is required")
+
         normalized = config_dir.strip()
-        if Path(normalized).name != normalized or "/" in normalized or "\\" in normalized:
+        if (
+            Path(normalized).name != normalized
+            or "/" in normalized
+            or "\\" in normalized
+        ):
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid config_dir: {config_dir}"
+                status_code=400, detail=f"Invalid config_dir: {config_dir}"
             )
-        
+
         config_root = get_runflow_root() / "config"
         if not config_root.exists():
             raise HTTPException(
-                status_code=404,
-                detail=f"Config root not found: {config_root}"
+                status_code=404, detail=f"Config root not found: {config_root}"
             )
-        
+
         if not config_root.is_dir():
             raise HTTPException(
-                status_code=400,
-                detail=f"Config path is not a directory: {config_root}"
+                status_code=400, detail=f"Config path is not a directory: {config_root}"
             )
-        
+
         config_path = config_root / normalized
         if not config_path.exists() or not config_path.is_dir():
             raise HTTPException(
-                status_code=404,
-                detail=f"Config directory not found: {normalized}"
+                status_code=404, detail=f"Config directory not found: {normalized}"
             )
-        
+
         files = sorted(
             [path.name for path in config_path.glob("*_runners.csv") if path.is_file()]
         )
         if not files:
             raise HTTPException(
                 status_code=404,
-                detail=f"No runner files found in config directory: {normalized}"
+                detail=f"No runner files found in config directory: {normalized}",
             )
-        
+
         return JSONResponse(content={"files": files, "config_dir": normalized})
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error listing config files for {config_dir}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list config files: {str(e)}"
+            status_code=500, detail=f"Failed to list config files: {str(e)}"
         )
 
 
@@ -849,49 +857,44 @@ async def get_config_files(
 async def get_analysis_config(request: Request, run_id: str):
     """
     Fetch analysis.json for a given run_id.
-    
+
     Issue #554: API endpoint to fetch analysis configuration for display in UI.
-    
+
     Args:
         run_id: Run identifier
-    
+
     Returns:
         JSON: analysis.json content
-    
+
     Raises:
         HTTPException: 404 if run_id or analysis.json not found
     """
-    from fastapi.responses import JSONResponse
+
     from fastapi import HTTPException
-    from pathlib import Path
-    
+    from fastapi.responses import JSONResponse
+
     require_auth(request)
-    
+
     try:
-        from app.utils.run_id import get_runflow_root
         from app.config.loader import load_analysis_context
-        
+
         # Issue #682: Use centralized get_run_directory() for correct path
         from app.utils.run_id import get_run_directory
+
         run_path = get_run_directory(run_id)
-        
+
         if not run_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Run ID {run_id} not found"
-            )
-        
+            raise HTTPException(status_code=404, detail=f"Run ID {run_id} not found")
+
         analysis_context = load_analysis_context(run_path)
         return JSONResponse(content=analysis_context.analysis_config)
-        
+
     except FileNotFoundError:
         raise HTTPException(
-            status_code=404,
-            detail=f"analysis.json not found for run_id {run_id}"
+            status_code=404, detail=f"analysis.json not found for run_id {run_id}"
         )
     except Exception as e:
         logger.error(f"Error loading analysis.json for run_id {run_id}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to load analysis configuration: {str(e)}"
+            status_code=500, detail=f"Failed to load analysis configuration: {str(e)}"
         )

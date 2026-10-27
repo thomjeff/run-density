@@ -33,8 +33,8 @@ DENSITY_EPSILON = 1e-6
 
 # Dynamic conflict length thresholds
 CONFLICT_LENGTH_SHORT_SEGMENT_M = 100.0  # For segments <= 1.0km
-CONFLICT_LENGTH_MEDIUM_SEGMENT_M = 150.0  # For segments 1.0-2.0km  
-CONFLICT_LENGTH_LONG_SEGMENT_M = 200.0   # For segments > 2.0km
+CONFLICT_LENGTH_MEDIUM_SEGMENT_M = 150.0  # For segments 1.0-2.0km
+CONFLICT_LENGTH_LONG_SEGMENT_M = 200.0  # For segments > 2.0km
 SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM = 1.0
 SEGMENT_LENGTH_LONG_THRESHOLD_KM = 2.0
 
@@ -71,7 +71,7 @@ MIN_SUSTAINED_PERIOD_MINUTES = 2.0
 
 # Binning thresholds for flow analysis
 TEMPORAL_BINNING_THRESHOLD_MINUTES = 10.0  # Use time bins if overlap > 10 minutes
-SPATIAL_BINNING_THRESHOLD_METERS = 100.0   # Use distance bins if conflict zone > 100m
+SPATIAL_BINNING_THRESHOLD_METERS = 100.0  # Use distance bins if conflict zone > 100m
 SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as suspicious
 
 # E2E Testing URLs
@@ -91,7 +91,7 @@ CONVERGENCE_POINT_TOLERANCE_KM = 0.1  # 100m tolerance around convergence points
 DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
 
 # Day short codes for v2 (Issue #495)
-DAY_SHORT_CODES = ['fri', 'sat', 'sun', 'mon']
+DAY_SHORT_CODES = ["fri", "sat", "sun", "mon"]
 
 # Issue #798 Phase 8: race-specific durations live in race templates (v1 adapter only).
 EVENT_DURATION_MINUTES = dict(get_v1_event_duration_minutes())
@@ -116,7 +116,9 @@ MAX_BIN_DATASET_SIZE_MB = 15  # File size limit per ChatGPT
 BIN_MAX_FEATURES = 10000  # Feature count limit per ChatGPT
 BIN_MAX_GEOJSON_MB_GZ = 15  # Compressed GeoJSON size limit
 DEFAULT_BIN_TIME_WINDOW_SECONDS = 60  # 1-minute analysis windows per ChatGPT
-MAX_BIN_GENERATION_TIME_SECONDS = 120  # P95 target per ChatGPT performance plan (relaxed for initial deployment)
+MAX_BIN_GENERATION_TIME_SECONDS = (
+    120  # P95 target per ChatGPT performance plan (relaxed for initial deployment)
+)
 BIN_HARD_LIMIT_SECONDS = 180  # Absolute ceiling before failover per ChatGPT
 BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
 
@@ -151,12 +153,7 @@ FLOW_TYPE_CHOICES = [
 FLOW_TYPE_VALUES = [c["value"] for c in FLOW_TYPE_CHOICES]
 
 # Map density thresholds for zone determination (frontend)
-MAP_DENSITY_THRESHOLDS = {
-    "green": 0.36,
-    "yellow": 0.54,
-    "orange": 0.72,
-    "red": 1.08
-}
+MAP_DENSITY_THRESHOLDS = {"green": 0.36, "yellow": 0.54, "orange": 0.72, "red": 1.08}
 
 # Map zone colors
 MAP_ZONE_COLORS = {
@@ -164,7 +161,7 @@ MAP_ZONE_COLORS = {
     "yellow": "#FFC107",
     "orange": "#FF9800",
     "red": "#F44336",
-    "dark-red": "#B71C1C"
+    "dark-red": "#B71C1C",
 }
 
 # Storage Configuration (Issue #452)
@@ -199,7 +196,9 @@ MOTION_DIRNAME = "motion"
 MOTION_SAMPLES_FILENAME = "samples.parquet"
 MOTION_METADATA_FILENAME = "metadata.json"
 MOTION_RUNNERS_SNAPSHOT_FILENAME = "runners_snapshot.parquet"
-MOTION_SAMPLE_INTERVAL_SEC = 5  # global ticks from local midnight; never hardcode in engines
+MOTION_SAMPLE_INTERVAL_SEC = (
+    5  # global ticks from local midnight; never hardcode in engines
+)
 MOTION_SCHEMA_VERSION = "1.0.0"
 MOTION_MODEL_VERSION = "constant_pace_v1"
 MOTION_TIME_SOURCE = "modeled_constant_pace"
@@ -288,6 +287,6 @@ SEGMENT_DIRECTION_VALUES = [c["value"] for c in SEGMENT_DIRECTION_CHOICES]
 
 # RES (Runner Experience Score) thresholds and weights (Issue #573)
 RES_HIGH_DENSITY_THRESHOLD = 0.72  # LOS D threshold (p/m²) - configurable
-RES_HIGH_FLOW_THRESHOLD = 90.0     # runners/min/m - configurable
-RES_FLOW_PENALTY_WEIGHT = 2.0      # Flow penalty weight
-RES_DENSITY_PENALTY_WEIGHT = 1.5   # Density penalty weight
+RES_HIGH_FLOW_THRESHOLD = 90.0  # runners/min/m - configurable
+RES_FLOW_PENALTY_WEIGHT = 2.0  # Flow penalty weight
+RES_DENSITY_PENALTY_WEIGHT = 1.5  # Density penalty weight

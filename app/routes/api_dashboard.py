@@ -8,26 +8,25 @@ Epic: RF-FE-002 | Issue: #279 | Step: 6
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
-from pathlib import Path
 import json
 import logging
 import re
 import shutil
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from app.common.config import load_rulebook, load_reporting
-from app.utils.auth import require_auth
-from app.utils.run_id import get_latest_run_id, resolve_selected_day
-from app.storage import create_runflow_storage
-from app.utils.metadata import get_run_index
-from app.utils.display_time import format_local_display_datetime
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 # Issue #283: Import SSOT for flagging logic parity
-from app import flagging as ssot_flagging
+from app.common.config import load_rulebook
+from app.storage import create_runflow_storage
+from app.utils.auth import require_auth
+from app.utils.display_time import format_local_display_datetime
+from app.utils.metadata import get_run_index
+from app.utils.run_id import get_latest_run_id, get_run_directory, resolve_selected_day
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -45,45 +44,47 @@ router = APIRouter()
 def calculate_peak_density_los(peak_density: float) -> str:
     """
     DEPRECATED: Calculate LOS for peak density using hardcoded thresholds.
-    
+
     This function is deprecated because it:
     1. Uses hardcoded thresholds instead of rulebook SSOT
     2. Ignores schema-specific thresholds (e.g., start_corral for A1)
     3. Causes LOS inconsistencies between Dashboard and other UI pages
-    
+
     Issue #640: Use worst_los from segment_metrics.json instead.
-    
+
     Args:
         peak_density: Peak density value (persons/m²)
-        
+
     Returns:
         LOS grade (A-F) - INCORRECT for schema-specific segments
-    
+
     .. deprecated:: Issue #640
         Use worst_los from segment_metrics.json (SSOT) instead.
     """
-    logger.warning("DEPRECATED: calculate_peak_density_los() called. Use worst_los from segment_metrics.json instead.")
+    logger.warning(
+        "DEPRECATED: calculate_peak_density_los() called. Use worst_los from segment_metrics.json instead."
+    )
     try:
         rulebook = load_rulebook()
         thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-        
+
         # Get density thresholds (assuming they're in order A->F)
         density_thresholds = thresholds.get("density", [])
-        
+
         if not density_thresholds:
             # Fallback to hardcoded thresholds if YAML missing
             density_thresholds = [0.2, 0.4, 0.6, 0.8, 1.0]
-        
+
         # Find appropriate LOS grade
         los_grades = ["A", "B", "C", "D", "E", "F"]
-        
+
         for i, threshold in enumerate(density_thresholds):
             if peak_density < threshold:
                 return los_grades[i]
-        
+
         # If above all thresholds, return F
         return "F"
-        
+
     except Exception as e:
         logger.error(f"Error calculating peak density LOS: {e}")
         # Fallback to simple threshold
@@ -123,7 +124,9 @@ def _calculate_flags_metrics(flags) -> tuple:
     elif isinstance(flags, list):
         segments_flagged = len(flags)
         bins_flagged = sum(f.get("flagged_bins", 0) for f in flags)
-        logger.info(f"Calculated bins_flagged: {bins_flagged} from {len(flags)} flag entries")
+        logger.info(
+            f"Calculated bins_flagged: {bins_flagged} from {len(flags)} flag entries"
+        )
     else:
         segments_flagged = 0
         bins_flagged = 0
@@ -141,21 +144,25 @@ def _analysis_inputs_from_day_metadata(day_meta: Dict[str, Any]) -> Dict[str, An
     ef = pt.get("event_first_finisher") or {}
     el = pt.get("event_last_finisher") or {}
     ad = pt.get("actual_event_duration") or {}
-    events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+    events_obj = (
+        day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+    )
     event_rows: List[Dict[str, Any]] = []
     for ev_name in sorted(events_obj.keys()):
         ev_info = events_obj.get(ev_name)
         if not isinstance(ev_info, dict):
             continue
         lk = str(ev_name).lower()
-        event_rows.append({
-            "event": ev_name,
-            "participants": int(ev_info.get("participants", 0)),
-            "start_time": str(ev_info.get("start_time", "") or ""),
-            "first_finisher": ef.get(lk) if isinstance(ef, dict) else None,
-            "last_finisher": el.get(lk) if isinstance(el, dict) else None,
-            "duration": ad.get(lk) if isinstance(ad, dict) else None,
-        })
+        event_rows.append(
+            {
+                "event": ev_name,
+                "participants": int(ev_info.get("participants", 0)),
+                "start_time": str(ev_info.get("start_time", "") or ""),
+                "first_finisher": ef.get(lk) if isinstance(ef, dict) else None,
+                "last_finisher": el.get(lk) if isinstance(el, dict) else None,
+                "duration": ad.get(lk) if isinstance(ad, dict) else None,
+            }
+        )
     return {
         "day_start": pt.get("day_start"),
         "day_end": pt.get("day_end"),
@@ -167,7 +174,7 @@ def _analysis_inputs_from_day_metadata(day_meta: Dict[str, Any]) -> Dict[str, An
 def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
     """
     Calculate peak density and rate from segment metrics.
-    
+
     Returns:
         Tuple of (peak_density, peak_rate, peak_segment_id)
         where peak_segment_id is the segment with peak density.
@@ -175,40 +182,42 @@ def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
     peak_density = 0.0
     peak_rate = 0.0
     peak_segment_id = None
-    
+
     for seg_id, metrics in segment_metrics.items():
         if isinstance(metrics, dict):
             seg_peak_density = metrics.get("peak_density", 0.0)
             seg_peak_rate = metrics.get("peak_rate", 0.0)
-            
+
             if seg_peak_density > peak_density:
                 peak_density = seg_peak_density
                 peak_segment_id = seg_id
             elif seg_peak_density == peak_density and peak_segment_id:
                 # Tie-breaker: use segment with worse LOS if same density
-                current_los = segment_metrics.get(peak_segment_id, {}).get("worst_los", "A")
+                current_los = segment_metrics.get(peak_segment_id, {}).get(
+                    "worst_los", "A"
+                )
                 candidate_los = metrics.get("worst_los", "A")
                 # LOS ranking: F > E > D > C > B > A
                 los_order = {"F": 6, "E": 5, "D": 4, "C": 3, "B": 2, "A": 1}
                 if los_order.get(candidate_los, 0) > los_order.get(current_los, 0):
                     peak_segment_id = seg_id
-            
+
             peak_rate = max(peak_rate, seg_peak_rate)
-    
+
     return peak_density, peak_rate, peak_segment_id
 
 
 @router.get("/api/dashboard/summary")
 async def get_dashboard_summary(
     run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
-    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
 ):
     """
     Get dashboard summary data for KPI tiles.
-    
+
     Returns:
         JSON with aggregated metrics from all data sources
-        
+
     Sources:
         - meta.json → run_timestamp, environment
         - segment_metrics.json → segments_total, peak_density, peak_rate, segments_overtaking, segments_copresence
@@ -221,15 +230,20 @@ async def get_dashboard_summary(
             run_id = get_latest_run_id()
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
-        
+
         # Track missing files for warnings
         warnings = []
-        
+
         # Load meta data (Issue #580: Updated path to metadata/ subdirectory)
-        meta = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metadata/meta.json", warnings) or {}
+        meta = (
+            _load_ui_artifact_safe(
+                storage, f"{selected_day}/ui/metadata/meta.json", warnings
+            )
+            or {}
+        )
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
-        
+
         # Load day metadata for events (canonical source for event tiles)
         events_detail: List[Dict[str, Any]] = []
         day_events_map: Dict[str, Dict[str, Any]] = {}
@@ -237,72 +251,102 @@ async def get_dashboard_summary(
             day_meta_path = storage._full_local(f"{selected_day}/metadata.json")
             if day_meta_path.exists():
                 day_meta = json.loads(day_meta_path.read_text())
-                events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+                events_obj = (
+                    day_meta.get("events", {})
+                    if isinstance(day_meta.get("events"), dict)
+                    else {}
+                )
                 for ev_name, ev_info in events_obj.items():
                     if not isinstance(ev_info, dict):
                         continue
                     participants = int(ev_info.get("participants", 0))
                     start_time = ev_info.get("start_time", "")
-                    events_detail.append({
-                        "name": ev_name,
-                        "start_time": start_time,
-                        "participants": participants
-                    })
+                    events_detail.append(
+                        {
+                            "name": ev_name,
+                            "start_time": start_time,
+                            "participants": participants,
+                        }
+                    )
                     day_events_map[ev_name] = {
                         "count": participants,
-                        "start_time": start_time
+                        "start_time": start_time,
                     }
         except Exception as e:
             logger.warning(f"Could not read day metadata for events: {e}")
-        
+
         # Load segment metrics (Issue #580: Updated path to metrics/ subdirectory)
         # Issue #485: Extract summary fields BEFORE filtering segment-level data
-        raw_segment_metrics = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metrics/segment_metrics.json", warnings) or {}
-        
+        raw_segment_metrics = (
+            _load_ui_artifact_safe(
+                storage, f"{selected_day}/ui/metrics/segment_metrics.json", warnings
+            )
+            or {}
+        )
+
         # Extract summary-level fields (these are top-level keys, not segment IDs)
-        summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
-                         'overtaking_segments', 'co_presence_segments']
+        summary_fields = [
+            "peak_density",
+            "peak_rate",
+            "segments_with_flags",
+            "flagged_bins",
+            "overtaking_segments",
+            "co_presence_segments",
+        ]
         segments_overtaking = raw_segment_metrics.get("overtaking_segments", 0)
         segments_copresence = raw_segment_metrics.get("co_presence_segments", 0)
-        
+
         # Filter out summary fields to get only segment-level data
         # Segment-level data has segment IDs as keys (not in summary_fields list)
-        segment_metrics = {k: v for k, v in raw_segment_metrics.items() 
-                          if k not in summary_fields}
+        segment_metrics = {
+            k: v for k, v in raw_segment_metrics.items() if k not in summary_fields
+        }
         segments_total = len(segment_metrics)
-        
-        logger.info(f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
-        
+
+        logger.info(
+            f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}"
+        )
+
         # Calculate peak density and rate from segment-level data
         # Issue #640: Get peak LOS from segment_metrics.json (SSOT) instead of recalculating
-        peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(segment_metrics)
-        
+        peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(
+            segment_metrics
+        )
+
         # Get canonical LOS from segment with peak density (SSOT from bins.parquet via segment_metrics.json)
         if peak_segment_id and peak_segment_id in segment_metrics:
             peak_density_los = segment_metrics[peak_segment_id].get("worst_los", "A")
-            logger.info(f"Using SSOT LOS for peak density segment {peak_segment_id}: {peak_density_los} (density={peak_density})")
+            logger.info(
+                f"Using SSOT LOS for peak density segment {peak_segment_id}: {peak_density_los} (density={peak_density})"
+            )
         else:
             # Fallback if no segment found (should not happen, but be defensive)
-            logger.warning(f"Peak density segment {peak_segment_id} not found in segment_metrics, defaulting to LOS A")
+            logger.warning(
+                f"Peak density segment {peak_segment_id} not found in segment_metrics, defaulting to LOS A"
+            )
             peak_density_los = "A"
-        
+
         # Load flags data (Issue #580: Updated path to metrics/ subdirectory)
-        flags = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metrics/flags.json", warnings)
+        flags = _load_ui_artifact_safe(
+            storage, f"{selected_day}/ui/metrics/flags.json", warnings
+        )
         if flags is None:
             flags = []
-        
-        logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
+
+        logger.info(
+            f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}"
+        )
         segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
-        
+
         # Runners data: prefer metadata events map; fallback to empty
         total_runners = sum((v.get("count", 0) for v in day_events_map.values()), 0)
         cohorts = day_events_map  # cohorts keyed by event name with count/start_time
-        
+
         # Determine status
         status = "normal"
         if peak_density_los in ["E", "F"] or segments_flagged > 0:
             status = "action_required"
-        
+
         # Build response
         summary = {
             "run_id": run_id,  # Issue #470: Include run_id in response
@@ -322,19 +366,20 @@ async def get_dashboard_summary(
             "segments_overtaking": segments_overtaking,
             "segments_copresence": segments_copresence,
             "status": status,
-            "warnings": warnings
+            "warnings": warnings,
         }
-        
-        logger.info(f"Dashboard summary: {segments_total} segments, {total_runners} runners, status={status}")
-        
-        return JSONResponse(
-            content=summary,
-            headers={"Cache-Control": "public, max-age=60"}
+
+        logger.info(
+            f"Dashboard summary: {segments_total} segments, {total_runners} runners, status={status}"
         )
-        
+
+        return JSONResponse(
+            content=summary, headers={"Cache-Control": "public, max-age=60"}
+        )
+
     except Exception as e:
         logger.error(f"Error generating dashboard summary: {e}")
-        
+
         # Return safe defaults
         fallback_summary = {
             "timestamp": datetime.now().isoformat() + "Z",
@@ -350,12 +395,11 @@ async def get_dashboard_summary(
             "segments_overtaking": 0,
             "segments_copresence": 0,
             "status": "normal",
-            "warnings": ["error: failed to load dashboard data"]
+            "warnings": ["error: failed to load dashboard data"],
         }
-        
+
         return JSONResponse(
-            content=fallback_summary,
-            headers={"Cache-Control": "public, max-age=60"}
+            content=fallback_summary, headers={"Cache-Control": "public, max-age=60"}
         )
 
 
@@ -363,9 +407,9 @@ async def get_dashboard_summary(
 async def get_runs_list():
     """
     Get list of all runs from index.json with summary metrics.
-    
+
     Issue #565: Returns all runs with event_summary data for Run History Table.
-    
+
     Returns:
         JSON with list of runs, each containing:
         - run_id
@@ -376,48 +420,53 @@ async def get_runs_list():
     """
     try:
         runs = get_run_index()
-        
+
         runs_list = []
         for run in runs:
             run_id = run.get("run_id")
             if not run_id:
                 continue
-            
+
             # Load analysis.json for description (readonly: no data_dir validation; Issue #740 cloud)
             description = None
             try:
                 from app.config.loader import load_analysis_config_readonly
-                from app.utils.run_id import get_run_directory
+
                 cfg = load_analysis_config_readonly(get_run_directory(run_id))
                 description = cfg.get("description")
             except Exception as e:
                 logger.warning(f"Could not load analysis.json for {run_id}: {e}")
-            
+
             # Load root metadata.json for total_elapsed_minutes (Issue #638 follow-up)
             # Issue #682: Use centralized get_run_directory() for correct path
-            from app.utils.run_id import get_run_directory
             run_dir = get_run_directory(run_id)
             metadata_path = run_dir / "metadata.json"
             total_elapsed_minutes = None
             if metadata_path.exists():
                 try:
-                    with open(metadata_path, 'r', encoding='utf-8') as f:
+                    with open(metadata_path, "r", encoding="utf-8") as f:
                         metadata_data = json.load(f)
                         performance = metadata_data.get("performance", {})
                         stored_format = performance.get("total_elapsed_minutes")
                         total_elapsed_seconds = performance.get("total_elapsed_seconds")
-                        
+
                         # Issue #638: Reformat if stored in old hh:mm format
                         # Use total_elapsed_seconds to calculate correct mm:ss format
                         if total_elapsed_seconds is not None and stored_format:
                             # Check if stored format is legacy hh:mm (e.g., "00:05")
-                            if ':' in str(stored_format):
-                                parts = str(stored_format).split(':')
-                                if len(parts) == 2 and parts[0] == '00' and int(parts[1]) < 60:
+                            if ":" in str(stored_format):
+                                parts = str(stored_format).split(":")
+                                if (
+                                    len(parts) == 2
+                                    and parts[0] == "00"
+                                    and int(parts[1]) < 60
+                                ):
                                     # Legacy hh:mm format - reformat using total_elapsed_seconds
                                     total_minutes_int = int(total_elapsed_seconds // 60)
                                     seconds = int(total_elapsed_seconds % 60)
-                                    total_elapsed_minutes = f"{total_minutes_int:02d}:{seconds:02d}"
+                                    total_elapsed_minutes = (
+                                        f"{total_minutes_int:02d}:{seconds:02d}"
+                                    )
                                 else:
                                     # Already in mm:ss format or other format
                                     total_elapsed_minutes = stored_format
@@ -429,11 +478,11 @@ async def get_runs_list():
                             total_elapsed_minutes = stored_format
                 except Exception as e:
                     logger.warning(f"Could not load metadata.json for {run_id}: {e}")
-            
+
             # Format created_at for display (MM-DD HH:MM in DISPLAY_TIMEZONE)
             created_at = run.get("created_at", "")
             formatted_date = format_local_display_datetime(created_at)
-            
+
             run_entry = {
                 "run_id": run_id,
                 "description": description or f"Run {run_id[:8]}...",
@@ -441,20 +490,18 @@ async def get_runs_list():
                 "formatted_date": formatted_date,
                 "event_summary": run.get("event_summary", {}),
                 "status": run.get("status", "complete"),
-                "total_elapsed_minutes": total_elapsed_minutes  # Issue #638: Add Run Time column
+                "total_elapsed_minutes": total_elapsed_minutes,  # Issue #638: Add Run Time column
             }
             runs_list.append(run_entry)
-        
+
         return JSONResponse(
-            content={"runs": runs_list},
-            headers={"Cache-Control": "public, max-age=60"}
+            content={"runs": runs_list}, headers={"Cache-Control": "public, max-age=60"}
         )
-        
+
     except Exception as e:
         logger.error(f"Error getting runs list: {e}")
         return JSONResponse(
-            content={"runs": []},
-            headers={"Cache-Control": "public, max-age=60"}
+            content={"runs": []}, headers={"Cache-Control": "public, max-age=60"}
         )
 
 
@@ -496,10 +543,10 @@ async def get_run_progress(run_id: str):
 async def get_run_summary(run_id: str):
     """
     Get detailed summary for specific run with metrics per day.
-    
+
     Issue #565: Returns metrics for each day in column-per-day format for Run Detail View.
     Issue #739: Includes analysis_inputs per day (day windows + per-event timings from metadata).
-    
+
     Returns:
         JSON with run_id, description, days, metrics per day, and analysis_inputs:
         - participants
@@ -528,83 +575,122 @@ async def get_run_summary(run_id: str):
             analysis_data = load_analysis_config_readonly(run_path)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-        
+
         description = analysis_data.get("description", f"Run {run_id[:8]}...")
         event_summary = analysis_data.get("event_summary", {})
-        days = event_summary.get("days", [])
+        event_summary.get("days", [])
         events_by_day = event_summary.get("events_by_day", {})
-        
+
         # Get list of days from events_by_day keys
         day_list = sorted(events_by_day.keys()) if events_by_day else []
-        
+
         # Load metrics for each day
         storage = create_runflow_storage(run_id)
         metrics_by_day: Dict[str, Any] = {}
         analysis_inputs: Dict[str, Any] = {}
-        
+
         for day in day_list:
             try:
                 # Load day metadata
                 day_meta_path = storage._full_local(f"{day}/metadata.json")
                 if not day_meta_path.exists():
                     continue
-                
+
                 day_meta = json.loads(day_meta_path.read_text())
                 analysis_inputs[day] = _analysis_inputs_from_day_metadata(day_meta)
-                
+
                 # Get events for this day
-                events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+                events_obj = (
+                    day_meta.get("events", {})
+                    if isinstance(day_meta.get("events"), dict)
+                    else {}
+                )
                 event_names = [ev_name for ev_name in events_obj.keys()]
-                total_participants = sum(int(ev_info.get("participants", 0)) for ev_info in events_obj.values() if isinstance(ev_info, dict))
-                
+                total_participants = sum(
+                    int(ev_info.get("participants", 0))
+                    for ev_info in events_obj.values()
+                    if isinstance(ev_info, dict)
+                )
+
                 # Load segment metrics
-                segment_metrics = _load_ui_artifact_safe(storage, f"{day}/ui/metrics/segment_metrics.json", []) or {}
-                summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
-                                 'overtaking_segments', 'co_presence_segments']
+                segment_metrics = (
+                    _load_ui_artifact_safe(
+                        storage, f"{day}/ui/metrics/segment_metrics.json", []
+                    )
+                    or {}
+                )
+                summary_fields = [
+                    "peak_density",
+                    "peak_rate",
+                    "segments_with_flags",
+                    "flagged_bins",
+                    "overtaking_segments",
+                    "co_presence_segments",
+                ]
                 segments_overtaking = segment_metrics.get("overtaking_segments", 0)
                 segments_copresence = segment_metrics.get("co_presence_segments", 0)
-                
+
                 # Filter segment-level data
-                segment_level_data = {k: v for k, v in segment_metrics.items() if k not in summary_fields}
+                segment_level_data = {
+                    k: v for k, v in segment_metrics.items() if k not in summary_fields
+                }
                 segments_total = len(segment_level_data)
-                
+
                 # Calculate peak density and rate from segment-level data
                 # Issue #640: Get peak LOS from segment_metrics.json (SSOT) instead of recalculating
-                peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(segment_level_data)
-                
+                peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(
+                    segment_level_data
+                )
+
                 # Get canonical LOS from segment with peak density (SSOT from bins.parquet via segment_metrics.json)
                 if peak_segment_id and peak_segment_id in segment_level_data:
-                    peak_density_los = segment_level_data[peak_segment_id].get("worst_los", "A")
+                    peak_density_los = segment_level_data[peak_segment_id].get(
+                        "worst_los", "A"
+                    )
                 else:
                     # Fallback if no segment found (should not happen, but be defensive)
-                    logger.warning(f"Peak density segment {peak_segment_id} not found in segment_metrics for day {day}, defaulting to LOS A")
+                    logger.warning(
+                        f"Peak density segment {peak_segment_id} not found in segment_metrics for day {day}, defaulting to LOS A"
+                    )
                     peak_density_los = "A"
-                
+
                 # Load flags
-                flags = _load_ui_artifact_safe(storage, f"{day}/ui/metrics/flags.json", [])
+                flags = _load_ui_artifact_safe(
+                    storage, f"{day}/ui/metrics/flags.json", []
+                )
                 if flags is None:
                     flags = []
                 segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
-                
+
                 # Get operational_status from metadata (Issue #565)
                 operational_status = day_meta.get("operational_status", "Unknown")
-                
+
                 # Issue #573: Get event_groups RES data from metadata
                 event_groups_res = day_meta.get("event_groups", {})
-                
+
                 # Issue #636: Get predicted_timings for day_first_finisher and day_last_finisher
                 # Issue #638 follow-up: Get day_duration from predicted_timings
                 predicted_timings = day_meta.get("predicted_timings", {}) or {}
-                day_first_finisher = predicted_timings.get("day_first_finisher") if predicted_timings else None
-                day_last_finisher = predicted_timings.get("day_last_finisher") if predicted_timings else None
-                day_duration = predicted_timings.get("day_duration") if predicted_timings else None
-                
+                day_first_finisher = (
+                    predicted_timings.get("day_first_finisher")
+                    if predicted_timings
+                    else None
+                )
+                day_last_finisher = (
+                    predicted_timings.get("day_last_finisher")
+                    if predicted_timings
+                    else None
+                )
+                day_duration = (
+                    predicted_timings.get("day_duration") if predicted_timings else None
+                )
+
                 metrics_by_day[day] = {
                     "participants": total_participants,
                     "events": event_names,
                     "day_first_finisher": day_first_finisher,  # Issue #636: Add to Run Details table
-                    "day_last_finisher": day_last_finisher,    # Issue #636: Add to Run Details table
-                    "day_duration": day_duration,              # Issue #638: Add Day Duration row after Last Finisher
+                    "day_last_finisher": day_last_finisher,  # Issue #636: Add to Run Details table
+                    "day_duration": day_duration,  # Issue #638: Add Day Duration row after Last Finisher
                     "segments_with_flags": f"{segments_flagged} / {segments_total}",
                     "peak_density": round(peak_density, 3),
                     "peak_density_los": peak_density_los,
@@ -613,9 +699,9 @@ async def get_run_summary(run_id: str):
                     "co_presence_segments": segments_copresence,
                     "flagged_bins": bins_flagged,
                     "operational_status": operational_status,
-                    "event_groups": event_groups_res  # Issue #573: RES data per event group
+                    "event_groups": event_groups_res,  # Issue #573: RES data per event group
                 }
-                
+
             except Exception as e:
                 logger.warning(f"Error loading metrics for day {day}: {e}")
                 analysis_inputs[day] = {
@@ -635,9 +721,9 @@ async def get_run_summary(run_id: str):
                     "co_presence_segments": 0,
                     "flagged_bins": 0,
                     "operational_status": "Unknown",
-                    "event_groups": {}  # Issue #573: Empty event_groups on error
+                    "event_groups": {},  # Issue #573: Empty event_groups on error
                 }
-        
+
         return JSONResponse(
             content={
                 "run_id": run_id,
@@ -646,14 +732,16 @@ async def get_run_summary(run_id: str):
                 "metrics": metrics_by_day,
                 "analysis_inputs": analysis_inputs,
             },
-            headers={"Cache-Control": "public, max-age=60"}
+            headers={"Cache-Control": "public, max-age=60"},
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting run summary for {run_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Error loading run summary: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error loading run summary: {str(e)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -750,7 +838,9 @@ async def update_run_metadata(request: Request, run_id: str, payload: UpdateRunR
             logger.warning(f"Could not update analysis.json for {run_id}: {e}")
 
     logger.info(f"Updated run {run_id} description to: {description!r}")
-    return JSONResponse(content={"ok": True, "run_id": run_id, "description": description})
+    return JSONResponse(
+        content={"ok": True, "run_id": run_id, "description": description}
+    )
 
 
 @router.delete("/api/runs/{run_id}")
@@ -784,7 +874,9 @@ async def delete_run(request: Request, run_id: str):
             folder_deleted = True
         except Exception as e:
             logger.error(f"Failed to delete run folder {run_dir}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete run folder: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to delete run folder: {e}"
+            )
 
     if not in_index and not folder_deleted:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
@@ -792,7 +884,9 @@ async def delete_run(request: Request, run_id: str):
     if in_index:
         _write_analysis_index(remaining)
 
-    logger.info(f"Deleted run {run_id} (folder_deleted={folder_deleted}, index_updated={in_index})")
+    logger.info(
+        f"Deleted run {run_id} (folder_deleted={folder_deleted}, index_updated={in_index})"
+    )
     return JSONResponse(
         content={"ok": True, "run_id": run_id, "folder_deleted": folder_deleted}
     )

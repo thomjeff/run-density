@@ -179,8 +179,7 @@ def event_mix_breakdown(
     }
     event_set = set(events)
     by_event_vs: Dict[str, Dict[str, set]] = {
-        event: {other: set() for other in events if other != event}
-        for event in events
+        event: {other: set() for other in events if other != event} for event in events
     }
 
     for row in runner_rows:
@@ -223,7 +222,9 @@ def _pct(count: int, field_size: int) -> Optional[float]:
     return round(100.0 * count / field_size, 1)
 
 
-def _field_sizes_from_pairs(pair_entries: Sequence[Mapping[str, Any]]) -> Dict[str, int]:
+def _field_sizes_from_pairs(
+    pair_entries: Sequence[Mapping[str, Any]],
+) -> Dict[str, int]:
     sizes: Dict[str, int] = {}
     for pair in pair_entries:
         ea = _norm_event(pair.get("event_a"))
@@ -237,12 +238,16 @@ def _field_sizes_from_pairs(pair_entries: Sequence[Mapping[str, Any]]) -> Dict[s
     return sizes
 
 
-def _worst_pair_attribution(same_pass_pairs: Sequence[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+def _worst_pair_attribution(
+    same_pass_pairs: Sequence[Mapping[str, Any]],
+) -> Optional[Dict[str, Any]]:
     best = None
     best_score = -1
     for pair in same_pass_pairs:
         worst = pair.get("worst_zone") or {}
-        score = int(worst.get("overtaking_a") or 0) + int(worst.get("overtaking_b") or 0)
+        score = int(worst.get("overtaking_a") or 0) + int(
+            worst.get("overtaking_b") or 0
+        )
         score = max(score, int(worst.get("unique_encounters") or 0))
         if score > best_score:
             best_score = score
@@ -292,12 +297,14 @@ def merge_occupancy_series(
     return series
 
 
-def build_segment_flow_summary(
+def build_segment_flow_summary(  # noqa: C901
     *,
     flow_segments: Mapping[str, Any],
     overlaps_summary: Mapping[str, Any],
     runner_rows: Optional[Sequence[Mapping[str, Any]]] = None,
-    occupancy_tables: Optional[Sequence[Tuple[str, Sequence[str], Sequence[Mapping[str, Any]]]]] = None,
+    occupancy_tables: Optional[
+        Sequence[Tuple[str, Sequence[str], Sequence[Mapping[str, Any]]]]
+    ] = None,
     cursor_hhmm: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the durable per-seg_id Flow summary from existing pair artifacts."""
@@ -307,7 +314,9 @@ def build_segment_flow_summary(
             overlap_by_flow_id[str(item["flow_id"])] = item
 
     fs_by_key: Dict[str, Tuple[str, Dict[str, Any]]] = {}
-    fs_by_pair: Dict[Tuple[str, str, str], List[Tuple[str, Dict[str, Any]]]] = defaultdict(list)
+    fs_by_pair: Dict[Tuple[str, str, str], List[Tuple[str, Dict[str, Any]]]] = (
+        defaultdict(list)
+    )
     for composite_key, raw in (flow_segments or {}).items():
         if not isinstance(raw, dict):
             continue
@@ -335,7 +344,11 @@ def build_segment_flow_summary(
     def _append_pair(seg_id: str, pair: Dict[str, Any]) -> None:
         bucket = grouped.setdefault(
             seg_id,
-            {"seg_id": seg_id, "segment_label": pair.get("segment_label") or "", "pairs": []},
+            {
+                "seg_id": seg_id,
+                "segment_label": pair.get("segment_label") or "",
+                "pairs": [],
+            },
         )
         label = pair.get("segment_label") or ""
         if label and " / " not in label:
@@ -361,7 +374,9 @@ def build_segment_flow_summary(
             "kind": kind,
             "event_a": event_a,
             "event_b": event_b,
-            "segment_label": (raw or {}).get("segment_label") or overlap.get("seg_label") or "",
+            "segment_label": (raw or {}).get("segment_label")
+            or overlap.get("seg_label")
+            or "",
             "flow_type": (raw or {}).get("flow_type"),
             "total_a": int((raw or {}).get("total_a") or 0),
             "total_b": int((raw or {}).get("total_b") or 0),
@@ -392,7 +407,11 @@ def build_segment_flow_summary(
         event_b = _norm_event(raw.get("event_b"))
         if not seg_id or (seg_id, event_a, event_b) in consumed_pair_keys:
             continue
-        flow_id = str(raw.get("flow_id") or composite_key or default_flow_id(seg_id, event_a, event_b)).strip()
+        flow_id = str(
+            raw.get("flow_id")
+            or composite_key
+            or default_flow_id(seg_id, event_a, event_b)
+        ).strip()
         kind = classify_pair_kind(flow_id, event_a, event_b, seg_id)
         pair = {
             "flow_id": flow_id,
@@ -415,7 +434,9 @@ def build_segment_flow_summary(
         _append_pair(seg_id, pair)
 
     parents = []
-    for seg_id, bucket in sorted(grouped.items(), key=lambda item: seg_id_sort_key(item[0])):
+    for seg_id, bucket in sorted(
+        grouped.items(), key=lambda item: seg_id_sort_key(item[0])
+    ):
         pairs = bucket["pairs"]
         same_pass = [p for p in pairs if p["kind"] == PAIR_KIND_SAME_PASS]
         corridor = [p for p in pairs if p["kind"] == PAIR_KIND_CORRIDOR]
@@ -444,7 +465,9 @@ def build_segment_flow_summary(
 
         field_sizes = _field_sizes_from_pairs(same_pass)
         allowed_ids = [p["flow_id"] for p in same_pass]
-        runner_keyed = bool(runner_rows) and any(str(r.get("flow_id") or "") for r in runner_rows or [])
+        runner_keyed = bool(runner_rows) and any(
+            str(r.get("flow_id") or "") for r in runner_rows or []
+        )
         mix_overtaking = empty_mix_breakdown(events)
         mix_overtaken = empty_mix_breakdown(events)
         if runner_keyed and same_pass:
@@ -593,7 +616,10 @@ def _load_occupancy_tables(
             rows = list(csv.DictReader(handle))
         events = [
             event
-            for event in (_norm_event(item.get("event_a")), _norm_event(item.get("event_b")))
+            for event in (
+                _norm_event(item.get("event_a")),
+                _norm_event(item.get("event_b")),
+            )
             if event
         ]
         tables.append((flow_id, events, rows))

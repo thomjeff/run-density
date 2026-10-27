@@ -63,7 +63,9 @@ def build_event_runners_from_results_df(
     if work.empty:
         raise ValueError(f"No finishers with valid Gun/Chip times for {event_name}")
 
-    work["start_offset"] = (work["gun_seconds"] - work["chip_seconds"]).round().astype(int)
+    work["start_offset"] = (
+        (work["gun_seconds"] - work["chip_seconds"]).round().astype(int)
+    )
     work["start_offset"] = work["start_offset"].clip(lower=0)
     work["pace"] = (work["chip_seconds"] / 60.0) / distance_km
     work["runner_id"] = work["No."].astype(int).astype(str)
@@ -116,9 +118,7 @@ def export_raceroster_runner_csvs(
     for sheet_name, event_name, distance_km, filename in specs:
         raw = pd.read_excel(xlsx_path, sheet_name=sheet_name)
         skipped = int(
-            raw["Chip Time"].isna().sum()
-            if "Chip Time" in raw.columns
-            else len(raw)
+            raw["Chip Time"].isna().sum() if "Chip Time" in raw.columns else len(raw)
         )
         runners = build_event_runners_from_results_df(raw, event_name, distance_km)
         target = out_dir / filename

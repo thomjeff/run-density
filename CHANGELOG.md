@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Code Quality gate (#940)
+- flake8, black, and isort share line length 88. Config is `.flake8` and `pyproject.toml`
+- `app/` is formatted so a product edit no longer fails CI on leftover whitespace
+- Existing complexity above 15 is `# noqa: C901`; new functions still fail C901. Bare `except` and unused names still fail
+
 ### Create is Build + Plan only (#938)
 - Create (`app.main`, `:8080`) no longer mounts Execute pages or `/api/execute/*`. Workspace picker is Build | Plan
 - Plan still publishes a Day Plan ZIP (`POST /api/plan/plans`). Race day is `make execute` only

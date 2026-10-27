@@ -11,6 +11,7 @@ import pandas as pd
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
+from app.core.motion.movement_drilldown import load_authored_movements
 from app.core.motion.occupancy import (
     PlaceSpec,
     PlaceStream,
@@ -23,7 +24,6 @@ from app.core.motion.occupancy import (
     query_planar_occupancy,
 )
 from app.core.motion.stream_passage import build_stream_passage_table
-from app.core.motion.movement_drilldown import load_authored_movements
 from app.utils.constants import (
     MOTION_DEFAULT_PLACE_BUFFER_M,
     MOTION_DIRNAME,
@@ -130,9 +130,7 @@ async def get_motion_metadata(
                 "selected_day": selected_day,
                 "available_days": available_days,
                 "metadata": meta,
-                "notes": []
-                if ok
-                else ["Motion metadata not found for this run/day."],
+                "notes": [] if ok else ["Motion metadata not found for this run/day."],
             }
         )
     except Exception as exc:
@@ -232,7 +230,7 @@ async def get_motion_places(
 
 
 @router.get("/api/motion/occupancy")
-async def get_motion_occupancy(
+async def get_motion_occupancy(  # noqa: C901
     run_id: Optional[str] = Query(None),
     day: Optional[str] = Query(None),
     metrics: Optional[str] = Query(
@@ -337,14 +335,10 @@ async def get_motion_occupancy(
                         status_code=404,
                         content={
                             "ok": False,
-                            "error": (
-                                f"loc_id {loc_id} not found or unmappable"
-                            ),
+                            "error": (f"loc_id {loc_id} not found or unmappable"),
                         },
                     )
-                place = place_spec_from_location(
-                    match, buffer_m=float(buffer_m)
-                )
+                place = place_spec_from_location(match, buffer_m=float(buffer_m))
             elif pass_id:
                 data_dir = _analysis_data_dir(run_id)
                 if data_dir is None or not (data_dir / "passes.csv").is_file():
@@ -366,9 +360,7 @@ async def get_motion_occupancy(
                         status_code=404,
                         content={
                             "ok": False,
-                            "error": (
-                                f"pass_id {pass_id} not found or unmappable"
-                            ),
+                            "error": (f"pass_id {pass_id} not found or unmappable"),
                         },
                     )
                 place = PlaceSpec(

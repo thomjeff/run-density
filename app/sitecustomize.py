@@ -11,4 +11,3 @@ if os.getenv("COVERAGE_PROCESS_START"):
     except Exception:
         # Silently continue if coverage is unavailable; avoids breaking runtime.
         pass
-

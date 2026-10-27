@@ -11,29 +11,29 @@ Epic: Issue #277
 """
 
 from __future__ import annotations
+
 import json
 import logging
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from shapely.geometry import LineString, Point
+import numpy as np
+import pandas as pd
 from pyproj import Transformer
+from shapely.geometry import LineString, Point
 
-from app.io.loader import load_locations, load_runners, load_segments
-from app.core.gpx.processor import load_all_courses, GPXCourse
-from app.core.trajectory.crossing import arrival_at_km
+from app.core.gpx.processor import GPXCourse, load_all_courses
 from app.core.locations.report_json import authored_proxy_pass_id
 from app.core.locations.schema import _yn
+from app.core.trajectory.crossing import arrival_at_km
+from app.io.loader import load_locations, load_runners, load_segments
 from app.utils.constants import (
-    LOCATION_SNAP_THRESHOLD_M,
     LOCATION_SEGMENT_CLAMP_M,
     LOCATION_SETUP_BUFFER_MINUTES,
-    SECONDS_PER_MINUTE,
+    LOCATION_SNAP_THRESHOLD_M,
     METERS_PER_KM,
-    TIME_FORMAT_HOURS
+    SECONDS_PER_MINUTE,
 )
 
 # Configure logging
@@ -52,7 +52,8 @@ def order_locations_csv_columns(columns):
     resource = sorted(
         c
         for c in cols
-        if (c.endswith("_count") or c.endswith("_mins")) and c not in _RESOURCE_SKIP_COUNT_COLS
+        if (c.endswith("_count") or c.endswith("_mins"))
+        and c not in _RESOURCE_SKIP_COUNT_COLS
     )
     preferred = [
         "loc_id",
@@ -142,40 +143,40 @@ def order_passes_csv_columns(columns):
 def round_to_interval(value_minutes: float, interval_minutes: float) -> float:
     """
     Round value up to nearest interval.
-    
+
     Issue #277: Used for loc_end rounding.
-    
+
     Args:
         value_minutes: Value to round (in minutes)
         interval_minutes: Rounding interval (in minutes)
-        
+
     Returns:
         Rounded value (in minutes)
     """
     if interval_minutes <= 0:
         return value_minutes
-    
+
     return np.ceil(value_minutes / interval_minutes) * interval_minutes
 
 
 def format_time_hhmmss(seconds: float) -> str:
     """
     Format seconds to hh:mm:ss string.
-    
+
     Args:
         seconds: Time in seconds
-        
+
     Returns:
         Formatted time string (hh:mm:ss)
     """
     if pd.isna(seconds) or seconds is None:
         return "NA"
-    
+
     total_seconds = int(seconds)
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
-    
+
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
@@ -313,40 +314,40 @@ def merge_by_event_timings(
 def parse_segment_ids(seg_id_value: Any) -> List[str]:
     """
     Parse seg_id from locations.csv, handling both single and comma-separated values.
-    
+
     Issue #598: Helper function to parse segment IDs for flag propagation.
-    
+
     Handles formats:
     - Single: "G1"
     - Multiple: "A2,A3"
     - Quoted multiple: ""\"A2,A3""\"
     - Empty/NaN: []
-    
+
     Args:
         seg_id_value: Value from seg_id column (can be string, NaN, None, etc.)
-        
+
     Returns:
         List of segment ID strings (empty list if missing/NaN)
     """
     if pd.isna(seg_id_value) or seg_id_value is None or seg_id_value == "":
         return []
-    
+
     # Convert to string and strip whitespace
     seg_id_str = str(seg_id_value).strip()
-    
+
     if not seg_id_str:
         return []
-    
+
     # Handle quoted strings (e.g., ""\"A2,A3""\"")
     # Remove outer quotes if present
     if seg_id_str.startswith('"') and seg_id_str.endswith('"'):
         seg_id_str = seg_id_str[1:-1]
     if seg_id_str.startswith("'") and seg_id_str.endswith("'"):
         seg_id_str = seg_id_str[1:-1]
-    
+
     # Split by comma and clean up each segment ID
-    segment_ids = [s.strip() for s in seg_id_str.split(',') if s.strip()]
-    
+    segment_ids = [s.strip() for s in seg_id_str.split(",") if s.strip()]
+
     return segment_ids
 
 
@@ -378,96 +379,101 @@ def location_has_proxy_and_seg_conflict(location: pd.Series) -> bool:
     return not seg_id_effectively_empty(location.get("seg_id"))
 
 
-def load_flagged_segments(run_id: Optional[str] = None, day: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+def load_flagged_segments(
+    run_id: Optional[str] = None, day: Optional[str] = None
+) -> Dict[str, Dict[str, Any]]:
     """
     Load flagged segments from flags.json.
-    
+
     Issue #598: Loads flag data for segment-to-location flag propagation.
-    
+
     Args:
         run_id: Optional run ID for runflow structure
         day: Optional day code (fri|sat|sun|mon) for day-scoped data
-        
+
     Returns:
         Dictionary mapping seg_id to flag data (severity, worst_los, etc.)
         Empty dict if flags.json not found or invalid
     """
     flagged_segments = {}
-    
+
     try:
         from app.storage import create_runflow_storage
-        
+
         if not run_id:
-            logger.warning("load_flagged_segments: run_id not provided, cannot load flags.json")
+            logger.warning(
+                "load_flagged_segments: run_id not provided, cannot load flags.json"
+            )
             return flagged_segments
-        
+
         storage = create_runflow_storage(run_id)
-        
+
         # Determine path to flags.json
         if day:
             flags_path = f"{day}/ui/metrics/flags.json"
         else:
             flags_path = "ui/metrics/flags.json"
-        
+
         if not storage.exists(flags_path):
             logger.debug(f"flags.json not found at {flags_path} for run_id={run_id}")
             return flagged_segments
-        
+
         # Load flags.json
         flags_data = storage.read_json(flags_path)
-        
+
         if not flags_data:
             logger.debug(f"flags.json is empty at {flags_path}")
             return flagged_segments
-        
+
         # Handle different formats of flags.json
         flags_list = []
         if isinstance(flags_data, list):
             flags_list = flags_data
         elif isinstance(flags_data, dict):
             # Check for 'flagged_segments' key
-            if 'flagged_segments' in flags_data:
-                flags_list = flags_data['flagged_segments']
+            if "flagged_segments" in flags_data:
+                flags_list = flags_data["flagged_segments"]
             else:
                 logger.warning(f"flags.json has unexpected dict format at {flags_path}")
                 return flagged_segments
-        
+
         # Build lookup dictionary: {seg_id: flag_data}
         for flag_entry in flags_list:
             # Extract seg_id (try both 'seg_id' and 'segment_id' for compatibility)
-            seg_id = flag_entry.get('seg_id') or flag_entry.get('segment_id')
+            seg_id = flag_entry.get("seg_id") or flag_entry.get("segment_id")
             if seg_id:
                 flagged_segments[str(seg_id)] = {
-                    'worst_severity': flag_entry.get('worst_severity'),
-                    'worst_los': flag_entry.get('worst_los'),
-                    'peak_density': flag_entry.get('peak_density'),
-                    'peak_rate': flag_entry.get('peak_rate'),
-                    'flagged_bins': flag_entry.get('flagged_bins') or flag_entry.get('flagged_bin_count', 0),
-                    'note': flag_entry.get('note', ''),
-                    'type': flag_entry.get('type', 'density')
+                    "worst_severity": flag_entry.get("worst_severity"),
+                    "worst_los": flag_entry.get("worst_los"),
+                    "peak_density": flag_entry.get("peak_density"),
+                    "peak_rate": flag_entry.get("peak_rate"),
+                    "flagged_bins": flag_entry.get("flagged_bins")
+                    or flag_entry.get("flagged_bin_count", 0),
+                    "note": flag_entry.get("note", ""),
+                    "type": flag_entry.get("type", "density"),
                 }
-        
-        logger.debug(f"Loaded {len(flagged_segments)} flagged segments from {flags_path}")
-        
+
+        logger.debug(
+            f"Loaded {len(flagged_segments)} flagged segments from {flags_path}"
+        )
+
     except Exception as e:
         logger.warning(f"Could not load flagged segments from flags.json: {e}")
-    
+
     return flagged_segments
 
 
 def get_segment_ranges_for_event(
-    segments_df: pd.DataFrame,
-    segment_ids: List[str],
-    event: str
+    segments_df: pd.DataFrame, segment_ids: List[str], event: str
 ) -> List[Tuple[str, float, float]]:
     """
     Get distance ranges (from_km, to_km) for listed segments for a specific event.
-    
+
     Args:
         segments_df: DataFrame from segments.csv
         segment_ids: List of segment IDs to check
         event: Event name (lowercase: "full", "half", "10k")
-        
+
     Returns:
         List of (seg_id, from_km, to_km) tuples
     """
@@ -475,45 +481,43 @@ def get_segment_ranges_for_event(
     missing_segments = []
     invalid_ranges = []
     not_used_by_event = []
-    
+
     # Use lowercase event names (v2 standard)
     event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
-    
+
     # Validate required columns exist (Issue #559)
     if from_col not in segments_df.columns or to_col not in segments_df.columns:
         logger.error(
             f"Missing required columns for event {event}: {from_col} and/or {to_col} not found in segments.csv"
         )
         return ranges
-    
+
     for seg_id in segment_ids:
         seg_row = segments_df[segments_df["seg_id"] == seg_id]
         if seg_row.empty:
             missing_segments.append(seg_id)
             logger.warning(f"Segment {seg_id} not found in segments.csv (Issue #559)")
             continue
-        
+
         row = seg_row.iloc[0]
         from_km = row.get(from_col)
         to_km = row.get(to_col)
-        
+
         # Check if segment is used by this event
         event_flag = row.get(event_col, "").lower() if event_col in row.index else ""
         if event_flag != "y":
             not_used_by_event.append((seg_id, event_flag))
-            logger.debug(f"Segment {seg_id} not used by event {event} (flag={event_flag})")
+            logger.debug(
+                f"Segment {seg_id} not used by event {event} (flag={event_flag})"
+            )
             continue
-        
+
         if pd.notna(from_km) and pd.notna(to_km) and from_km != to_km:
             # Only add if segment is actually used by this event
             if event_flag == "y":
-                ranges.append((
-                    seg_id,
-                    float(from_km),
-                    float(to_km)
-                ))
+                ranges.append((seg_id, float(from_km), float(to_km)))
             else:
                 logger.debug(
                     f"Segment {seg_id} has range [{from_km}, {to_km}] but not used by event {event} (flag={event_flag})"
@@ -524,7 +528,7 @@ def get_segment_ranges_for_event(
                 f"Segment {seg_id} missing or invalid {from_col}/{to_col} for event {event} "
                 f"(from_km={from_km}, to_km={to_km}) (Issue #559)"
             )
-    
+
     # Enhanced error reporting (Issue #559)
     if missing_segments:
         logger.error(
@@ -550,21 +554,20 @@ def get_segment_ranges_for_event(
             f"Event {event}: Segments {[s[0] for s in not_used_by_event]} are not marked as used by this event "
             f"(but other segments are valid, so location will be processed)."
         )
-    
+
     return ranges
 
 
 def project_point_to_course(
-    location_point_utm: Point,
-    course_polyline_utm: LineString
+    location_point_utm: Point, course_polyline_utm: LineString
 ) -> Optional[float]:
     """
     Project a location point onto a course polyline and return distance along line.
-    
+
     Args:
         location_point_utm: Location point in UTM coordinates
         course_polyline_utm: Course polyline in UTM coordinates
-        
+
     Returns:
         Distance along course in kilometers, or None if projection fails
     """
@@ -582,48 +585,46 @@ def find_nearest_segment(
     location_point_utm: Point,
     segments_df: pd.DataFrame,
     courses: Dict[str, GPXCourse],
-    event: str
+    event: str,
 ) -> Optional[Tuple[str, float]]:
     """
     Find nearest segment to location point (fallback when segments field is empty).
-    
+
     Args:
         location_point_utm: Location point in UTM
         segments_df: DataFrame from segments.csv
         courses: Dictionary of GPX courses
         event: Event name
-        
+
     Returns:
         Tuple of (seg_id, distance_km) or None if no segment within threshold
     """
     from app.core.gpx.processor import generate_segment_coordinates
-    
+
     # GPX courses use lowercase keys
     course = courses.get(event.lower())
     if not course:
         return None
-    
+
     # Convert course to UTM LineString
-    course_points_utm = [
-        WGS84_TO_UTM.transform(p.lon, p.lat) for p in course.points
-    ]
+    course_points_utm = [WGS84_TO_UTM.transform(p.lon, p.lat) for p in course.points]
     course_line_utm = LineString(course_points_utm)
-    
+
     # Project location onto full course
     distance_km = project_point_to_course(location_point_utm, course_line_utm)
     if distance_km is None:
         return None
-    
+
     # Find which segment this distance falls within (use lowercase event names)
     event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
-    
+
     for _, seg_row in segments_df.iterrows():
         if seg_row.get(event_col, "").lower() == "y":
             from_km = seg_row.get(from_col)
             to_km = seg_row.get(to_col)
-            
+
             if pd.notna(from_km) and pd.notna(to_km):
                 if from_km <= distance_km <= to_km:
                     # Check distance from location to segment centerline
@@ -640,8 +641,10 @@ def find_nearest_segment(
                         continue
                     direction = seg_row.get("direction")
                     width_m = seg_row.get("width_m")
-                    if not direction or width_m is None or (
-                        isinstance(width_m, float) and pd.isna(width_m)
+                    if (
+                        not direction
+                        or width_m is None
+                        or (isinstance(width_m, float) and pd.isna(width_m))
                     ):
                         logger.warning(
                             "find_nearest_segment: segment %s missing direction or width_m; skipping",
@@ -649,39 +652,42 @@ def find_nearest_segment(
                         )
                         continue
 
-                    segments_list = [{
-                        "seg_id": seg_id,
-                        "segment_label": seg_label,
-                        "direction": direction,
-                        "width_m": width_m,
-                        event_col: "y",
-                        f"{event_col}_from_km": from_km,
-                        f"{event_col}_to_km": to_km,
-                    }]
+                    segments_list = [
+                        {
+                            "seg_id": seg_id,
+                            "segment_label": seg_label,
+                            "direction": direction,
+                            "width_m": width_m,
+                            event_col: "y",
+                            f"{event_col}_from_km": from_km,
+                            f"{event_col}_to_km": to_km,
+                        }
+                    ]
                     seg_coords = generate_segment_coordinates(courses, segments_list)
-                    
+
                     if seg_coords and seg_coords[0].get("line_coords"):
                         seg_line_coords = seg_coords[0]["line_coords"]
                         seg_points_utm = [
-                            WGS84_TO_UTM.transform(lon, lat) for lon, lat in seg_line_coords
+                            WGS84_TO_UTM.transform(lon, lat)
+                            for lon, lat in seg_line_coords
                         ]
                         seg_line_utm = LineString(seg_points_utm)
-                        
+
                         # Calculate distance from point to segment
                         distance_to_seg_m = location_point_utm.distance(seg_line_utm)
-                        
+
                         if distance_to_seg_m <= LOCATION_SNAP_THRESHOLD_M:
                             return (seg_id, distance_km)
-    
+
     return None
 
 
-def calculate_arrival_times_for_location(
+def calculate_arrival_times_for_location(  # noqa: C901
     location: pd.Series,
     runners_df: pd.DataFrame,
     segments_df: pd.DataFrame,
     courses: Dict[str, GPXCourse],
-    start_times: Dict[str, float]
+    start_times: Dict[str, float],
 ) -> Dict[str, List[float]]:
     """
     Calculate arrival times for all eligible runners at a location, keyed by event.
@@ -691,21 +697,21 @@ def calculate_arrival_times_for_location(
                 (e.g., B1 outbound, B3 return, D1 outbound, D2 return).
     Issue #828: Returns per-event buckets so callers can compute aggregate and
                 by-event first/peak/last without changing arrival math.
-    
+
     Args:
         location: Location row from locations.csv
         runners_df: DataFrame from runners.csv
         segments_df: DataFrame from segments.csv
         courses: Dictionary of GPX courses
         start_times: Dictionary of event start times in minutes
-        
+
     Returns:
         Mapping of event id → list of arrival times in seconds (may include
         duplicates for multiple crossings). Same runner may appear multiple
         times (once per segment crossing).
     """
     arrivals_by_event: Dict[str, List[float]] = {}
-    
+
     # Eligible events: product vocabulary ∩ (courses present or all COURSE_EVENT_IDS),
     # discovered dynamically from location flags (#701 / #531 elite+open).
     from app.core.event_discovery import active_events
@@ -719,47 +725,55 @@ def calculate_arrival_times_for_location(
             f"Location {location.get('loc_id')}: No eligible events among {candidate_events}"
         )
         return arrivals_by_event
-    
-    logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")
-    
+
+    logger.debug(
+        f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}"
+    )
+
     # Convert location point to UTM
     lat = location.get("lat")
     lon = location.get("lon")
     if pd.isna(lat) or pd.isna(lon):
         logger.warning(f"Location {location.get('loc_id')} has invalid coordinates")
         return arrivals_by_event
-    
+
     location_point_utm = Point(WGS84_TO_UTM.transform(lon, lat))
-    
+
     # Get listed segments (if any)
     segments_list = location.get("segments_list", [])
-    
+
     # Process each eligible event
     for event in eligible_events:
         # GPX courses use lowercase keys
         course = courses.get(event.lower())
         if not course:
             continue
-        
+
         # Convert course to UTM LineString
         course_points_utm = [
             WGS84_TO_UTM.transform(p.lon, p.lat) for p in course.points
         ]
         course_line_utm = LineString(course_points_utm)
-        
+
         # Project location onto course
         distance_km = project_point_to_course(location_point_utm, course_line_utm)
         if distance_km is None:
-            logger.warning(f"Location {location.get('loc_id')} ({event}): Projection failed - could not project point to course")
+            logger.warning(
+                f"Location {location.get('loc_id')} ({event}): Projection failed - could not project point to course"
+            )
             continue
-        
-        logger.debug(f"Location {location.get('loc_id')} ({event}): Projected distance = {distance_km:.3f}km")
-        
+
+        logger.debug(
+            f"Location {location.get('loc_id')} ({event}): Projected distance = {distance_km:.3f}km"
+        )
+
         # Issue #480: Process ALL listed segments independently for multiple crossings
         if segments_list:
             from app.core.gpx.processor import generate_segment_coordinates
-            
-            segment_ranges = get_segment_ranges_for_event(segments_df, segments_list, event)
+
+            segment_ranges = get_segment_ranges_for_event(
+                segments_df, segments_list, event
+            )
             if not segment_ranges:
                 # Enhanced error message with validation details (Issue #559)
                 logger.warning(
@@ -769,45 +783,51 @@ def calculate_arrival_times_for_location(
                     f"(3) Segments not marked as used by event {event}, (4) Invalid distance ranges."
                 )
                 continue
-            
+
             # Get runners for this event (case-insensitive matching)
             event_runners = runners_df[
                 runners_df["event"].astype(str).str.lower() == event.lower()
             ].copy()
-            
+
             if event_runners.empty:
-                logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
+                logger.warning(
+                    f"Location {location.get('loc_id')} ({event}): No runners found for event {event}"
+                )
                 continue
-            
+
             event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
             # GPX courses use lowercase keys ("10k", not "10K")
             event_col_gpx = event.lower()
-            
+
             # Issue #480: Process ALL listed segments independently
             # This ensures we capture all crossings (e.g., B1 outbound, B3 return, D1 outbound, D2 return)
             processed_segments = []
             event_arrivals = arrivals_by_event.setdefault(event, [])
-            
+
             for seg_id, from_km, to_km in segment_ranges:
-                logger.debug(f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km")
-                
+                logger.debug(
+                    f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km"
+                )
+
                 # Get segment_label from segments_df (required by generate_segment_coordinates)
-                seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                seg_row = segments_df[segments_df["seg_id"] == seg_id]
                 if seg_row.empty:
                     raise ValueError(
                         f"Location {location.get('loc_id')} ({event}): Segment {seg_id} not found in segments_df. "
                         "This is a data validation error - fail-fast."
                     )
-                seg_label = seg_row.iloc[0].get('seg_label') or seg_row.iloc[0].get('segment_label')
+                seg_label = seg_row.iloc[0].get("seg_label") or seg_row.iloc[0].get(
+                    "segment_label"
+                )
                 if not seg_label:
                     raise ValueError(
                         f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df. "
                         "This is a data validation error - fail-fast."
                     )
-                
+
                 # Issue #655: Extract direction and width_m from segments_df (required by generate_segment_coordinates)
-                direction = seg_row.iloc[0].get('direction')
-                width_m = seg_row.iloc[0].get('width_m')
+                direction = seg_row.iloc[0].get("direction")
+                width_m = seg_row.iloc[0].get("width_m")
                 if not direction:
                     raise ValueError(
                         f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing direction in segments_df. "
@@ -818,22 +838,24 @@ def calculate_arrival_times_for_location(
                         f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing width_m in segments_df. "
                         "This is a data validation error - fail-fast."
                     )
-                
+
                 # Get segment centerline for this event
-                segments_for_gpx = [{
-                    "seg_id": seg_id,
-                    "segment_label": seg_label,  # Issue #655: Add segment_label required by generate_segment_coordinates
-                    "direction": direction,  # Issue #655: Add direction required by generate_segment_coordinates validation
-                    "width_m": width_m,  # Issue #655: Add width_m required by generate_segment_coordinates validation
-                    event_col_gpx: "y",
-                    f"{event_col_gpx}_from_km": from_km,
-                    f"{event_col_gpx}_to_km": to_km
-                }]
+                segments_for_gpx = [
+                    {
+                        "seg_id": seg_id,
+                        "segment_label": seg_label,  # Issue #655: Add segment_label required by generate_segment_coordinates
+                        "direction": direction,  # Issue #655: Add direction required by generate_segment_coordinates validation
+                        "width_m": width_m,  # Issue #655: Add width_m required by generate_segment_coordinates validation
+                        event_col_gpx: "y",
+                        f"{event_col_gpx}_from_km": from_km,
+                        f"{event_col_gpx}_to_km": to_km,
+                    }
+                ]
                 seg_coords = generate_segment_coordinates(courses, segments_for_gpx)
-                
+
                 # Determine distance along segment for this location
                 seg_distance_km = None
-                
+
                 if seg_coords and seg_coords[0].get("line_coords"):
                     # Project location onto segment centerline
                     seg_line_coords = seg_coords[0]["line_coords"]
@@ -841,24 +863,30 @@ def calculate_arrival_times_for_location(
                         WGS84_TO_UTM.transform(lon, lat) for lon, lat in seg_line_coords
                     ]
                     seg_line_utm = LineString(seg_points_utm)
-                    
+
                     # Check distance from location to segment centerline
                     distance_to_seg_m = location_point_utm.distance(seg_line_utm)
-                    
+
                     if distance_to_seg_m <= LOCATION_SNAP_THRESHOLD_M:
                         # Project onto segment centerline to get distance along segment
                         seg_distance_m = seg_line_utm.project(location_point_utm)
                         seg_distance_relative_km = seg_distance_m / METERS_PER_KM
-                        
+
                         # Convert to absolute course distance: from_km + distance_along_segment
                         absolute_distance_km = from_km + seg_distance_relative_km
-                        
+
                         # Verify it's within segment bounds. Boundary pins (turnarounds,
                         # corridor junctions) can land metres past an end — clamp within
                         # LOCATION_SEGMENT_CLAMP_M instead of failing to midpoint fallback.
                         clamp_km = LOCATION_SEGMENT_CLAMP_M / METERS_PER_KM
-                        if (from_km - clamp_km) <= absolute_distance_km <= (to_km + clamp_km):
-                            seg_distance_km = max(from_km, min(absolute_distance_km, to_km))
+                        if (
+                            (from_km - clamp_km)
+                            <= absolute_distance_km
+                            <= (to_km + clamp_km)
+                        ):
+                            seg_distance_km = max(
+                                from_km, min(absolute_distance_km, to_km)
+                            )
                             logger.debug(
                                 f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {seg_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_relative_km:.3f}km)"
                             )
@@ -866,7 +894,7 @@ def calculate_arrival_times_for_location(
                             logger.debug(
                                 f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}]"
                             )
-                
+
                 # Fallback: use full course projection if centerline projection failed or unavailable
                 if seg_distance_km is None:
                     if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
@@ -881,7 +909,7 @@ def calculate_arrival_times_for_location(
                         seg_distance_km = (from_km + to_km) / 2.0
                         segment_length_km = to_km - from_km
                         projection_error_km = abs(distance_km - seg_distance_km)
-                        
+
                         # Enhanced logging with detailed error information (Issue #558)
                         logger.warning(
                             f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km "
@@ -890,7 +918,7 @@ def calculate_arrival_times_for_location(
                             f"projection error: {projection_error_km:.3f}km. "
                             f"Using segment midpoint {seg_distance_km:.3f}km for arrival calculations."
                         )
-                
+
                 # Calculate arrival times for ALL runners at this segment distance
                 # Issue #480: Same runner can contribute multiple arrival times (once per segment)
                 for _, runner in event_runners.iterrows():
@@ -898,7 +926,7 @@ def calculate_arrival_times_for_location(
                     if pd.isna(start_offset):
                         start_offset = 0
                     # start_offset is in seconds, not minutes
-                    
+
                     pace_min_per_km = runner.get("pace", 0)
                     if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
                         continue
@@ -910,9 +938,9 @@ def calculate_arrival_times_for_location(
                         km=seg_distance_km,
                     )
                     event_arrivals.append(arrival_time)
-                
+
                 processed_segments.append(seg_id)
-            
+
             logger.debug(
                 f"Location {location.get('loc_id')} ({event}): Processed {len(processed_segments)} segments: {processed_segments}, "
                 f"calculated arrival times for {len(event_runners)} runners across {len(processed_segments)} segments"
@@ -920,34 +948,44 @@ def calculate_arrival_times_for_location(
             continue  # Skip the single-segment calculation below
         else:
             # Fallback: find nearest segment
-            nearest = find_nearest_segment(location_point_utm, segments_df, courses, event)
+            nearest = find_nearest_segment(
+                location_point_utm, segments_df, courses, event
+            )
             if not nearest:
-                logger.warning(f"Location {location.get('loc_id')} ({event}): No nearest segment found")
+                logger.warning(
+                    f"Location {location.get('loc_id')} ({event}): No nearest segment found"
+                )
                 continue
             # distance_km already set from projection
-            logger.debug(f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km")
-        
+            logger.debug(
+                f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km"
+            )
+
         # Get runners for this event (case-insensitive matching for v2 lowercase standard)
         event_runners = runners_df[
             runners_df["event"].astype(str).str.lower() == event.lower()
         ].copy()
-        
-        logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}")
-        
+
+        logger.debug(
+            f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}"
+        )
+
         if event_runners.empty:
-            logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
+            logger.warning(
+                f"Location {location.get('loc_id')} ({event}): No runners found for event {event}"
+            )
             continue
-        
+
         # Calculate arrival times
         event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
         event_arrivals = arrivals_by_event.setdefault(event, [])
-        
+
         for _, runner in event_runners.iterrows():
             start_offset = runner.get("start_offset", 0)
             if pd.isna(start_offset):
                 start_offset = 0
             # start_offset is in seconds, not minutes
-            
+
             pace_min_per_km = runner.get("pace", 0)
             if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
                 continue
@@ -959,12 +997,12 @@ def calculate_arrival_times_for_location(
                 km=distance_km,
             )
             event_arrivals.append(arrival_time)
-        
+
         logger.debug(
             f"Location {location.get('loc_id')} ({event}): Calculated {len(event_arrivals)} "
             f"arrival times for {len(event_runners)} runners at distance {distance_km:.3f}km"
         )
-    
+
     return arrivals_by_event
 
 
@@ -1001,7 +1039,7 @@ def _write_computed_locations_json(
     return path
 
 
-def generate_location_report(
+def generate_location_report(  # noqa: C901
     locations_csv: str,
     runners_csv: str,
     segments_csv: str,
@@ -1012,13 +1050,13 @@ def generate_location_report(
     gpx_paths: Optional[Dict[str, str]] = None,
     locations_df: Optional[pd.DataFrame] = None,
     runners_df: Optional[pd.DataFrame] = None,
-    segments_df: Optional[pd.DataFrame] = None
+    segments_df: Optional[pd.DataFrame] = None,
 ) -> Dict[str, Any]:
     """
     Generate locations report with arrival modeling and operational timing.
-    
+
     Issue #277: Main entry point for location report generation.
-    
+
     Args:
         locations_csv: Path to locations.csv (required)
         runners_csv: Path to runners.csv (required)
@@ -1027,21 +1065,21 @@ def generate_location_report(
         output_dir: Output directory for report
         run_id: Optional run ID for runflow structure
         gpx_paths: Mapping of event name to GPX file path (required)
-        
+
     Returns:
         Dictionary with report results and file path
     """
     from app.report_utils import get_report_paths, get_runflow_category_path
-    
+
     # Issue #512: Start times must be provided, not from constants
     if start_times is None:
         raise ValueError(
             "start_times parameter is required. Start times must come from API request, "
             "not from hardcoded constants. (Issue #512)"
         )
-    
+
     logger.debug("Starting location report generation...")
-    
+
     try:
         if locations_df is None:
             locations_df = load_locations(locations_csv)
@@ -1058,32 +1096,36 @@ def generate_location_report(
     except Exception as e:
         logger.error(f"Failed to load input data: {e}")
         return {"ok": False, "error": str(e), "error_type": "load_error"}
-    
+
     if locations_df.empty:
         logger.warning("No locations found in locations.csv")
         return {"ok": False, "error": "No locations to process"}
-    
+
     # Determine output path
     # Issue #598: Only override output_dir if run_id is provided AND output_dir is default
     # For v2, output_dir is already set correctly, so don't override
     if run_id and output_dir == "reports":
         output_dir = get_runflow_category_path(run_id, "reports")
-    
+
     # Calculate earliest start time for loc_start calculation
     earliest_start_min = min(start_times.values()) if start_times else 0
-    loc_start_base_sec = (earliest_start_min - LOCATION_SETUP_BUFFER_MINUTES) * SECONDS_PER_MINUTE
-    
+    loc_start_base_sec = (
+        earliest_start_min - LOCATION_SETUP_BUFFER_MINUTES
+    ) * SECONDS_PER_MINUTE
+
     # Issue #598: Load flagged segments for flag propagation
     flagged_segments = {}
     if run_id:
         flagged_segments = load_flagged_segments(run_id=run_id, day=day)
-        logger.debug(f"Issue #598: Loaded {len(flagged_segments)} flagged segments for flag propagation (day={day})")
-    
+        logger.debug(
+            f"Issue #598: Loaded {len(flagged_segments)} flagged segments for flag propagation (day={day})"
+        )
+
     # Process each location
     report_rows = []
     # Build lookup dictionary for proxy locations (will be populated as we process)
     locations_by_id = {}
-    
+
     for _, location in locations_df.iterrows():
         pass_id = location.get("pass_id")
         if pass_id is None or (isinstance(pass_id, float) and pd.isna(pass_id)):
@@ -1091,9 +1133,9 @@ def generate_location_report(
         human_loc_id = location.get("loc_id")
         loc_label = location.get("loc_label", "")
         loc_type = location.get("loc_type", "").lower()
-        
+
         logger.debug(f"Processing pass {pass_id} (loc_id={human_loc_id}): {loc_label}")
-        
+
         # Initialize report row
         # 2027: pass_id = timed instance; loc_id = human Location; pass_key = opaque unifier
         pass_key = ""
@@ -1136,9 +1178,9 @@ def generate_location_report(
             "flagged_seg_id": None,
             "flag_severity": None,
             "flag_worst_los": None,
-            "flag_note": None
+            "flag_note": None,
         }
-        
+
         # Issue #751: proxy_pass_id + seg_id both set — ambiguous; fail this row for timing
         if location_has_proxy_and_seg_conflict(location):
             report_row["timing_source"] = "error:proxy_and_seg"
@@ -1156,24 +1198,28 @@ def generate_location_report(
             report_rows.append(report_row)
             locations_by_id[pass_id] = report_row
             continue
-        
+
         # Check if timing_source is set to proxy:n in input locations.csv
         # (keep using pass_id as loc_id alias in nested code via binding)
         loc_id = pass_id
         # This handles locations that should copy timing from another location
         timing_source = location.get("timing_source", "")
-        if pd.notna(timing_source) and isinstance(timing_source, str) and timing_source.startswith("proxy:"):
+        if (
+            pd.notna(timing_source)
+            and isinstance(timing_source, str)
+            and timing_source.startswith("proxy:")
+        ):
             try:
                 proxy_id = int(timing_source.split(":")[1])
                 logger.debug(
                     f"Location {loc_id} ({loc_label}): timing_source={timing_source}, "
                     f"will copy timing from location {proxy_id}"
                 )
-                
+
                 # Look up proxy location (must be processed first, so check if it exists)
                 # If not yet processed, we'll handle it in a second pass
                 proxy_location = locations_by_id.get(proxy_id)
-                
+
                 if proxy_location:
                     # Copy operational timing from proxy location (loc_start, loc_end, duration)
                     # Note: first_runner, peak_start, peak_end, last_runner are NOT copied
@@ -1182,13 +1228,15 @@ def generate_location_report(
                     report_row["loc_end"] = proxy_location.get("loc_end")
                     report_row["duration"] = proxy_location.get("duration")
                     report_row["timing_source"] = timing_source
-                    report_row["notes"] = f"{location.get('notes', '')} (Proxy to location {proxy_id})".strip()
-                    
+                    report_row["notes"] = (
+                        f"{location.get('notes', '')} (Proxy to location {proxy_id})".strip()
+                    )
+
                     logger.debug(
                         f"Location {loc_id} ({loc_label}): Copied timing from proxy location {proxy_id}: "
                         f"loc_end={report_row['loc_end']}, duration={report_row['duration']}"
                     )
-                    
+
                     # Add to report_rows and continue (skip arrival time calculation)
                     report_rows.append(report_row)
                     locations_by_id[loc_id] = report_row
@@ -1205,23 +1253,29 @@ def generate_location_report(
                     f"Location {loc_id} ({loc_label}): Invalid timing_source format '{timing_source}': {e}"
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
-        
+
         proxy_loc_id = location.get("proxy_pass_id")
-        if proxy_loc_id is None or (isinstance(proxy_loc_id, float) and pd.isna(proxy_loc_id)) or proxy_loc_id == "":
+        if (
+            proxy_loc_id is None
+            or (isinstance(proxy_loc_id, float) and pd.isna(proxy_loc_id))
+            or proxy_loc_id == ""
+        ):
             proxy_loc_id = location.get("proxy_loc_id")
-        
+
         # Issue #598: Propagate flags from segments
         # 1. Get seg_id(s) for this location (direct or via proxy)
         location_seg_ids = []
         seg_id_value = location.get("seg_id")
         pass_lookup_col = "pass_id" if "pass_id" in locations_df.columns else "loc_id"
-        
+
         if pd.notna(seg_id_value) and seg_id_value != "":
             # Direct seg_id match
             location_seg_ids = parse_segment_ids(seg_id_value)
         elif pd.notna(proxy_loc_id) and proxy_loc_id != "":
             # Proxy pass: use proxy pass's seg_id
-            proxy_location_row = locations_df[locations_df[pass_lookup_col] == proxy_loc_id]
+            proxy_location_row = locations_df[
+                locations_df[pass_lookup_col] == proxy_loc_id
+            ]
             if not proxy_location_row.empty:
                 proxy_seg_id = proxy_location_row.iloc[0].get("seg_id")
                 if pd.notna(proxy_seg_id) and proxy_seg_id != "":
@@ -1229,14 +1283,14 @@ def generate_location_report(
                     logger.debug(
                         f"Location {loc_id} ({loc_label}): Using proxy pass {proxy_loc_id}'s seg_id: {location_seg_ids}"
                     )
-        
+
         # 2. Check if ANY of the location's segment IDs are flagged
         flagged_seg_id = None
         flag_severity = None
         flag_worst_los = None
         flag_note = None
         is_flagged = False
-        
+
         for seg_id in location_seg_ids:
             if seg_id in flagged_segments:
                 flag_data = flagged_segments[seg_id]
@@ -1244,40 +1298,45 @@ def generate_location_report(
                 # Record first flagged segment as the trigger
                 if not flagged_seg_id:
                     flagged_seg_id = seg_id
-                    flag_severity = flag_data.get('worst_severity')
-                    flag_worst_los = flag_data.get('worst_los')
+                    flag_severity = flag_data.get("worst_severity")
+                    flag_worst_los = flag_data.get("worst_los")
                     # Build note from flag data
                     note_parts = []
-                    if flag_data.get('flagged_bins'):
+                    if flag_data.get("flagged_bins"):
                         note_parts.append(f"{flag_data['flagged_bins']} bins flagged")
                     if flag_severity:
                         note_parts.append(f"severity: {flag_severity}")
-                    flag_note = ", ".join(note_parts) if note_parts else flag_data.get('note', '')
+                    flag_note = (
+                        ", ".join(note_parts)
+                        if note_parts
+                        else flag_data.get("note", "")
+                    )
                 break  # Use first flagged segment found
-        
+
         # 3. Set flag fields in report_row
         report_row["flag"] = is_flagged
         report_row["flagged_seg_id"] = flagged_seg_id
         report_row["flag_severity"] = flag_severity
         report_row["flag_worst_los"] = flag_worst_los
         report_row["flag_note"] = flag_note
-        
+
         if is_flagged:
             logger.debug(
                 f"Location {loc_id} ({loc_label}): Flagged via segment {flagged_seg_id} "
                 f"(severity={flag_severity}, los={flag_worst_los})"
             )
-        
+
         # Issue #751: Skip arrival modeling for traffic, or any loc_type with proxy_loc_id and empty seg_id
         # (operational window filled from proxy in Issue #479 / #751 loop below).
         skip_arrival_modeling = loc_type == "traffic" or (
-            proxy_loc_id_is_set(proxy_loc_id) and seg_id_effectively_empty(location.get("seg_id"))
+            proxy_loc_id_is_set(proxy_loc_id)
+            and seg_id_effectively_empty(location.get("seg_id"))
         )
         if skip_arrival_modeling:
             report_rows.append(report_row)
             locations_by_id[loc_id] = report_row
             continue
-        
+
         # Calculate arrival times (per-event buckets — Issue #828)
         arrivals_by_event = calculate_arrival_times_for_location(
             location, runners_df, segments_df, courses, start_times
@@ -1285,9 +1344,14 @@ def generate_location_report(
         arrival_times: List[float] = []
         for times in arrivals_by_event.values():
             arrival_times.extend(times)
-        
+
         if not arrival_times:
-            loc_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
+            loc_row = locations_df[
+                locations_df[
+                    "pass_id" if "pass_id" in locations_df.columns else "loc_id"
+                ]
+                == loc_id
+            ]
             if not loc_row.empty:
                 loc = loc_row.iloc[0]
                 logger.warning(
@@ -1300,7 +1364,7 @@ def generate_location_report(
             report_rows.append(report_row)
             locations_by_id[loc_id] = report_row
             continue
-        
+
         # Aggregate statistics (union of all events — unchanged semantics)
         timing = compute_timing_window(arrival_times)
         report_row["first_runner"] = timing["first_runner"]
@@ -1308,7 +1372,7 @@ def generate_location_report(
         report_row["peak_end"] = timing["peak_end"]
         report_row["last_runner"] = timing["last_runner"]
         report_row["by_event"] = build_by_event_timings(arrivals_by_event)
-        
+
         # Calculate loc_end (last_runner + buffer, rounded to interval)
         if report_row["last_runner"] != "NA":
             arrival_times_sorted = sorted(arrival_times)
@@ -1316,43 +1380,57 @@ def generate_location_report(
             buffer_minutes = location.get("buffer", 0)
             if pd.isna(buffer_minutes):
                 buffer_minutes = 0
-            
+
             interval_minutes = location.get("interval", 5)
             if pd.isna(interval_minutes):
                 interval_minutes = 5
-            
+
             loc_end_minutes = (last_runner_sec / SECONDS_PER_MINUTE) + buffer_minutes
-            loc_end_minutes_rounded = round_to_interval(loc_end_minutes, interval_minutes)
-            report_row["loc_end"] = format_time_hhmmss(loc_end_minutes_rounded * SECONDS_PER_MINUTE)
-            
+            loc_end_minutes_rounded = round_to_interval(
+                loc_end_minutes, interval_minutes
+            )
+            report_row["loc_end"] = format_time_hhmmss(
+                loc_end_minutes_rounded * SECONDS_PER_MINUTE
+            )
+
             # Calculate duration
-            duration_minutes = loc_end_minutes_rounded - (loc_start_base_sec / SECONDS_PER_MINUTE)
-            report_row["duration"] = int(duration_minutes) if duration_minutes > 0 else 0
-        
+            duration_minutes = loc_end_minutes_rounded - (
+                loc_start_base_sec / SECONDS_PER_MINUTE
+            )
+            report_row["duration"] = (
+                int(duration_minutes) if duration_minutes > 0 else 0
+            )
+
         report_rows.append(report_row)
         locations_by_id[loc_id] = report_row
-    
+
     # Second pass: Handle locations with timing_source="proxy:n" that referenced locations not yet processed
     # This ensures proxy locations are available when needed
     for i, report_row in enumerate(report_rows):
         loc_id = report_row["loc_id"]
-        location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
-        
+        location_row = locations_df[
+            locations_df["pass_id" if "pass_id" in locations_df.columns else "loc_id"]
+            == loc_id
+        ]
+
         if location_row.empty:
             continue
-        
+
         location = location_row.iloc[0]
         timing_source = location.get("timing_source", "")
-        
+
         # Check if this location needs proxy timing and wasn't handled in first pass
-        if (pd.notna(timing_source) and isinstance(timing_source, str) and 
-            timing_source.startswith("proxy:") and 
-            report_row.get("timing_source") == "modeled"):  # Only process if not already handled
-            
+        if (
+            pd.notna(timing_source)
+            and isinstance(timing_source, str)
+            and timing_source.startswith("proxy:")
+            and report_row.get("timing_source") == "modeled"
+        ):  # Only process if not already handled
+
             try:
                 proxy_id = int(timing_source.split(":")[1])
                 proxy_location = locations_by_id.get(proxy_id)
-                
+
                 if proxy_location:
                     # Copy operational timing from proxy location (loc_start, loc_end, duration)
                     # Note: first_runner, peak_start, peak_end, last_runner are NOT copied
@@ -1361,14 +1439,14 @@ def generate_location_report(
                     report_row["loc_end"] = proxy_location.get("loc_end")
                     report_row["duration"] = proxy_location.get("duration")
                     report_row["timing_source"] = timing_source
-                    
+
                     original_notes = report_row.get("notes", "")
                     proxy_note = f"Proxy to location {proxy_id}"
                     if original_notes:
                         report_row["notes"] = f"{original_notes} ({proxy_note})"
                     else:
                         report_row["notes"] = proxy_note
-                    
+
                     logger.debug(
                         f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
                         f"Copied timing from proxy location {proxy_id} in second pass: "
@@ -1386,26 +1464,29 @@ def generate_location_report(
                     f"Invalid timing_source format '{timing_source}': {e}"
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
-    
+
     # Issue #751 / #479: Process proxy_pass_id when seg_id is empty (all loc_types)
     # Build lookup dictionary for all processed passes (refresh after second pass)
     locations_by_id = {row["pass_id"]: row for row in report_rows}
-    
+
     for report_row in report_rows:
         if report_row.get("timing_source") == "error:proxy_and_seg":
             continue
-        
+
         loc_id = report_row["pass_id"]
-        location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
-        
+        location_row = locations_df[
+            locations_df["pass_id" if "pass_id" in locations_df.columns else "loc_id"]
+            == loc_id
+        ]
+
         if location_row.empty:
             continue
-        
+
         location = location_row.iloc[0]
         proxy_loc_id = location.get("proxy_pass_id")
         if not proxy_loc_id_is_set(proxy_loc_id):
             proxy_loc_id = location.get("proxy_loc_id")
-        
+
         logger.debug(
             "Pass %s: proxy_pass_id=%s, type=%s, isna=%s",
             loc_id,
@@ -1413,17 +1494,17 @@ def generate_location_report(
             type(proxy_loc_id),
             pd.isna(proxy_loc_id) if hasattr(pd, "isna") else "N/A",
         )
-        
+
         if not proxy_loc_id_is_set(proxy_loc_id):
             logger.debug(
                 "Pass %s: No proxy_pass_id, keeping timing_source as modeled",
                 loc_id,
             )
             continue
-        
+
         if not seg_id_effectively_empty(location.get("seg_id")):
             continue
-        
+
         # Convert proxy_loc_id to int for lookup (handle string/numeric)
         try:
             proxy_id = int(proxy_loc_id)
@@ -1434,10 +1515,10 @@ def generate_location_report(
             )
             report_row["timing_source"] = "error:proxy_not_found"
             continue
-        
+
         # Look up proxy location
         proxy_location = locations_by_id.get(proxy_id)
-        
+
         if not proxy_location:
             logger.error(
                 f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
@@ -1445,7 +1526,7 @@ def generate_location_report(
             )
             report_row["timing_source"] = "error:proxy_not_found"
             continue
-        
+
         # Check if proxy location has loc_end
         proxy_loc_end = proxy_location.get("loc_end")
         if not proxy_loc_end or proxy_loc_end == "NA" or pd.isna(proxy_loc_end):
@@ -1455,27 +1536,29 @@ def generate_location_report(
             )
             report_row["timing_source"] = "error:proxy_not_found"
             continue
-        
+
         # Copy loc_end from proxy location
         report_row["loc_end"] = proxy_loc_end
-        
+
         # Calculate duration: loc_end - loc_start (in minutes)
         # Parse loc_end time string (hh:mm:ss) to seconds
         try:
             loc_end_parts = proxy_loc_end.split(":")
             loc_end_sec = (
-                int(loc_end_parts[0]) * 3600 +
-                int(loc_end_parts[1]) * 60 +
-                int(loc_end_parts[2])
+                int(loc_end_parts[0]) * 3600
+                + int(loc_end_parts[1]) * 60
+                + int(loc_end_parts[2])
             )
-            
+
             # Calculate duration in minutes
             duration_minutes = (loc_end_sec - loc_start_base_sec) / SECONDS_PER_MINUTE
-            report_row["duration"] = int(duration_minutes) if duration_minutes > 0 else 0
-            
+            report_row["duration"] = (
+                int(duration_minutes) if duration_minutes > 0 else 0
+            )
+
             # Set timing_source
             report_row["timing_source"] = f"proxy:{proxy_id}"
-            
+
             logger.debug(
                 f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
                 f"Set loc_end={proxy_loc_end} and duration={report_row['duration']} from proxy location {proxy_id}"
@@ -1488,10 +1571,10 @@ def generate_location_report(
             report_row["timing_source"] = "error:proxy_not_found"
             report_row["loc_end"] = None
             report_row["duration"] = None
-    
+
     # Issue #589: Dynamically detect and add resource count and minutes fields
     # This must be done after all report_rows are created and duration is calculated
-    
+
     # Detect all *_count columns from the first location (all locations should have same columns)
     if report_rows and len(locations_df) > 0:
         count_columns = [
@@ -1499,19 +1582,24 @@ def generate_location_report(
             for col in locations_df.columns
             if col.endswith("_count") and col not in _RESOURCE_SKIP_COUNT_COLS
         ]
-        
+
         # Add *_count and *_mins fields to each report_row
         for report_row in report_rows:
             duration_minutes = report_row.get("duration", 0)
             if duration_minutes is None:
                 duration_minutes = 0
-            
+
             # Add each resource count field
             for count_col in count_columns:
                 # Get count value from original pass data
                 loc_id = report_row.get("pass_id", report_row.get("loc_id"))
-                location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
-                
+                location_row = locations_df[
+                    locations_df[
+                        "pass_id" if "pass_id" in locations_df.columns else "loc_id"
+                    ]
+                    == loc_id
+                ]
+
                 if not location_row.empty:
                     location = location_row.iloc[0]
                     count_value = location.get(count_col, 0)
@@ -1521,15 +1609,15 @@ def generate_location_report(
                         count_value = int(count_value)  # Ensure integer
                 else:
                     count_value = 0
-                
+
                 # Add count field to report_row
                 report_row[count_col] = count_value
-                
+
                 # Calculate and add corresponding _mins field
                 mins_col = count_col.replace("_count", "_mins")
                 mins_value = count_value * duration_minutes
                 report_row[mins_col] = int(mins_value) if mins_value >= 0 else 0
-    
+
     # Resolve human proxy_loc_id from authored proxy_pass_id (Issues #894 / #895)
     from app.core.locations.report_json import attach_resolved_proxies
 
@@ -1589,5 +1677,5 @@ def generate_location_report(
         "passes_relative_path": passes_rel,
         "locations_processed": len(report_df),
         "locations_consolidated": len(locations_df_out),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }

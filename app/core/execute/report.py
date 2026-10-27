@@ -33,11 +33,7 @@ def count_codes(
     """Package resource codes as `{code}_count` columns, Locations.csv order."""
     codes: List[str] = []
     if available:
-        codes = [
-            str(code).strip().lower()
-            for code in available
-            if str(code).strip()
-        ]
+        codes = [str(code).strip().lower() for code in available if str(code).strip()]
     else:
         seen = set()
         for row in locations:
@@ -49,9 +45,7 @@ def count_codes(
                     continue
                 seen.add(name[:-6].strip().lower())
         codes = list(seen)
-    return sorted(
-        code for code in codes if code and code not in SKIP_RESOURCE_CODES
-    )
+    return sorted(code for code in codes if code and code not in SKIP_RESOURCE_CODES)
 
 
 def csv_columns(

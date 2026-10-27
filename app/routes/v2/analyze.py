@@ -7,9 +7,10 @@ This enables early E2E testing of the API contract while core refactors proceed.
 Phase 2: API Route (Issue #496)
 """
 
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, status
 from fastapi.responses import JSONResponse
-import logging
 
 from app.api.models.v2 import V2AnalyzeRequest, V2AnalyzeResponse, V2ErrorResponse
 from app.core.v2.analysis_submit import submit_v2_analysis
@@ -25,7 +26,9 @@ logger = logging.getLogger(__name__)
     summary="Run v2 analysis",
     description="Analyze multiple events across multiple days with day-partitioned outputs",
 )
-async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTasks) -> V2AnalyzeResponse:
+async def analyze_v2(
+    request: V2AnalyzeRequest, background_tasks: BackgroundTasks
+) -> V2AnalyzeResponse:
     """Main v2 analysis endpoint."""
     try:
         return submit_v2_analysis(request.model_dump(), background_tasks)

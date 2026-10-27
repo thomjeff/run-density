@@ -21,9 +21,7 @@ SCHEMA_VERSION = 3
 INCIDENTS_FILENAME = "incidents.json"
 NOTE_KINDS = frozenset({"system", "user", "transfer"})
 NOT_YET_KNOWN = "not_yet_known"
-EXCLUSIVE_CARE = frozenset(
-    {"no_care_as_reported", "care_details_not_known"}
-)
+EXCLUSIVE_CARE = frozenset({"no_care_as_reported", "care_details_not_known"})
 SHARED_CARE = (
     "assessed_by_agency",
     "observation",
@@ -211,9 +209,7 @@ def catalog() -> Dict[str, Any]:
         "fm_event": _pairs(FM_EVENTS),
         "incident_types": _pairs(INCIDENT_TYPES),
         "care_types": _pairs(CARE_TYPES),
-        "care_suggestions": {
-            key: list(ids) for key, ids in CARE_SUGGESTIONS.items()
-        },
+        "care_suggestions": {key: list(ids) for key, ids in CARE_SUGGESTIONS.items()},
         "shared_care_types": list(SHARED_CARE),
         "exclusive_incident_types": [NOT_YET_KNOWN],
         "exclusive_care_types": sorted(EXCLUSIVE_CARE),
@@ -506,7 +502,7 @@ def normalize_incident(incident: Dict[str, Any]) -> Dict[str, Any]:
     return incident
 
 
-def apply_fields(
+def apply_fields(  # noqa: C901
     incident: Dict[str, Any],
     payload: Mapping[str, Any],
 ) -> Dict[str, Any]:
@@ -554,7 +550,10 @@ def apply_fields(
         if incident.get("reported_by_agency") != new_reporter:
             incident["reported_by_agency"] = new_reporter
             changed = True
-    if "completed_by_agency" in payload and payload.get("completed_by_agency") is not None:
+    if (
+        "completed_by_agency" in payload
+        and payload.get("completed_by_agency") is not None
+    ):
         new_completed = _clean_reporter(payload.get("completed_by_agency"))
         if str(incident.get("completed_by_agency") or "") != new_completed:
             incident["completed_by_agency"] = new_completed
@@ -564,9 +563,7 @@ def apply_fields(
         if new_assigned != old_assigned:
             changed = True
             extra = str(
-                payload.get("assigned_note")
-                or payload.get("transfer_note")
-                or ""
+                payload.get("assigned_note") or payload.get("transfer_note") or ""
             ).strip()
             if old_assigned and new_assigned:
                 transfer_care(incident, new_assigned, extra)
@@ -581,9 +578,7 @@ def apply_fields(
             else:
                 assign_care(incident, new_assigned, extra)
     if "fm_event" in payload:
-        cleaned_events = _clean_list(
-            payload.get("fm_event"), CATALOG_KEYS["fm_event"]
-        )
+        cleaned_events = _clean_list(payload.get("fm_event"), CATALOG_KEYS["fm_event"])
         if list(incident.get("fm_event") or []) != cleaned_events:
             incident["fm_event"] = cleaned_events
             changed = True
@@ -716,13 +711,7 @@ def transfer_care(
     if from_key == to_key:
         raise ValueError("Already assigned to that care agency.")
     extra = str(text or "").strip()
-    note = (
-        "Transferred "
-        + agency_label(from_key)
-        + " → "
-        + agency_label(to_key)
-        + "."
-    )
+    note = "Transferred " + agency_label(from_key) + " → " + agency_label(to_key) + "."
     incident["assigned_to"] = to_key
     append_note(incident, note, kind="transfer", detail=extra)
     return incident
@@ -789,9 +778,7 @@ def load_store(storage: Any, *, run_id: str, day: str) -> Dict[str, Any]:
         return store
     items = raw.get("incidents") if isinstance(raw.get("incidents"), list) else []
     store["incidents"] = [
-        normalize_incident(dict(item))
-        for item in items
-        if isinstance(item, Mapping)
+        normalize_incident(dict(item)) for item in items if isinstance(item, Mapping)
     ]
     if raw.get("run_id"):
         store["run_id"] = str(raw.get("run_id"))
@@ -812,7 +799,9 @@ def find_incident(store: Mapping[str, Any], incident_id: str) -> Dict[str, Any]:
     raise IncidentNotFoundError(wanted)
 
 
-def display_bib(incident: Mapping[str, Any], roster_row: Optional[Mapping[str, Any]]) -> str:
+def display_bib(
+    incident: Mapping[str, Any], roster_row: Optional[Mapping[str, Any]]
+) -> str:
     if roster_row and str(roster_row.get("bib") or "").strip():
         return str(roster_row.get("bib") or "").strip()
     return str(incident.get("bib") or "").strip()

@@ -3,23 +3,28 @@
 # Dependencies: numpy (standard), typing (standard), datetime (standard)
 
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Iterable, Optional, Any
-from datetime import datetime, timezone, timedelta
+
 import math
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
 import numpy as np
+
 from app import rulebook
 
 # -----------------------------
 # Types and small configuration
 # -----------------------------
 
+
 @dataclass(frozen=True)
 class SegmentInfo:
     segment_id: str
     length_m: float
-    width_m: float                          # mean usable width for density (meters)
-    coords: Optional[Any] = None            # whatever your Geo builder expects
+    width_m: float  # mean usable width for density (meters)
+    coords: Optional[Any] = None  # whatever your Geo builder expects
+
 
 @dataclass
 class BinFeature:
@@ -30,31 +35,36 @@ class BinFeature:
     end_km: float
     t_start: datetime
     t_end: datetime
-    density: float                          # p / m^2
-    rate: float                             # p / s (throughput rate) - renamed from 'flow' to avoid confusion with Flow analysis
-    los_class: Optional[str]                # set by rulebook flagging (SSOT)
+    density: float  # p / m^2
+    rate: float  # p / s (throughput rate) - renamed from 'flow' to avoid confusion with Flow analysis
+    los_class: Optional[str]  # set by rulebook flagging (SSOT)
     bin_size_km: float
+
 
 @dataclass
 class BinBuildResult:
     features: List[BinFeature]
     metadata: Dict[str, Any]
 
+
 # -----------------------------------
 # Validation
 # -----------------------------------
+
 
 def _validate_positive_finite(value: float, name: str) -> None:
     if value is None or not np.isfinite(value) or value <= 0.0:
         raise ValueError(f"{name} must be positive and finite (got {value}).")
 
+
 # ----------------------------------------------------
 # Vectorized accumulation: one segment, one time window
 # ----------------------------------------------------
 
+
 def accumulate_window_for_segment(
-    pos_m: np.ndarray,            # runner longitudinal position along segment [m]
-    speed_mps: np.ndarray,        # runner speed [m/s] for the window
+    pos_m: np.ndarray,  # runner longitudinal position along segment [m]
+    speed_mps: np.ndarray,  # runner speed [m/s] for the window
     seg: SegmentInfo,
     bin_len_m: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -70,7 +80,9 @@ def accumulate_window_for_segment(
 
     nbins = int(math.ceil(seg.length_m / bin_len_m))
     if nbins <= 0:
-        raise ValueError(f"Computed nbins={nbins} for segment {seg.segment_id}; check bin_len_m/length_m.")
+        raise ValueError(
+            f"Computed nbins={nbins} for segment {seg.segment_id}; check bin_len_m/length_m."
+        )
 
     # Clamp / filter positions to [0, length_m)
     # (Optional) If your model can produce small negatives / slight overshoot, clip them:
@@ -89,9 +101,11 @@ def accumulate_window_for_segment(
 
     return counts, sum_speed
 
+
 # -------------------------------------------------
 # Build features for all segments & time windows
 # -------------------------------------------------
+
 
 def build_bin_features(
     *,
@@ -118,7 +132,9 @@ def build_bin_features(
     """
     # Issue #640: LOS bands must be provided from rulebook (SSOT)
     if los_bands_by_segment is None and los_bands is None:
-        raise ValueError("LOS bands are required; provide los_bands_by_segment or los_bands from app.rulebook.")
+        raise ValueError(
+            "LOS bands are required; provide los_bands_by_segment or los_bands from app.rulebook."
+        )
     bin_len_m = bin_size_km * 1000.0
     _validate_positive_finite(bin_len_m, "bin_len_m")
 
@@ -137,7 +153,7 @@ def build_bin_features(
 
         seg_windows = runners_by_segment_and_window.get(seg_id, {})
 
-        for (t_start, t_end, w_idx) in time_windows:
+        for t_start, t_end, w_idx in time_windows:
             rw = seg_windows.get(w_idx)
             if rw is None:
                 # No runners mapped to this segment/window; still emit zero features? Up to you.
@@ -152,7 +168,9 @@ def build_bin_features(
                     sum_speed = np.zeros(nbins, dtype=np.float64)
                 else:
                     # Vectorized accumulation
-                    counts, sum_speed = accumulate_window_for_segment(pos_m, speed_mps, seg, bin_len_m)
+                    counts, sum_speed = accumulate_window_for_segment(
+                        pos_m, speed_mps, seg, bin_len_m
+                    )
 
             # Compute densities & flows vectorized
             area_m2 = bin_len_m * seg.width_m
@@ -226,9 +244,11 @@ def build_bin_features(
 
     return BinBuildResult(features=all_features, metadata=metadata)
 
+
 # -------------------------------------------------
 # Convenience: build time windows (fixed stride)
 # -------------------------------------------------
+
 
 def make_time_windows(
     *,
@@ -246,9 +266,11 @@ def make_time_windows(
         out.append((ts, te, i))
     return out
 
+
 # -------------------------------------------------
 # Serialization helpers (optional)
 # -------------------------------------------------
+
 
 def to_geojson_features(features: List[BinFeature]) -> List[Dict[str, Any]]:
     """Convert to minimal GeoJSON Feature dicts (geometry building is left to existing code)."""
@@ -266,9 +288,11 @@ def to_geojson_features(features: List[BinFeature]) -> List[Dict[str, Any]]:
             "los_class": f.los_class,
             "bin_size_km": f.bin_size_km,
         }
-        out.append({
-            "type": "Feature",
-            "geometry": None,  # your existing geometry builder should fill this using SegmentInfo.coords + bin range
-            "properties": props,
-        })
+        out.append(
+            {
+                "type": "Feature",
+                "geometry": None,  # your existing geometry builder should fill this using SegmentInfo.coords + bin range
+                "properties": props,
+            }
+        )
     return out

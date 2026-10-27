@@ -2,30 +2,34 @@
 API Routes for Bidirectional Overlap Data (Issue #720)
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
-from typing import Any, Dict, List, Optional
 import csv
 import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 
 from app.storage import create_runflow_storage
-from app.utils.constants import REPORTS_OVERLAPS_DIRNAME, REPORTS_OVERLAPS_SUMMARY_FILENAME
+from app.utils.constants import (
+    REPORTS_OVERLAPS_DIRNAME,
+    REPORTS_OVERLAPS_SUMMARY_FILENAME,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _empty_overlap_payload(selected_day: str, available_days: List[str]) -> JSONResponse:
-    return JSONResponse(content={
-        "selected_day": selected_day,
-        "available_days": available_days,
-        "overlaps": {
-            "analyzed_count": 0,
-            "overlap_count": 0,
-            "segments": []
+def _empty_overlap_payload(
+    selected_day: str, available_days: List[str]
+) -> JSONResponse:
+    return JSONResponse(
+        content={
+            "selected_day": selected_day,
+            "available_days": available_days,
+            "overlaps": {"analyzed_count": 0, "overlap_count": 0, "segments": []},
         }
-    })
+    )
 
 
 def _load_overlap_summary(storage, selected_day: str) -> Optional[Dict[str, Any]]:
@@ -42,7 +46,7 @@ def _load_overlap_summary(storage, selected_day: str) -> Optional[Dict[str, Any]
 @router.get("/api/bidirectional/segments")
 async def get_bidirectional_segments(
     run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
-    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
 ):
     try:
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
@@ -56,26 +60,30 @@ async def get_bidirectional_segments(
         if not summary:
             return _empty_overlap_payload(selected_day, available_days)
 
-        response = JSONResponse(content={
-            "selected_day": selected_day,
-            "available_days": available_days,
-            "overlaps": {
-                "analyzed_count": summary.get("analyzed_count", 0),
-                "overlap_count": summary.get("overlap_count", 0),
-                "segments": summary.get("segments", []),
+        response = JSONResponse(
+            content={
+                "selected_day": selected_day,
+                "available_days": available_days,
+                "overlaps": {
+                    "analyzed_count": summary.get("analyzed_count", 0),
+                    "overlap_count": summary.get("overlap_count", 0),
+                    "segments": summary.get("segments", []),
+                },
             }
-        })
+        )
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error loading bidirectional segments: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to load bidirectional segments: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load bidirectional segments: {str(e)}"
+        )
 
 
 @router.get("/api/bidirectional/segment/{seg_id}")
-async def get_bidirectional_segment_detail(
+async def get_bidirectional_segment_detail(  # noqa: C901
     seg_id: str,
     run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
@@ -98,21 +106,32 @@ async def get_bidirectional_segment_detail(
         segments = summary.get("segments", [])
         if flow_id:
             seg_matches = [
-                seg for seg in segments
-                if str(seg.get("flow_id") or "") == str(flow_id)
+                seg for seg in segments if str(seg.get("flow_id") or "") == str(flow_id)
             ]
         else:
             seg_matches = [
-                seg for seg in segments
+                seg
+                for seg in segments
                 if str(seg.get("seg_id")) == str(seg_id)
                 and (event_a is None or str(seg.get("event_a")) == str(event_a))
                 and (event_b is None or str(seg.get("event_b")) == str(event_b))
             ]
         if not seg_matches:
-            detail = f"Flow row {flow_id} not found" if flow_id else f"Segment {seg_id} not found in overlap summary"
+            detail = (
+                f"Flow row {flow_id} not found"
+                if flow_id
+                else f"Segment {seg_id} not found in overlap summary"
+            )
             raise HTTPException(status_code=404, detail=detail)
-        if len(seg_matches) > 1 and not flow_id and (event_a is None or event_b is None):
-            raise HTTPException(status_code=400, detail="event_a and event_b are required for this segment")
+        if (
+            len(seg_matches) > 1
+            and not flow_id
+            and (event_a is None or event_b is None)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="event_a and event_b are required for this segment",
+            )
 
         segment = seg_matches[0]
         if not segment.get("event_a_label"):
@@ -121,7 +140,9 @@ async def get_bidirectional_segment_detail(
             segment["event_b_label"] = segment.get("event_b")
         csv_filename = segment.get("csv_filename")
         if not csv_filename:
-            raise HTTPException(status_code=404, detail="Overlap CSV not found for segment")
+            raise HTTPException(
+                status_code=404, detail="Overlap CSV not found for segment"
+            )
 
         csv_path = f"{selected_day}/reports/{REPORTS_OVERLAPS_DIRNAME}/{csv_filename}"
         if not storage.exists(csv_path):
@@ -133,19 +154,25 @@ async def get_bidirectional_segment_detail(
         for row in reader:
             parsed = dict(row)
             for key, value in row.items():
-                if key.endswith("_count") or key.endswith("_entries") or key.endswith("_exits"):
+                if (
+                    key.endswith("_count")
+                    or key.endswith("_entries")
+                    or key.endswith("_exits")
+                ):
                     try:
                         parsed[key] = int(value)
                     except Exception:
                         parsed[key] = 0
             rows.append(parsed)
 
-        response = JSONResponse(content={
-            "selected_day": selected_day,
-            "available_days": available_days,
-            "segment": segment,
-            "rows": rows
-        })
+        response = JSONResponse(
+            content={
+                "selected_day": selected_day,
+                "available_days": available_days,
+                "segment": segment,
+                "rows": rows,
+            }
+        )
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
     except HTTPException:
@@ -154,4 +181,6 @@ async def get_bidirectional_segment_detail(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error loading bidirectional segment detail: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to load bidirectional segment: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load bidirectional segment: {str(e)}"
+        )

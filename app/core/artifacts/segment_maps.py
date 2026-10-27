@@ -11,7 +11,7 @@ import io
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -38,7 +38,7 @@ _MARKER_OUTLINE_PX = 2
 def export_segment_map_pngs(
     segments_geojson: Dict[str, Any],
     segment_metrics: Dict[str, Dict[str, Any]],
-    output_dir: Path
+    output_dir: Path,
 ) -> int:
     """
     Generate LOS-colored map snapshots for each segment feature.
@@ -51,9 +51,15 @@ def export_segment_map_pngs(
     Returns:
         Number of PNGs generated.
     """
-    features = segments_geojson.get("features", []) if isinstance(segments_geojson, dict) else []
+    features = (
+        segments_geojson.get("features", [])
+        if isinstance(segments_geojson, dict)
+        else []
+    )
     if not features:
-        raise ValueError("segments.geojson contains no features for segment map generation.")
+        raise ValueError(
+            "segments.geojson contains no features for segment map generation."
+        )
 
     reporting_config = load_reporting()
     los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
@@ -65,7 +71,9 @@ def export_segment_map_pngs(
     for feature in features:
         seg_id = _feature_segment_id(feature)
         if not seg_id:
-            raise ValueError("Segment feature missing seg_id; cannot generate map snapshot.")
+            raise ValueError(
+                "Segment feature missing seg_id; cannot generate map snapshot."
+            )
 
         metrics = segment_metrics.get(seg_id)
         if not metrics or "worst_los" not in metrics:
@@ -79,7 +87,9 @@ def export_segment_map_pngs(
         los_grade = str(metrics.get("worst_los"))
         color = los_colors.get(los_grade)
         if not color:
-            raise ValueError(f"LOS color missing for grade {los_grade} (segment {seg_id}).")
+            raise ValueError(
+                f"LOS color missing for grade {los_grade} (segment {seg_id})."
+            )
 
         coords = _extract_feature_coords(feature)
         if not coords:
@@ -89,12 +99,16 @@ def export_segment_map_pngs(
         _render_segment_snapshot(coords, color, output_path, seg_id)
         count += 1
 
-    logger.debug(f"Segment maps generated — Count: {count} PNG files — Location: {output_dir}")
+    logger.debug(
+        f"Segment maps generated — Count: {count} PNG files — Location: {output_dir}"
+    )
     return count
 
 
 def _validate_los_colors(los_colors: Dict[str, str]) -> None:
-    missing = [grade for grade in ["A", "B", "C", "D", "E", "F"] if grade not in los_colors]
+    missing = [
+        grade for grade in ["A", "B", "C", "D", "E", "F"] if grade not in los_colors
+    ]
     if missing:
         raise ValueError(f"LOS colors missing grades: {missing}")
 
@@ -116,7 +130,9 @@ def _extract_feature_coords(feature: Dict[str, Any]) -> List[Tuple[float, float]
     return coords
 
 
-def _normalize_coords(raw_coords: Sequence[Sequence[float]]) -> List[Tuple[float, float]]:
+def _normalize_coords(
+    raw_coords: Sequence[Sequence[float]],
+) -> List[Tuple[float, float]]:
     coords: List[Tuple[float, float]] = []
     transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
     for pair in raw_coords:
@@ -139,20 +155,26 @@ def _render_segment_snapshot(
     coords: Sequence[Tuple[float, float]],
     line_color: str,
     output_path: Path,
-    seg_id: str
+    seg_id: str,
 ) -> None:
     min_lon, max_lon, min_lat, max_lat = _coords_bounds(coords)
     if min_lon == max_lon or min_lat == max_lat:
-        min_lon, max_lon, min_lat, max_lat = _pad_bounds(min_lon, max_lon, min_lat, max_lat)
+        min_lon, max_lon, min_lat, max_lat = _pad_bounds(
+            min_lon, max_lon, min_lat, max_lat
+        )
 
     zoom = _select_zoom(min_lon, max_lon, min_lat, max_lat)
     center_lon = (min_lon + max_lon) / 2
     center_lat = (min_lat + max_lat) / 2
 
     try:
-        img, top_left_x, top_left_y = _render_map_tiles(center_lat, center_lon, zoom, _MAP_SIZE)
+        img, top_left_x, top_left_y = _render_map_tiles(
+            center_lat, center_lon, zoom, _MAP_SIZE
+        )
     except Exception as exc:
-        logger.warning(f"Segment {seg_id}: Map tiles unavailable ({exc}); using placeholder.")
+        logger.warning(
+            f"Segment {seg_id}: Map tiles unavailable ({exc}); using placeholder."
+        )
         img, top_left_x, top_left_y = _render_placeholder(_MAP_SIZE)
 
     draw = ImageDraw.Draw(img)
@@ -170,7 +192,9 @@ def _render_segment_snapshot(
     img.save(output_path, format="PNG")
 
 
-def _coords_bounds(coords: Sequence[Tuple[float, float]]) -> Tuple[float, float, float, float]:
+def _coords_bounds(
+    coords: Sequence[Tuple[float, float]],
+) -> Tuple[float, float, float, float]:
     lons = [lon for lon, _ in coords]
     lats = [lat for _, lat in coords]
     return min(lons), max(lons), min(lats), max(lats)
@@ -201,10 +225,7 @@ def _select_zoom(min_lon: float, max_lon: float, min_lat: float, max_lat: float)
 
 
 def _render_map_tiles(
-    lat: float,
-    lon: float,
-    zoom: int,
-    size: Tuple[int, int]
+    lat: float, lon: float, zoom: int, size: Tuple[int, int]
 ) -> Tuple[Image.Image, float, float]:
     width_px, height_px = size
     center_x, center_y = _latlon_to_pixels(lat, lon, zoom)
@@ -278,27 +299,23 @@ def _latlon_to_pixels(lat: float, lon: float, zoom: int) -> Tuple[float, float]:
     siny = math.sin(math.radians(lat))
     siny = min(max(siny, -0.9999), 0.9999)
     x = _TILE_SIZE * (0.5 + lon / 360.0) * (2**zoom)
-    y = _TILE_SIZE * (
-        0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)
-    ) * (2**zoom)
+    y = (
+        _TILE_SIZE
+        * (0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi))
+        * (2**zoom)
+    )
     return x, y
 
 
 def _latlon_to_image_px(
-    lat: float,
-    lon: float,
-    zoom: int,
-    top_left_x: float,
-    top_left_y: float
+    lat: float, lon: float, zoom: int, top_left_x: float, top_left_y: float
 ) -> Tuple[float, float]:
     world_x, world_y = _latlon_to_pixels(lat, lon, zoom)
     return world_x - top_left_x, world_y - top_left_y
 
 
 def _draw_start_end_markers(
-    draw: ImageDraw.ImageDraw,
-    points: Sequence[Tuple[float, float]],
-    color: str
+    draw: ImageDraw.ImageDraw, points: Sequence[Tuple[float, float]], color: str
 ) -> None:
     if not points:
         return
@@ -309,10 +326,7 @@ def _draw_start_end_markers(
 
 
 def _draw_marker(
-    draw: ImageDraw.ImageDraw,
-    point: Tuple[float, float],
-    color: str,
-    label: str
+    draw: ImageDraw.ImageDraw, point: Tuple[float, float], color: str, label: str
 ) -> None:
     x, y = point
     radius = _MARKER_RADIUS_PX

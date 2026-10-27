@@ -4,15 +4,15 @@ Course Mapping storage: create/list/load/save under {data_dir}/courses/{id}.
 Issue #732: Same approach as baseline — data_dir from request, same as /analysis, /config, /baseline.
 """
 
-from pathlib import Path
-from typing import Dict, Any, List
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List
 
+from app.core.course.export import enrich_segments_event_distances
 from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id
-from app.core.course.export import enrich_segments_event_distances
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,16 @@ logger = logging.getLogger(__name__)
 def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     """Distance in km between two WGS84 points."""
     import math
+
     R = 6371000  # Earth radius in meters
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)) / 1000
 
 
@@ -107,31 +113,49 @@ def list_courses(data_dir: Path) -> List[Dict[str, Any]]:
             continue
         course_file = path / "course.json"
         if not course_file.exists():
-            result.append({
-                "id": path.name, "name": "", "description": "", "path": str(path),
-                "updated": None, "distance_km": 0, "segments_count": 0, "locations_count": 0,
-            })
+            result.append(
+                {
+                    "id": path.name,
+                    "name": "",
+                    "description": "",
+                    "path": str(path),
+                    "updated": None,
+                    "distance_km": 0,
+                    "segments_count": 0,
+                    "locations_count": 0,
+                }
+            )
             continue
         try:
             with open(course_file, "r") as f:
                 data = json.load(f)
             segments = data.get("segments") or []
             locations = data.get("locations") or []
-            result.append({
-                "id": data.get("id", path.name),
-                "name": (data.get("name") or "")[:255],
-                "description": (data.get("description") or "")[:255],
-                "path": str(path),
-                "updated": data.get("updated"),
-                "distance_km": _course_distance_km(data),
-                "segments_count": len(segments),
-                "locations_count": len(locations),
-            })
+            result.append(
+                {
+                    "id": data.get("id", path.name),
+                    "name": (data.get("name") or "")[:255],
+                    "description": (data.get("description") or "")[:255],
+                    "path": str(path),
+                    "updated": data.get("updated"),
+                    "distance_km": _course_distance_km(data),
+                    "segments_count": len(segments),
+                    "locations_count": len(locations),
+                }
+            )
         except (json.JSONDecodeError, IOError):
-            result.append({
-                "id": path.name, "name": "", "description": "", "path": str(path),
-                "updated": None, "distance_km": 0, "segments_count": 0, "locations_count": 0,
-            })
+            result.append(
+                {
+                    "id": path.name,
+                    "name": "",
+                    "description": "",
+                    "path": str(path),
+                    "updated": None,
+                    "distance_km": 0,
+                    "segments_count": 0,
+                    "locations_count": 0,
+                }
+            )
     return result
 
 
@@ -176,6 +200,7 @@ def delete_course(data_dir: Path, course_id: str) -> None:
     Issue #732.
     """
     import shutil
+
     if "/" in course_id or "\\" in course_id or course_id in ("", ".", ".."):
         raise ValueError(f"Invalid course_id: {course_id}")
     course_dir = data_dir / "courses" / course_id

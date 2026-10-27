@@ -14,11 +14,15 @@ warnings.warn(
     stacklevel=2,
 )
 
-from app.core.reports.density.report import (  # noqa: E402,F401
+from app.core.reports.density.report import (
     convert_json_to_segment_summary,
     create_flagging_config,
-    generate_density_report,
+)
+from app.core.reports.density.report import generate_density_report  # noqa: E402,F401
+from app.core.reports.density.report import (
     generate_density_report as generate_new_density_report,
+)
+from app.core.reports.density.report import (
     load_density_rulebook,
     load_flags_from_json,
     load_parquet_sources,

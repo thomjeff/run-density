@@ -13,12 +13,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from app.core.config_package.location_ids import assign_unique_location_ids
 from app.core.course.export import (
     build_locations_csv,
     build_segments_csv,
     enrich_segments_event_distances,
 )
-from app.core.config_package.location_ids import assign_unique_location_ids
 from app.core.locations.schema import (
     ensure_manifest_resources,
     normalize_location_record,
@@ -206,9 +206,7 @@ def _normalize_course_locations(
     normalized: List[Dict[str, Any]] = []
     for i, loc in enumerate(locations):
         if isinstance(loc, dict):
-            normalized.append(
-                normalize_location_record(loc, resource_codes, index=i)
-            )
+            normalized.append(normalize_location_record(loc, resource_codes, index=i))
     assign_unique_location_ids(normalized)
     course_data["locations"] = normalized
 
@@ -564,9 +562,7 @@ def create_config_package(
         from app.utils.constants import DAY_SHORT_CODES
 
         if clean_event_day not in DAY_SHORT_CODES:
-            raise ValueError(
-                f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}"
-            )
+            raise ValueError(f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}")
     clean_events = normalize_package_events(package_events)
     if not clean_events:
         raise ValueError("Select at least one event for this configuration")
@@ -655,9 +651,7 @@ def update_config_package_metadata(
         from app.utils.constants import DAY_SHORT_CODES
 
         if clean_event_day not in DAY_SHORT_CODES:
-            raise ValueError(
-                f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}"
-            )
+            raise ValueError(f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}")
 
     package_path = resolve_config_package_path(cid)
     manifest_path = package_path / CONFIG_MANIFEST_NAME
@@ -720,9 +714,7 @@ def delete_config_package(config_id: str) -> Dict[str, Any]:
     if root.is_dir():
         data = _load_index(root)
         packages: List[Dict[str, Any]] = data["packages"]
-        data["packages"] = [
-            p for p in packages if p.get("config_id") != config_id
-        ]
+        data["packages"] = [p for p in packages if p.get("config_id") != config_id]
         _save_index(root, data)
 
     logger.info("Deleted config package %s", config_id)
@@ -753,7 +745,9 @@ def import_runner_files_from_package(
 
     allowed_names: Optional[set[str]] = None
     if filenames:
-        allowed_names = {Path(str(name)).name for name in filenames if str(name).strip()}
+        allowed_names = {
+            Path(str(name)).name for name in filenames if str(name).strip()
+        }
         if not allowed_names:
             raise ValueError("At least one runner filename is required")
 
@@ -888,9 +882,7 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     from app.core.locations.identity import stamp_pass_identity
 
     locations = course.get("locations") or []
-    day_stamped = stamp_locations_with_package_day(
-        locations, package_event_day(cid)
-    )
+    day_stamped = stamp_locations_with_package_day(locations, package_event_day(cid))
     stamp_pass_identity(locations)
     seg_refreshed = refresh_location_seg_ids_from_segments(locations, segments)
     course["locations"] = locations
@@ -932,9 +924,7 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     legacy_locations = package_path / "locations.csv"
     if legacy_locations.is_file() and not locations_target.is_file():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        legacy_locations.rename(
-            package_path / f"locations.csv.bak.{stamp}"
-        )
+        legacy_locations.rename(package_path / f"locations.csv.bak.{stamp}")
     elif legacy_locations.is_file():
         # Keep a backup of the old name for operators; canonical file is passes.csv
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -942,7 +932,9 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         legacy_locations.unlink()
     locations_target.write_text(locations_csv, encoding="utf-8")
 
-    from app.core.config_package.segment_recipes import export_package_flow_and_gpx_files
+    from app.core.config_package.segment_recipes import (
+        export_package_flow_and_gpx_files,
+    )
 
     flow_gpx = export_package_flow_and_gpx_files(cid)
 
@@ -960,7 +952,9 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         "segment_count": len(segments),
         "locations_path": str(locations_target),
         "passes_path": str(locations_target),
-        "locations_backup_path": str(locations_backup_path) if locations_backup_path else None,
+        "locations_backup_path": (
+            str(locations_backup_path) if locations_backup_path else None
+        ),
         "location_count": len(locations),
         "flow_gpx": flow_gpx,
         "flow_path": flow_gpx.get("flow_path"),

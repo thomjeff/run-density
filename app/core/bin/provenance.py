@@ -6,7 +6,7 @@ Never invent silent defaults such as window_s=30 / bin_km=0.2 for live reports.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import pandas as pd
 
@@ -25,7 +25,9 @@ def resolve_bin_report_params(bins_df: pd.DataFrame) -> Dict[str, Any]:
           - ``window_s`` / ``window_seconds``: temporal window (seconds)
     """
     if bins_df is None or bins_df.empty:
-        raise BinProvenanceError("bins DataFrame is empty; cannot resolve bin/window provenance")
+        raise BinProvenanceError(
+            "bins DataFrame is empty; cannot resolve bin/window provenance"
+        )
 
     bin_km = _resolve_bin_km(bins_df)
     window_seconds = _resolve_window_seconds(bins_df)
@@ -65,7 +67,9 @@ def _resolve_window_seconds(bins_df: pd.DataFrame) -> int:
     deltas = (ends - starts).dt.total_seconds().dropna()
     deltas = deltas[deltas > 0]
     if deltas.empty:
-        raise BinProvenanceError("bins.parquet has no positive (t_end - t_start) windows")
+        raise BinProvenanceError(
+            "bins.parquet has no positive (t_end - t_start) windows"
+        )
     # Median is robust if a few irregular rows exist
     seconds = int(round(float(deltas.median())))
     if seconds <= 0:

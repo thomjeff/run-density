@@ -42,9 +42,7 @@ class DuplicateBibError(ValueError):
         self.bib = bib
         self.reg_ids = list(reg_ids)
         joined = ", ".join(self.reg_ids)
-        super().__init__(
-            f"Duplicate bib {bib} on starts {joined}."
-        )
+        super().__init__(f"Duplicate bib {bib} on starts {joined}.")
 
 
 def participants_relpath(day: str) -> str:
@@ -130,7 +128,9 @@ def split_conditions(raw: str) -> List[str]:
     return out
 
 
-def _row_from_csv(raw: Mapping[str, Any], mapping: Mapping[str, str]) -> Optional[Dict[str, Any]]:
+def _row_from_csv(
+    raw: Mapping[str, Any], mapping: Mapping[str, str]
+) -> Optional[Dict[str, Any]]:
     values: Dict[str, str] = {}
     for header, field in mapping.items():
         values[field] = _cell(raw, header)
@@ -173,9 +173,7 @@ def parse_roster_csv(text: str) -> List[Dict[str, Any]]:
     reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
     mapping = _map_headers(reader.fieldnames)
     if "reg_id" not in mapping.values():
-        raise ValueError(
-            "CSV is missing Participant ID (reg_id)."
-        )
+        raise ValueError("CSV is missing Participant ID (reg_id).")
     rows: List[Dict[str, Any]] = []
     seen: Dict[str, int] = {}
     for raw in reader:
@@ -206,11 +204,7 @@ def assert_unique_start_bibs(rows: Iterable[Mapping[str, Any]]) -> None:
 
 
 def lookup_rows(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        dict(row)
-        for row in rows
-        if str(row.get("row_kind") or "") == "start"
-    ]
+    return [dict(row) for row in rows if str(row.get("row_kind") or "") == "start"]
 
 
 def query_matches(query: str, field: str, row: Mapping[str, Any]) -> bool:
@@ -258,9 +252,7 @@ def condition_matches(row: Mapping[str, Any], condition: str) -> bool:
     return False
 
 
-def condition_matches_any(
-    row: Mapping[str, Any], conditions: Sequence[str]
-) -> bool:
+def condition_matches_any(row: Mapping[str, Any], conditions: Sequence[str]) -> bool:
     wanted = [str(item).strip() for item in conditions if str(item).strip()]
     if not wanted:
         return True

@@ -5,17 +5,20 @@ This module processes GPX files to extract real geographical coordinates
 for race segments, enabling accurate map visualization.
 """
 
-import xml.etree.ElementTree as ET
-import math
 import bisect
-import pandas as pd
-from typing import Dict, List, Tuple, Optional
+import math
+import sys
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+import pandas as pd
 
 
 @dataclass
 class GPXPoint:
     """Represents a GPS point with coordinates and distance"""
+
     lat: float
     lon: float
     distance_km: float = 0.0
@@ -25,11 +28,15 @@ class GPXPoint:
 
 EARTH_R = 6371000.0  # metres
 
+
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance between two points in meters"""
     rlat1, rlon1, rlat2, rlon2 = map(math.radians, (lat1, lon1, lat2, lon2))
     dlat, dlon = rlat2 - rlat1, rlon2 - rlon1
-    a = math.sin(dlat/2)**2 + math.cos(rlat1)*math.cos(rlat2)*math.sin(dlon/2)**2
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+    )
     return 2 * EARTH_R * math.asin(math.sqrt(a))
 
 
@@ -43,14 +50,16 @@ def cumulative_km(course_points: List[Tuple[float, float]]) -> List[float]:
     out = [0.0]
     acc = 0.0
     for i in range(1, len(course_points)):
-        lat0, lon0 = course_points[i-1]
+        lat0, lon0 = course_points[i - 1]
         lat1, lon1 = course_points[i]
         acc += haversine_m(lat0, lon0, lat1, lon1) / 1000.0
         out.append(acc)
     return out
 
 
-def _interp_vertex(course_points: List[Tuple[float, float]], cum_km: List[float], target_km: float) -> Tuple[float, float]:
+def _interp_vertex(
+    course_points: List[Tuple[float, float]], cum_km: List[float], target_km: float
+) -> Tuple[float, float]:
     """
     Returns (lon, lat) at the exact target_km along the course (linear along segment).
     """
@@ -124,10 +133,11 @@ def metres_between(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 @dataclass
 class GPXCourse:
     """Represents a complete GPX course with points and metadata"""
+
     name: str
     points: List[GPXPoint]
     total_distance_km: float = 0.0
-    
+
     def __post_init__(self):
         """Cache route data for efficient slicing"""
         # Extract raw coordinates for slicing
@@ -142,19 +152,21 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     Returns distance in kilometers
     """
     R = 6371  # Earth's radius in kilometers
-    
+
     lat1_rad = math.radians(lat1)
     lon1_rad = math.radians(lon1)
     lat2_rad = math.radians(lat2)
     lon2_rad = math.radians(lon2)
-    
+
     dlat = lat2_rad - lat1_rad
     dlon = lon2_rad - lon1_rad
-    
-    a = (math.sin(dlat/2)**2 + 
-         math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2)
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    )
     c = 2 * math.asin(math.sqrt(a))
-    
+
     return R * c
 
 
@@ -165,127 +177,139 @@ def parse_gpx_file(filepath: str) -> GPXCourse:
     try:
         tree = ET.parse(filepath)
         root = tree.getroot()
-        
+
         # Handle different GPX namespaces
         namespaces = {
-            'gpx': 'http://www.topografix.com/GPX/1/1',
-            'gpx11': 'http://www.topografix.com/GPX/1/1',
-            'gpx10': 'http://www.topografix.com/GPX/1/0'
+            "gpx": "http://www.topografix.com/GPX/1/1",
+            "gpx11": "http://www.topografix.com/GPX/1/1",
+            "gpx10": "http://www.topografix.com/GPX/1/0",
         }
-        
+
         # Find the track name
         track_name = "Unknown Course"
-        for track in root.findall('.//gpx:trk', namespaces):
-            name_elem = track.find('gpx:name', namespaces)
+        for track in root.findall(".//gpx:trk", namespaces):
+            name_elem = track.find("gpx:name", namespaces)
             if name_elem is not None:
                 track_name = name_elem.text
                 break
-        
+
         # Extract track points
         points = []
-        for trkpt in root.findall('.//gpx:trkpt', namespaces):
-            lat = float(trkpt.get('lat'))
-            lon = float(trkpt.get('lon'))
+        for trkpt in root.findall(".//gpx:trkpt", namespaces):
+            lat = float(trkpt.get("lat"))
+            lon = float(trkpt.get("lon"))
             points.append(GPXPoint(lat=lat, lon=lon))
-        
+
         # Calculate cumulative distances with better precision
         total_distance = 0.0
         for i in range(1, len(points)):
-            prev_point = points[i-1]
+            prev_point = points[i - 1]
             curr_point = points[i]
             segment_distance = haversine_distance(
-                prev_point.lat, prev_point.lon,
-                curr_point.lat, curr_point.lon
+                prev_point.lat, prev_point.lon, curr_point.lat, curr_point.lon
             )
             total_distance += segment_distance
             curr_point.distance_km = total_distance
 
         return GPXCourse(
-            name=track_name,
-            points=points,
-            total_distance_km=total_distance
+            name=track_name, points=points, total_distance_km=total_distance
         )
-        
+
     except Exception as e:
         raise ValueError(f"Failed to parse GPX file {filepath}: {e}")
 
 
-def find_coordinates_at_distance(course: GPXCourse, target_distance_km: float) -> Optional[Tuple[float, float]]:
+def find_coordinates_at_distance(
+    course: GPXCourse, target_distance_km: float
+) -> Optional[Tuple[float, float]]:
     """
     Find the coordinates at a specific distance along the course
     Returns (lat, lon) or None if distance is out of range
     """
     if not course.points or target_distance_km < 0:
         return None
-    
+
     # Debug logging for problematic distances
     if target_distance_km > 10:
-        print(f"  Looking for coordinates at {target_distance_km}km (course total: {course.total_distance_km:.2f}km)")
-    
+        print(
+            f"  Looking for coordinates at {target_distance_km}km (course total: {course.total_distance_km:.2f}km)"
+        )
+
     # Find the two points that bracket the target distance
     for i in range(len(course.points) - 1):
         point1 = course.points[i]
         point2 = course.points[i + 1]
-        
+
         if point1.distance_km <= target_distance_km <= point2.distance_km:
             # Interpolate between the two points
-            ratio = (target_distance_km - point1.distance_km) / (point2.distance_km - point1.distance_km)
+            ratio = (target_distance_km - point1.distance_km) / (
+                point2.distance_km - point1.distance_km
+            )
             lat = point1.lat + ratio * (point2.lat - point1.lat)
             lon = point1.lon + ratio * (point2.lon - point1.lon)
-            
+
             # Debug logging for interpolation
             if target_distance_km > 10:
-                print(f"    Interpolated {target_distance_km}km between points {i} ({point1.distance_km:.2f}km) and {i+1} ({point2.distance_km:.2f}km)")
+                print(
+                    f"    Interpolated {target_distance_km}km between points {i} ({point1.distance_km:.2f}km) and {i+1} ({point2.distance_km:.2f}km)"
+                )
                 print(f"    Result: ({lat:.6f}, {lon:.6f})")
-            
+
             return (lat, lon)
-    
+
     # If target distance is beyond the course, return the last point
     if target_distance_km >= course.total_distance_km:
         last_point = course.points[-1]
-        print(f"  Distance {target_distance_km}km beyond course, using last point at {last_point.distance_km:.2f}km")
+        print(
+            f"  Distance {target_distance_km}km beyond course, using last point at {last_point.distance_km:.2f}km"
+        )
         return (last_point.lat, last_point.lon)
-    
+
     # If target distance is before the course, return the first point
     if target_distance_km <= 0:
         first_point = course.points[0]
         print(f"  Distance {target_distance_km}km before course, using first point")
         return (first_point.lat, first_point.lon)
-    
-    print(f"  Distance {target_distance_km}km not found in course range [0, {course.total_distance_km:.2f}]")
+
+    print(
+        f"  Distance {target_distance_km}km not found in course range [0, {course.total_distance_km:.2f}]"
+    )
     return None
 
 
 def generate_segment_coordinates(
-    courses: Dict[str, GPXCourse],
-    segments: List[Dict]
+    courses: Dict[str, GPXCourse], segments: List[Dict]
 ) -> List[Dict]:
     """
     Generate real coordinates for race segments based on GPX courses
-    
+
     Args:
         courses: Dictionary mapping event names to GPXCourse objects
         segments: List of segment dictionaries from overlaps.csv
-    
+
     Returns:
         List of segments with real coordinates
     """
     result = []
-    
+
     for segment in segments:
         seg_id = segment.get("seg_id")
         if not seg_id:
-            raise ValueError("Segment missing required seg_id for GPX coordinate generation.")
+            raise ValueError(
+                "Segment missing required seg_id for GPX coordinate generation."
+            )
         label = segment.get("segment_label")
         if not label:
-            raise ValueError(f"Segment {seg_id} missing required segment_label for GPX coordinate generation.")
-        
+            raise ValueError(
+                f"Segment {seg_id} missing required segment_label for GPX coordinate generation."
+            )
+
         # Choose GPX/spans from analysis events present on this segment (#701).
         # Issue #655: Only consider events that exist in the courses dict.
         from app.core.event_discovery import pick_gpx_event
 
         gpx_event = pick_gpx_event(segment, courses.keys())
-        
+
         if gpx_event is None:
             available_events = set(courses.keys())
             raise ValueError(
@@ -293,7 +317,7 @@ def generate_segment_coordinates(
                 f"Available events: {sorted(available_events)}. "
                 f"This is a data validation error - fail-fast."
             )
-        
+
         # Lookup course (courses dict uses lowercase keys)
         course = courses.get(gpx_event)
         if course is None:
@@ -301,14 +325,14 @@ def generate_segment_coordinates(
                 f"Segment {seg_id} references event '{gpx_event}' but no GPX course was loaded. "
                 f"This is a data validation error - fail-fast."
             )
-        
+
         # Get event-specific from_km and to_km fields
         from_km_key = f"{gpx_event}_from_km"
         to_km_key = f"{gpx_event}_to_km"
-        
+
         from_km = segment.get(from_km_key)
         to_km = segment.get(to_km_key)
-        
+
         # Issue #655: Fail-fast if required fields are missing - no fallback behavior
         # All segments must have valid from_km/to_km for their active events per segments_616.csv
         if from_km is None or to_km is None:
@@ -323,15 +347,12 @@ def generate_segment_coordinates(
                 f"All segments must have valid numeric from_km/to_km values for their active events in segments_616.csv. "
                 f"This is a data validation error - fail-fast."
             )
-        
+
         # Use route slicing instead of just endpoints
         line_coords = slice_polyline_by_km(
-            course.course_points,
-            course.cum_km,
-            from_km,
-            to_km
+            course.course_points, course.cum_km, from_km, to_km
         )
-        
+
         # Issue #655: Fail-fast if route slicing fails - no fallback behavior
         # All segments with valid from_km/to_km must have valid geometry
         if not line_coords or len(line_coords) < 2:
@@ -340,13 +361,18 @@ def generate_segment_coordinates(
                 f"Segment has valid from_km={from_km}, to_km={to_km} but could not generate line coordinates. "
                 f"This indicates a GPX course data issue - fail-fast."
             )
-        
+
         # Check for suspicious segments (endpoints within 25m and too few vertices)
         coord_issue = False
-        if len(line_coords) <= 2 and metres_between(line_coords[0], line_coords[-1]) < 25.0:
+        if (
+            len(line_coords) <= 2
+            and metres_between(line_coords[0], line_coords[-1]) < 25.0
+        ):
             coord_issue = True
-            print(f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice.")
-        
+            print(
+                f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice."
+            )
+
         # Issue #655: Validate direction and width_m are present before adding to result
         # These are required fields from segments_616.csv and should never be missing
         direction = segment.get("direction")
@@ -363,48 +389,55 @@ def generate_segment_coordinates(
                 f"All segments must have a valid 'width_m' value in segments_616.csv. "
                 f"This is a data validation error - fail-fast."
             )
-        
-        result.append({
-            "seg_id": seg_id,
-            "segment_label": label,
-            "from_km": from_km,
-            "to_km": to_km,
-            "line_coords": line_coords,
-            "coord_issue": coord_issue,
-            "course": gpx_event,
-            "direction": direction,
-            "width_m": width_m,
-        })
-    
+
+        result.append(
+            {
+                "seg_id": seg_id,
+                "segment_label": label,
+                "from_km": from_km,
+                "to_km": to_km,
+                "line_coords": line_coords,
+                "coord_issue": coord_issue,
+                "course": gpx_event,
+                "direction": direction,
+                "width_m": width_m,
+            }
+        )
+
     return result
 
 
 def load_all_courses(gpx_files: Dict[str, str]) -> Dict[str, GPXCourse]:
     """
     Load all GPX courses from the data directory
-    
+
     Returns:
         Dictionary mapping event names to GPXCourse objects
     """
-    import os
     from pathlib import Path
-    
+
     if not gpx_files:
         raise ValueError("gpx_files is required to load GPX courses.")
     courses: Dict[str, GPXCourse] = {}
     for event, filepath_str in gpx_files.items():
         filepath = Path(filepath_str)
         if filepath.suffix.lower() != ".gpx":
-            raise ValueError(f"GPX file for event '{event}' must have .gpx extension: {filepath}")
+            raise ValueError(
+                f"GPX file for event '{event}' must have .gpx extension: {filepath}"
+            )
         if not filepath.exists():
-            raise FileNotFoundError(f"GPX file not found for event '{event}': {filepath}")
+            raise FileNotFoundError(
+                f"GPX file not found for event '{event}': {filepath}"
+            )
         try:
             course = parse_gpx_file(str(filepath))
             courses[event.lower()] = course
             print(f"✅ Loaded {event} course: {course.total_distance_km:.2f} km")
         except Exception as e:
-            raise ValueError(f"Failed to load {event} course from {filepath}: {e}") from e
-    
+            raise ValueError(
+                f"Failed to load {event} course from {filepath}: {e}"
+            ) from e
+
     return courses
 
 
@@ -413,56 +446,63 @@ def create_geojson_from_segments(segments_with_coords: List[Dict]) -> Dict:
     Convert segments with coordinates to GeoJSON format
     """
     features = []
-    
+
     for seg in segments_with_coords:
         direction = seg.get("direction")
         width_m = seg.get("width_m")
         # Issue #655: Validate direction is present - if missing, this indicates a bug in segment processing
         # Direction should be included in segments_list when building from segments_df
         if direction in (None, ""):
-            seg_id = seg.get('seg_id', 'unknown')
+            seg_id = seg.get("seg_id", "unknown")
             raise ValueError(
                 f"Segment {seg_id} missing direction for GeoJSON export. "
                 f"This indicates direction was not included in segments_list when building from segments.csv. "
                 f"Check that segments.csv has 'direction' column and it's being extracted correctly."
             )
         if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
-            raise ValueError(f"Segment {seg.get('seg_id')} missing width_m for GeoJSON export.")
+            raise ValueError(
+                f"Segment {seg.get('seg_id')} missing width_m for GeoJSON export."
+            )
         if seg.get("line_coords") and len(seg["line_coords"]) >= 2:
-            features.append({
-                "type": "Feature",
-                "properties": {
-                    "seg_id": seg["seg_id"],
-                    "segment_label": seg["segment_label"],
-                    "from_km": seg["from_km"],
-                    "to_km": seg["to_km"],
-                    "course": seg["course"],
-                    "coord_issue": seg.get("coord_issue", False),
-                    "direction": direction,
-                    "width_m": float(width_m),
-                },
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": seg["line_coords"]  # Already in [lon, lat] format
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "seg_id": seg["seg_id"],
+                        "segment_label": seg["segment_label"],
+                        "from_km": seg["from_km"],
+                        "to_km": seg["to_km"],
+                        "course": seg["course"],
+                        "coord_issue": seg.get("coord_issue", False),
+                        "direction": direction,
+                        "width_m": float(width_m),
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": seg[
+                            "line_coords"
+                        ],  # Already in [lon, lat] format
+                    },
                 }
-            })
+            )
         else:
             # Log segments without coordinates for debugging
-            print(f"⚠️  Segment {seg['seg_id']} missing coordinates: {seg.get('error', 'Unknown error')}")
-    
-    return {
-        "type": "FeatureCollection",
-        "features": features
-    }
+            print(
+                f"⚠️  Segment {seg['seg_id']} missing coordinates: {seg.get('error', 'Unknown error')}"
+            )
+
+    return {"type": "FeatureCollection", "features": features}
 
 
 if __name__ == "__main__":
     # Test the GPX processing
     print("Testing GPX processing...")
-    
+
     try:
         if len(sys.argv) < 2:
-            raise SystemExit("Usage: python -m app.core.gpx.processor event=path [event=path ...]")
+            raise SystemExit(
+                "Usage: python -m app.core.gpx.processor event=path [event=path ...]"
+            )
         gpx_paths = {}
         for arg in sys.argv[1:]:
             if "=" not in arg:
@@ -471,10 +511,12 @@ if __name__ == "__main__":
             gpx_paths[event.strip().lower()] = path.strip()
         courses = load_all_courses(gpx_paths)
         print(f"\nLoaded {len(courses)} courses")
-        
+
         for event, course in courses.items():
-            print(f"{event}: {course.total_distance_km:.2f} km, {len(course.points)} points")
-            
+            print(
+                f"{event}: {course.total_distance_km:.2f} km, {len(course.points)} points"
+            )
+
             # Test coordinate finding
             test_distances = [0.0, 1.0, 5.0, 10.0]
             for dist in test_distances:
@@ -483,6 +525,6 @@ if __name__ == "__main__":
                     print(f"  {dist}km: {coord[0]:.6f}, {coord[1]:.6f}")
                 else:
                     print(f"  {dist}km: Not found")
-                    
+
     except Exception as e:
         print(f"Error: {e}")

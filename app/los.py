@@ -16,6 +16,7 @@ Issue #233: Operational Intelligence - LOS Classification
 """
 
 from __future__ import annotations
+
 import logging
 from typing import Dict, Optional, Union
 
@@ -26,32 +27,25 @@ from app import rulebook
 logger = logging.getLogger(__name__)
 
 # LOS rank ordering (for comparisons and severity assignment)
-LOS_RANKS = {
-    'A': 0,
-    'B': 1,
-    'C': 2,
-    'D': 3,
-    'E': 4,
-    'F': 5
-}
+LOS_RANKS = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5}
 
 
 def los_from_density(
     density: float,
-    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None,
 ) -> str:
     """
     Classify density into Level of Service (A-F).
-    
+
     Uses rulebook SSOT classification (upper-bound thresholds).
-    
+
     Args:
         density: Areal density (people per square meter)
         thresholds: Optional rulebook LosBands or dict (optional; defaults to rulebook globals via SSOT)
-        
+
     Returns:
         LOS classification ('A', 'B', 'C', 'D', 'E', or 'F')
-        
+
     Examples:
         >>> los_from_density(0.3)  # Below B threshold
         'A'
@@ -67,7 +61,9 @@ def los_from_density(
         bands = thresholds  # Already from rulebook (SSOT)
     else:
         # Legacy support: convert dict to LosBands (should come from rulebook source)
-        missing = [key for key in ("A", "B", "C", "D", "E", "F") if key not in thresholds]
+        missing = [
+            key for key in ("A", "B", "C", "D", "E", "F") if key not in thresholds
+        ]
         if missing:
             raise ValueError(f"Missing LOS threshold keys: {missing}")
         bands = rulebook.LosBands(
@@ -76,32 +72,32 @@ def los_from_density(
             C=float(thresholds["C"]),
             D=float(thresholds["D"]),
             E=float(thresholds["E"]),
-            F=float(thresholds["F"])
+            F=float(thresholds["F"]),
         )
-    
+
     # Handle edge cases
     if pd.isna(density) or density < 0:
         logger.warning(f"Invalid density value: {density}, defaulting to LOS A")
-        return 'A'
-    
+        return "A"
+
     return rulebook.classify_los(density, bands)
 
 
 def los_rank(los_level: str) -> int:
     """
     Get numeric rank for a LOS level (A=0, B=1, ..., F=5).
-    
+
     This is useful for:
     - Comparing LOS levels (e.g., is LOS D worse than LOS C?)
     - Sorting by severity
     - Determining if a level meets a minimum threshold
-    
+
     Args:
         los_level: LOS classification ('A' through 'F')
-        
+
     Returns:
         Numeric rank (0-5) or -1 for invalid input
-        
+
     Examples:
         >>> los_rank('A')
         0
@@ -115,21 +111,21 @@ def los_rank(los_level: str) -> int:
     if los_level not in LOS_RANKS:
         logger.warning(f"Invalid LOS level: {los_level}, returning -1")
         return -1
-    
+
     return LOS_RANKS[los_level]
 
 
 def meets_los_threshold(los_level: str, min_threshold: str) -> bool:
     """
     Check if a LOS level meets or exceeds a minimum threshold.
-    
+
     Args:
         los_level: LOS classification to check
         min_threshold: Minimum acceptable LOS level
-        
+
     Returns:
         True if los_level >= min_threshold (worse or equal), False otherwise
-        
+
     Examples:
         >>> meets_los_threshold('D', 'C')  # D is worse than C
         True
@@ -143,60 +139,60 @@ def meets_los_threshold(los_level: str, min_threshold: str) -> bool:
 
 def classify_bins_los(
     df: pd.DataFrame,
-    density_field: str = 'density_peak',
-    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
+    density_field: str = "density_peak",
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None,
 ) -> pd.DataFrame:
     """
     Classify all bins in a DataFrame by LOS level.
-    
+
     Adds 'los' and 'los_rank' columns to the DataFrame.
-    
+
     Args:
         df: DataFrame with density data
         density_field: Column name containing density values (default: 'density_peak')
         thresholds: Custom LOS thresholds (not supported; rulebook SSOT only)
-        
+
     Returns:
         DataFrame with added 'los' and 'los_rank' columns
     """
     if density_field not in df.columns:
         logger.error(f"Density field '{density_field}' not found in DataFrame")
         return df
-    
+
     # Issue #640: classify_bins_los uses los_from_density which handles rulebook SSOT
     # No need to check thresholds here as los_from_density handles it
     # Classify each bin
-    df['los'] = df[density_field].apply(los_from_density)
-    
+    df["los"] = df[density_field].apply(los_from_density)
+
     # Add numeric rank for sorting/filtering
-    df['los_rank'] = df['los'].apply(los_rank)
-    
+    df["los_rank"] = df["los"].apply(los_rank)
+
     logger.info(f"Classified {len(df)} bins by LOS")
     logger.debug(f"LOS distribution: {df['los'].value_counts().to_dict()}")
-    
+
     return df
 
 
 def get_los_description(los_level: str) -> str:
     """
     Get human-readable description for a LOS level.
-    
+
     Args:
         los_level: LOS classification ('A' through 'F')
-        
+
     Returns:
         Description string
     """
     descriptions = {
-        'A': 'Free flow, no restrictions',
-        'B': 'Stable flow, minor speed restrictions',
-        'C': 'Stable flow, significant speed restrictions',
-        'D': 'Unstable flow, severe restrictions',
-        'E': 'Very unstable flow, stop-and-go',
-        'F': 'Breakdown flow, gridlock'
+        "A": "Free flow, no restrictions",
+        "B": "Stable flow, minor speed restrictions",
+        "C": "Stable flow, significant speed restrictions",
+        "D": "Unstable flow, severe restrictions",
+        "E": "Very unstable flow, stop-and-go",
+        "F": "Breakdown flow, gridlock",
     }
-    
-    return descriptions.get(los_level, 'Unknown LOS level')
+
+    return descriptions.get(los_level, "Unknown LOS level")
 
 
 # Phase 3 cleanup: Removed unused functions (not imported anywhere):

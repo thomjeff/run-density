@@ -12,6 +12,10 @@ from app.core.config_package.storage import (
     resolve_config_package_path,
     validate_config_id,
 )
+
+# UI-only suggestions when opening the run-analysis dialog (not applied server-side).
+# Issue #798 Phase 8: from race template (override via RACE_TEMPLATE env).
+from app.core.race_templates import get_suggested_event_schedule
 from app.core.v2.start_time import (
     START_TIME_MAX_MINUTES,
     START_TIME_MIN_MINUTES,
@@ -19,11 +23,9 @@ from app.core.v2.start_time import (
     validate_start_minute,
 )
 
-# UI-only suggestions when opening the run-analysis dialog (not applied server-side).
-# Issue #798 Phase 8: from race template (override via RACE_TEMPLATE env).
-from app.core.race_templates import get_suggested_event_schedule
-
-SUGGESTED_EVENT_SCHEDULE: Dict[str, Dict[str, int]] = dict(get_suggested_event_schedule())
+SUGGESTED_EVENT_SCHEDULE: Dict[str, Dict[str, int]] = dict(
+    get_suggested_event_schedule()
+)
 
 
 def _format_start_time(minutes: int) -> str:
@@ -72,7 +74,9 @@ def get_package_analyze_setup(config_id: str) -> Dict[str, Any]:
                     if suggested.get("start_time") is not None
                     else ""
                 ),
-                "suggested_event_duration_minutes": suggested.get("event_duration_minutes"),
+                "suggested_event_duration_minutes": suggested.get(
+                    "event_duration_minutes"
+                ),
             }
         )
 
@@ -85,7 +89,7 @@ def get_package_analyze_setup(config_id: str) -> Dict[str, Any]:
     }
 
 
-def build_package_analyze_payload(
+def build_package_analyze_payload(  # noqa: C901
     config_id: str,
     *,
     event_schedules: Sequence[Dict[str, Any]],
@@ -132,7 +136,9 @@ def build_package_analyze_payload(
         start_time = raw.get("start_time")
         duration = raw.get("event_duration_minutes")
         if start_time is None or duration is None:
-            raise ValueError(f"Event '{name}' requires start_time and event_duration_minutes")
+            raise ValueError(
+                f"Event '{name}' requires start_time and event_duration_minutes"
+            )
         start_time = int(start_time)
         duration = int(duration)
         try:
@@ -156,7 +162,9 @@ def build_package_analyze_payload(
     missing_events = sorted(expected_ids - set(schedule_by_name.keys()))
     extra_events = sorted(set(schedule_by_name.keys()) - expected_ids)
     if missing_events:
-        raise ValueError(f"Missing start-time schedule for: {', '.join(missing_events)}")
+        raise ValueError(
+            f"Missing start-time schedule for: {', '.join(missing_events)}"
+        )
     if extra_events:
         raise ValueError(f"Unknown events in schedule: {', '.join(extra_events)}")
 
@@ -192,7 +200,9 @@ def build_package_analyze_payload(
         if (package_path / "locations.csv").is_file():
             locations_file = "locations.csv"
         else:
-            raise ValueError("Missing passes.csv (or legacy locations.csv) in package root")
+            raise ValueError(
+                "Missing passes.csv (or legacy locations.csv) in package root"
+            )
 
     desc = str(description or manifest.get("label") or cid).strip()[:254]
 

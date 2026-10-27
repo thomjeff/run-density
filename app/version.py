@@ -14,8 +14,8 @@ import os
 import re
 import subprocess
 import sys
-from typing import Optional, Tuple
 from pathlib import Path
+from typing import Optional, Tuple
 
 
 def get_current_version() -> str:
@@ -49,9 +49,9 @@ def get_latest_git_tag() -> Optional[str]:
             ["git", "tag", "--sort=-version:refname"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
-        tags = result.stdout.strip().split('\n')
+        tags = result.stdout.strip().split("\n")
         return tags[0] if tags and tags[0] else None
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
@@ -60,27 +60,27 @@ def get_latest_git_tag() -> Optional[str]:
 def get_version() -> str:
     """
     Get application version with fallback logic.
-    
+
     Priority order:
     1. Latest git tag (preferred)
     2. APP_VERSION environment variable
     3. Default fallback ("v2.0.0")
-    
+
     Returns:
         Version string (e.g., "v2.0.6")
-    
+
     Issue #550: Make version dynamic from GitHub tag/release
     """
     # Try git tag first (preferred)
     git_tag = get_latest_git_tag()
     if git_tag:
         return git_tag
-    
+
     # Fall back to environment variable
     env_version = os.getenv("APP_VERSION")
     if env_version:
         return env_version
-    
+
     # Default fallback
     return "v2.0.0"
 
@@ -96,10 +96,10 @@ def parse_version(version: str) -> Tuple[int, int, int]:
         Tuple of (major, minor, patch) integers
     """
     # Remove 'v' prefix if present
-    version = version.lstrip('v')
+    version = version.lstrip("v")
 
     # Split by dots and convert to integers
-    parts = version.split('.')
+    parts = version.split(".")
     if len(parts) != 3:
         raise ValueError(f"Invalid version format: {version}")
 
@@ -144,7 +144,9 @@ def get_next_version(bump_type: str = "patch") -> str:
     elif bump_type == "patch":
         return format_version(major, minor, patch + 1)
     else:
-        raise ValueError(f"Invalid bump_type: {bump_type}. Must be 'major', 'minor', or 'patch'")
+        raise ValueError(
+            f"Invalid bump_type: {bump_type}. Must be 'major', 'minor', or 'patch'"
+        )
 
 
 def update_version_in_code(new_version: str) -> bool:
@@ -217,7 +219,7 @@ def create_version_bump_script() -> str:
     Returns:
         Path to the created script
     """
-    script_content = '''#!/bin/bash
+    script_content = """#!/bin/bash
 # Version Bump Script for run-density
 
 set -e
@@ -285,7 +287,7 @@ echo -e "${YELLOW}Next steps:${NC}"
 echo -e "1. Push changes: git push origin main"
 echo -e "2. Push tag: git push origin $NEXT_VERSION"
 echo -e "3. Create GitHub release: gh release create $NEXT_VERSION"
-'''
+"""
 
     script_path = Path("scripts/bump_version.sh")
     script_path.parent.mkdir(exist_ok=True)

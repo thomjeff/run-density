@@ -28,7 +28,6 @@ from app.core.config_package.storage import (
 )
 from app.core.course.flow_csv import validate_flow_csv_text
 from app.core.course.segment_library import (
-    build_course_segments_from_library,
     build_event_gpx_content,
     build_flow_csv_from_segments,
     concat_recipe_coordinates,
@@ -41,7 +40,6 @@ from app.core.course.segment_library import (
     set_manifest_legs,
     validate_recipe_stitch,
 )
-from app.utils.constants import COURSE_EVENT_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +71,11 @@ def package_recipe_event_ids(config_id: str) -> List[str]:
         data = _read_manifest_file(path)
         recipes = data.get("recipes") or {}
         if isinstance(recipes, dict) and recipes:
-            return sorted(str(k).strip().lower() for k in recipes.keys() if str(k).strip())
+            return sorted(
+                str(k).strip().lower() for k in recipes.keys() if str(k).strip()
+            )
     return list(_LEGACY_RECIPE_EVENT_IDS)
+
 
 def _repo_root() -> Path:
     """Project root (/app in Docker, repo root on host)."""
@@ -478,7 +479,8 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
         flow_validation = validate_flow_csv_text(flow_csv)
         if not flow_validation.ok:
             raise ValueError(
-                "flow.csv export failed validation: " + "; ".join(flow_validation.errors)
+                "flow.csv export failed validation: "
+                + "; ".join(flow_validation.errors)
             )
         flow_backup = _backup_export_file(flow_path)
         flow_path.write_text(flow_csv, encoding="utf-8")
@@ -514,7 +516,8 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
         flow_validation = validate_flow_csv_text(flow_csv)
         if not flow_validation.ok:
             raise ValueError(
-                "flow.csv export failed validation: " + "; ".join(flow_validation.errors)
+                "flow.csv export failed validation: "
+                + "; ".join(flow_validation.errors)
             )
         flow_backup = _backup_export_file(flow_path)
         flow_path.write_text(flow_csv, encoding="utf-8")
@@ -625,9 +628,7 @@ def apply_package_recipes(
         raise ValueError("No legs in library; import GPX legs to the org library first")
 
     event_ids = package_recipe_event_ids(cid)
-    bundle = export_library_to_course(
-        lib_dir, manifest=combined, event_ids=event_ids
-    )
+    bundle = export_library_to_course(lib_dir, manifest=combined, event_ids=event_ids)
     segments = bundle["segments"]
     if not segments:
         raise ValueError("Recipes produced no segments; check leg GPX and recipe order")
@@ -662,7 +663,8 @@ def apply_package_recipes(
         "segments_csv_path": export_result.get("path") if export_result else None,
         "flow_csv_path": (flow_gpx_result or {}).get("flow_path"),
         "gpx_files": (flow_gpx_result or {}).get("gpx_files") or [],
-        "readiness": (export_result or {}).get("readiness") or package_readiness(package_path),
+        "readiness": (export_result or {}).get("readiness")
+        or package_readiness(package_path),
         "library": state,
     }
 
@@ -694,7 +696,9 @@ def import_gpx_files_to_library(
     cid = validate_config_id(config_id)
     pkg_manifest = load_package_segment_manifest(cid)
     if effective_leg_source(pkg_manifest) == LEG_SOURCE_ORG:
-        from app.core.config_package.org_leg_library import import_gpx_files_to_org_library
+        from app.core.config_package.org_leg_library import (
+            import_gpx_files_to_org_library,
+        )
 
         import_gpx_files_to_org_library(uploads)
         return get_package_segment_library_state(cid)

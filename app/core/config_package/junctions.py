@@ -101,9 +101,7 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
         )
     side = str(raw.get("side") or "").strip().lower()
     if side not in _SIDES:
-        raise ValueError(
-            f"interactions[{index}].side must be left, right, or empty"
-        )
+        raise ValueError(f"interactions[{index}].side must be left, right, or empty")
     from_seg = str(raw.get("from_seg_id") or "").strip()
     if not from_seg:
         raise ValueError(f"interactions[{index}].from_seg_id is required")
@@ -112,28 +110,20 @@ def _normalize_interaction(raw: Any, index: int) -> Dict[str, Any]:
     if to_raw is None and raw.get("to_seg_id"):
         to_raw = [raw.get("to_seg_id")]
     if not isinstance(to_raw, list) or not to_raw:
-        raise ValueError(
-            f"interactions[{index}].to_seg_ids must be a non-empty list"
-        )
+        raise ValueError(f"interactions[{index}].to_seg_ids must be a non-empty list")
     to_segs: List[str] = []
     for t in to_raw:
         sid = str(t or "").strip()
         if sid and sid not in to_segs:
             to_segs.append(sid)
     if not to_segs:
-        raise ValueError(
-            f"interactions[{index}].to_seg_ids must include a segment id"
-        )
+        raise ValueError(f"interactions[{index}].to_seg_ids must include a segment id")
     if itype == "cross" and len(to_segs) != 1:
-        raise ValueError(
-            f"interactions[{index}]: cross allows exactly one to_seg_id"
-        )
+        raise ValueError(f"interactions[{index}]: cross allows exactly one to_seg_id")
 
     conflicts = str(raw.get("conflicts_with_seg_id") or "").strip()
     if itype == "cross" and not conflicts:
-        raise ValueError(
-            f"interactions[{index}]: cross requires conflicts_with_seg_id"
-        )
+        raise ValueError(f"interactions[{index}]: cross requires conflicts_with_seg_id")
     if itype == "merge":
         conflicts = ""
 
@@ -239,9 +229,7 @@ def validate_junctions_doc(data: Dict[str, Any]) -> Dict[str, Any]:
     junctions_raw = data.get("junctions") or []
     if not isinstance(junctions_raw, list):
         raise ValueError("junctions must be a list")
-    junctions = [
-        _normalize_junction(j, i) for i, j in enumerate(junctions_raw)
-    ]
+    junctions = [_normalize_junction(j, i) for i, j in enumerate(junctions_raw)]
     seen: Set[str] = set()
     for j in junctions:
         if j["id"] in seen:
@@ -362,9 +350,7 @@ def find_nearby_segments(
     cid = validate_config_id(config_id)
     # Keep endpoint cache across nearby lookups; tests clear via
     # clear_leg_endpoint_cache().
-    radius = float(
-        radius_m if radius_m is not None else JUNCTION_SEGMENT_PROXIMITY_M
-    )
+    radius = float(radius_m if radius_m is not None else JUNCTION_SEGMENT_PROXIMITY_M)
     if radius <= 0:
         raise ValueError("radius_m must be positive")
 
@@ -408,9 +394,7 @@ def find_nearby_segments(
         results.append(
             {
                 "seg_id": seg_id,
-                "seg_label": (
-                    seg.get("seg_label") or seg.get("description") or seg_id
-                ),
+                "seg_label": (seg.get("seg_label") or seg.get("description") or seg_id),
                 "leg_id": leg_id,
                 "length_km": seg.get("length_km"),
                 "width_m": seg.get("width_m"),

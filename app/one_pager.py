@@ -22,7 +22,7 @@ from app.utils.carto_basemaps import carto_light_tile_url
 logger = logging.getLogger(__name__)
 
 
-def generate_location_onepagers(
+def generate_location_onepagers(  # noqa: C901
     run_id: str,
     day: str,
     locations_results_json_path: Path,
@@ -108,9 +108,11 @@ def generate_location_onepagers(
             continue
         passes.sort(
             key=lambda pair: (
-                time_to_seconds(pair[1].get("first_runner"))
-                if time_to_seconds(pair[1].get("first_runner")) is not None
-                else 10**9,
+                (
+                    time_to_seconds(pair[1].get("first_runner"))
+                    if time_to_seconds(pair[1].get("first_runner")) is not None
+                    else 10**9
+                ),
                 _pass_instance_id(pair[0]) or 10**9,
             )
         )
@@ -118,7 +120,9 @@ def generate_location_onepagers(
         combined = dict(primary_report)
         combined["loc_start"] = min_time_str(r.get("loc_start") for _, r in passes)
         combined["loc_end"] = max_time_str(r.get("loc_end") for _, r in passes)
-        combined["first_runner"] = min_time_str(r.get("first_runner") for _, r in passes)
+        combined["first_runner"] = min_time_str(
+            r.get("first_runner") for _, r in passes
+        )
         combined["last_runner"] = max_time_str(r.get("last_runner") for _, r in passes)
         human_loc_id = _human_location_id(primary_loc, primary_report)
         sheet_specs.append(
@@ -363,15 +367,26 @@ def _render_onepager_html(
             blocks.append(_by_event_timing_html(prow))
         runner_timings_html = "\n".join(blocks)
     else:
-        runner_timings_html = """
+        runner_timings_html = (
+            """
         <p>The predicted timing for the first and last runner to arrive at and depart from this location.
         The peak times are when to expect the highest number of runners.</p>
         <ul>
-            <li>First: """ + html.escape(_format_time(report_row.get("first_runner"))) + """</li>
-            <li>Peak Start: """ + html.escape(_format_time(report_row.get("peak_start"))) + """</li>
-            <li>Peak End: """ + html.escape(_format_time(report_row.get("peak_end"))) + """</li>
-            <li>Last: """ + html.escape(_format_time(report_row.get("last_runner"))) + """</li>
-        </ul>""" + _by_event_timing_html(report_row)
+            <li>First: """
+            + html.escape(_format_time(report_row.get("first_runner")))
+            + """</li>
+            <li>Peak Start: """
+            + html.escape(_format_time(report_row.get("peak_start")))
+            + """</li>
+            <li>Peak End: """
+            + html.escape(_format_time(report_row.get("peak_end")))
+            + """</li>
+            <li>Last: """
+            + html.escape(_format_time(report_row.get("last_runner")))
+            + """</li>
+        </ul>"""
+            + _by_event_timing_html(report_row)
+        )
 
     events_list = ", ".join(events) if events else "NA"
 
@@ -391,9 +406,14 @@ def _render_onepager_html(
     else:
         map_block = ""
 
-    resources_html = "".join(f"<li>{html.escape(r)}</li>" for r in resources) if resources else "<li>NA</li>"
+    resources_html = (
+        "".join(f"<li>{html.escape(r)}</li>" for r in resources)
+        if resources
+        else "<li>NA</li>"
+    )
 
-    html_content = f"""<!DOCTYPE html>
+    html_content = (
+        f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -416,24 +436,53 @@ def _render_onepager_html(
     <h2>LOCATION TIMES</h2>
     <p>Time on location across all shifts.</p>
     <p>Day: {day_esc}</p>
-    <p>Times: """ + html.escape(f"{loc_start} - {loc_end} (Duration: {duration_text})") + """</p>
+    <p>Times: """
+        + html.escape(f"{loc_start} - {loc_end} (Duration: {duration_text})")
+        + """</p>
     <h2>RESOURCES</h2>
     <ul>
-    """ + resources_html + """
+    """
+        + resources_html
+        + """
     </ul>
     <h2>MAP</h2>
-    """ + (map_block + "\n    " if map_block else "") + """<p>GPS: """ + html.escape(gps_line) + """</p>
-    <p>View on <a href=\"""" + html.escape(maps_url) + """\" target="_blank" rel="noopener">Google Maps</a></p>
+    """
+        + (map_block + "\n    " if map_block else "")
+        + """<p>GPS: """
+        + html.escape(gps_line)
+        + """</p>
+    <p>View on <a href=\""""
+        + html.escape(maps_url)
+        + """\" target="_blank" rel="noopener">Google Maps</a></p>
     <h2>RUNNER TIMINGS</h2>
-    """ + runner_timings_html + """
+    """
+        + runner_timings_html
+        + """
     <h2>EVENTS</h2>
-    <p>""" + (html.escape("Runners from the following events will be at this location during the times above: " + events_list) if not is_proxy else html.escape("This location is near the course, but not directly on one or more events' course.")) + """</p>
+    <p>"""
+        + (
+            html.escape(
+                "Runners from the following events will be at this location during the times above: "
+                + events_list
+            )
+            if not is_proxy
+            else html.escape(
+                "This location is near the course, but not directly on one or more events' course."
+            )
+        )
+        + """</p>
     <h2>NOTES</h2>
-    """ + notes_html + """
+    """
+        + notes_html
+        + """
     <h2>EQUIPMENT PROVIDED</h2>
-    """ + equipment_html + """
+    """
+        + equipment_html
+        + """
     <h2>CONTACT</h2>
-    """ + contact_html + """
+    """
+        + contact_html
+        + """
     <h2>WEATHER</h2>
     <p>Dress for the weather conditions for the duration of your shift.</p>
     <h2>FOOTWEAR</h2>
@@ -441,6 +490,7 @@ def _render_onepager_html(
 </body>
 </html>
 """
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html_content, encoding="utf-8")
 
@@ -505,5 +555,3 @@ def _format_time(value: Any) -> str:
     if len(text) >= 5 and ":" in text:
         return text[:5]
     return text
-
-

@@ -10,7 +10,17 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 LOCATIONS_REPORT_FILENAME = "locations_report.json"
 
@@ -81,7 +91,9 @@ def resolve_proxy_ids(
     loc_ids = {lid for lid in pass_to_loc.values()}
     if raw_proxy_pass_id in loc_ids:
         matches = [pid for pid, lid in pass_to_loc.items() if lid == raw_proxy_pass_id]
-        proxy_pass = matches[0] if len(matches) == 1 else (matches[0] if matches else None)
+        proxy_pass = (
+            matches[0] if len(matches) == 1 else (matches[0] if matches else None)
+        )
         return proxy_pass, raw_proxy_pass_id
     return raw_proxy_pass_id, None
 
@@ -137,7 +149,11 @@ def json_ready(value: Any) -> Any:
         return {str(k): json_ready(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [json_ready(v) for v in value]
-    if hasattr(value, "item") and callable(value.item) and not isinstance(value, (bytes, bytearray)):
+    if (
+        hasattr(value, "item")
+        and callable(value.item)
+        and not isinstance(value, (bytes, bytearray))
+    ):
         try:
             return json_ready(value.item())
         except (ValueError, AttributeError):
@@ -167,7 +183,11 @@ def build_locations_report_document(
     resources_available: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     loc_list = [json_ready(dict(row)) for row in locations]
-    resources = list(resources_available) if resources_available is not None else resources_available_from_rows(loc_list)
+    resources = (
+        list(resources_available)
+        if resources_available is not None
+        else resources_available_from_rows(loc_list)
+    )
     return {
         "run_id": run_id or "",
         "day": (day or "").strip().lower(),

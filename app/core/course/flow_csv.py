@@ -144,9 +144,7 @@ def _corridor_pairs(
     return pairs
 
 
-def corridor_flow_id(
-    seg_id_a: str, seg_id_b: str, event_a: str, event_b: str
-) -> str:
+def corridor_flow_id(seg_id_a: str, seg_id_b: str, event_a: str, event_b: str) -> str:
     """Stable flow_id for generated opposing-pass corridor rows."""
     return f"{seg_id_a}_{seg_id_b}_{event_a}_{event_b}"
 
@@ -176,7 +174,7 @@ def _normalize_override(override: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def build_flow_csv_from_segments(
+def build_flow_csv_from_segments(  # noqa: C901
     segments: Sequence[Dict[str, Any]],
     event_ids: Optional[Sequence[str]] = None,
     *,
@@ -231,9 +229,8 @@ def build_flow_csv_from_segments(
         )
         if to_a <= from_a and to_b <= from_b:
             continue
-        if (
-            ov["event_a"] == ov["event_b"]
-            and _km_ranges_identical(from_a, to_a, from_b, to_b)
+        if ov["event_a"] == ov["event_b"] and _km_ranges_identical(
+            from_a, to_a, from_b, to_b
         ):
             continue
         flow_id = str(ov.get("flow_id") or "").strip() or default_flow_id(
@@ -243,7 +240,9 @@ def build_flow_csv_from_segments(
             {
                 "flow_id": flow_id,
                 "seg_id": ov["seg_id"],
-                "seg_label": str(ov.get("seg_label") or seg.get("seg_label") or "").strip(),
+                "seg_label": str(
+                    ov.get("seg_label") or seg.get("seg_label") or ""
+                ).strip(),
                 "event_a": ov["event_a"],
                 "event_b": ov["event_b"],
                 "from_km_a": from_a,
@@ -252,10 +251,12 @@ def build_flow_csv_from_segments(
                 "to_km_b": to_b,
                 "flow_type": str(
                     ov.get("flow_type") or seg.get("flow_type") or "overtake"
-                ).strip().lower(),
-                "direction": str(
-                    ov.get("direction") or seg.get("direction") or "uni"
-                ).strip().lower(),
+                )
+                .strip()
+                .lower(),
+                "direction": str(ov.get("direction") or seg.get("direction") or "uni")
+                .strip()
+                .lower(),
                 "notes": str(ov.get("notes") or "").strip()
                 or str(seg.get("description") or "").strip()
                 or str(seg.get("flow_notes") or "").strip(),
@@ -263,9 +264,7 @@ def build_flow_csv_from_segments(
             }
         )
 
-    override_pair_keys = {
-        (r["seg_id"], r["event_a"], r["event_b"]) for r in rows
-    }
+    override_pair_keys = {(r["seg_id"], r["event_a"], r["event_b"]) for r in rows}
 
     for seg in segments:
         seg_id = str(seg.get("seg_id", "")).strip()
@@ -308,7 +307,9 @@ def build_flow_csv_from_segments(
                     "to_km_a": to_a,
                     "from_km_b": from_b,
                     "to_km_b": to_b,
-                    "flow_type": str(seg.get("flow_type") or "overtake").strip().lower(),
+                    "flow_type": str(seg.get("flow_type") or "overtake")
+                    .strip()
+                    .lower(),
                     "direction": direction,
                     "notes": str(seg.get("description") or "").strip()
                     or str(seg.get("flow_notes") or "").strip(),
@@ -367,7 +368,7 @@ def build_flow_csv_from_segments(
     return out.getvalue()
 
 
-def validate_flow_csv(
+def validate_flow_csv(  # noqa: C901
     rows: Sequence[Dict[str, Any]],
     *,
     strict_auto_same_event: bool = True,
@@ -427,12 +428,7 @@ def validate_flow_csv(
         identical_km = _km_ranges_identical(from_a, to_a, from_b, to_b)
         notes = str(raw.get("notes") or "").strip()
 
-        if (
-            strict_auto_same_event
-            and auto_generated
-            and same_event
-            and identical_km
-        ):
+        if strict_auto_same_event and auto_generated and same_event and identical_km:
             result.errors.append(
                 f"Row {row_num} ({flow_id}): auto-generated same-event row with "
                 "identical A/B km windows is not allowed"

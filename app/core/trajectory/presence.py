@@ -61,10 +61,18 @@ class TrajectoryPresence:
             self.speed_mps = np.full(len(self.event), np.nan, dtype=np.float64)
         else:
             self.speed_mps = np.asarray(speed_mps, dtype=np.float64)
-        self.start_sec = None if start_sec is None else np.asarray(start_sec, dtype=np.float64)
-        self.pace_sec = None if pace_sec is None else np.asarray(pace_sec, dtype=np.float64)
-        self.finish_t = None if finish_t is None else np.asarray(finish_t, dtype=np.float64)
-        self.finish_km = None if finish_km is None else np.asarray(finish_km, dtype=np.float64)
+        self.start_sec = (
+            None if start_sec is None else np.asarray(start_sec, dtype=np.float64)
+        )
+        self.pace_sec = (
+            None if pace_sec is None else np.asarray(pace_sec, dtype=np.float64)
+        )
+        self.finish_t = (
+            None if finish_t is None else np.asarray(finish_t, dtype=np.float64)
+        )
+        self.finish_km = (
+            None if finish_km is None else np.asarray(finish_km, dtype=np.float64)
+        )
 
     @classmethod
     def from_samples(
@@ -87,12 +95,23 @@ class TrajectoryPresence:
         if snapshot is not None and not snapshot.empty and "pace" in snapshot.columns:
             snap = snapshot.copy()
             snap["runner_id"] = snap["runner_id"].astype(str)
-            pace_map = dict(zip(snap["runner_id"].astype(str), snap["pace"].astype(float)))
-            pace_sec = np.array([float(pace_map.get(r, np.nan)) * 60.0 for r in runner_id])
+            pace_map = dict(
+                zip(snap["runner_id"].astype(str), snap["pace"].astype(float))
+            )
+            pace_sec = np.array(
+                [float(pace_map.get(r, np.nan)) * 60.0 for r in runner_id]
+            )
             with np.errstate(divide="ignore", invalid="ignore"):
                 speed = np.where(pace_sec > 0, 1000.0 / pace_sec, np.nan)
         order = np.argsort(t, kind="mergesort")
-        return cls(t[order], km[order], event[order], runner_id[order], speed[order], clock="samples")
+        return cls(
+            t[order],
+            km[order],
+            event[order],
+            runner_id[order],
+            speed[order],
+            clock="samples",
+        )
 
     @classmethod
     def from_snapshot(
@@ -120,13 +139,21 @@ class TrajectoryPresence:
             snap["start_offset"] = 0.0
         if "distance" not in snap.columns:
             snap["distance"] = np.nan
-        gun = np.array([guns.get(str(e), np.nan) for e in snap["event"]], dtype=np.float64)
-        offset = pd.to_numeric(snap["start_offset"], errors="coerce").to_numpy(dtype=np.float64)
+        gun = np.array(
+            [guns.get(str(e), np.nan) for e in snap["event"]], dtype=np.float64
+        )
+        offset = pd.to_numeric(snap["start_offset"], errors="coerce").to_numpy(
+            dtype=np.float64
+        )
         offset = np.nan_to_num(offset, nan=0.0)
-        pace_min = pd.to_numeric(snap["pace"], errors="coerce").to_numpy(dtype=np.float64)
+        pace_min = pd.to_numeric(snap["pace"], errors="coerce").to_numpy(
+            dtype=np.float64
+        )
         pace_sec = pace_min * 60.0
         start_sec = gun + offset
-        finish_km = pd.to_numeric(snap["distance"], errors="coerce").to_numpy(dtype=np.float64)
+        finish_km = pd.to_numeric(snap["distance"], errors="coerce").to_numpy(
+            dtype=np.float64
+        )
         finish_km = np.where(np.isfinite(finish_km) & (finish_km > 0), finish_km, 1.0e6)
         with np.errstate(invalid="ignore"):
             finish_t = start_sec + pace_sec * finish_km
@@ -152,7 +179,9 @@ class TrajectoryPresence:
         i1 = int(np.searchsorted(self.t, t1, side="left"))
         return slice(i0, i1), np.arange(i0, i1)
 
-    def _snapshot_span(self, t0: float, t1: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _snapshot_span(
+        self, t0: float, t1: float
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Km occupied on-course during half-open ``[t0, t1)``."""
         start = self.start_sec
         pace = self.pace_sec
@@ -249,7 +278,9 @@ class TrajectoryPresence:
             prev = best.get(key)
             if prev is None or dt[i] < prev[0]:
                 best[key] = (float(dt[i]), float(kms[i]), float(spd[i]))
-        pos_m = np.array([(v[1] - float(from_km)) * 1000.0 for v in best.values()], dtype=np.float64)
+        pos_m = np.array(
+            [(v[1] - float(from_km)) * 1000.0 for v in best.values()], dtype=np.float64
+        )
         speeds = np.array([v[2] for v in best.values()], dtype=np.float64)
         return pos_m, speeds
 
@@ -283,7 +314,7 @@ class TrajectoryPresence:
         return np.asarray(pos_m, dtype=np.float64), np.asarray(speeds, dtype=np.float64)
 
 
-def fill_mapping_from_samples(
+def fill_mapping_from_samples(  # noqa: C901
     presence: TrajectoryPresence,
     *,
     segments_dict: Dict,
@@ -299,8 +330,8 @@ def fill_mapping_from_samples(
         return mapping
     window_seconds = 120
     if len(time_windows) >= 2:
-        (t0, t1, _) = time_windows[0]
-        (t2, t3, _) = time_windows[1]
+        t0, t1, _ = time_windows[0]
+        t2, t3, _ = time_windows[1]
         window_seconds = int((t2 - t0).total_seconds())
     earliest_start_min = min(start_times.values())
     for event in event_names:
@@ -309,10 +340,12 @@ def fill_mapping_from_samples(
         if event_min is None:
             continue
         event_start_sec = float(event_min) * 60.0
-        start_idx = int(((float(event_min) - earliest_start_min) * 60) // window_seconds)
+        start_idx = int(
+            ((float(event_min) - earliest_start_min) * 60) // window_seconds
+        )
         event_column = event_lower
         for global_w_idx in range(start_idx, len(time_windows)):
-            (t_start, t_end, _) = time_windows[global_w_idx]
+            t_start, t_end, _ = time_windows[global_w_idx]
             t_mid = t_start + (t_end - t_start) / 2
             t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
             if t_mid_sec < (event_start_sec - window_seconds):
@@ -326,7 +359,9 @@ def fill_mapping_from_samples(
                 flag = str(seg_row.iloc[0].get(event_column, "n")).lower()
                 if flag not in {"y", "yes", "true", "1"}:
                     continue
-                km_range = segment_ranges[seg_id].get(event_lower) or segment_ranges[seg_id].get(event)
+                km_range = segment_ranges[seg_id].get(event_lower) or segment_ranges[
+                    seg_id
+                ].get(event)
                 if km_range is None:
                     continue
                 from_km, to_km = km_range

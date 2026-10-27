@@ -10,8 +10,6 @@ From that we build:
 
 from __future__ import annotations
 
-import csv
-import io
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -163,9 +161,7 @@ def validate_corridor_pairings(
             continue
         mate = legs_by_id.get(mate_id)
         if mate is None:
-            warnings.append(
-                f"Leg {leg_id} is paired with unknown leg {mate_id}"
-            )
+            warnings.append(f"Leg {leg_id} is paired with unknown leg {mate_id}")
             continue
         mate_pair = str(mate.get("paired_with") or "").strip()
         if mate_pair != leg_id:
@@ -201,7 +197,9 @@ def validate_corridor_pairings(
     return warnings
 
 
-def load_leg_library(library_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def load_leg_library(
+    library_dir: Path, manifest: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
     """Load all legs from manifest into memory."""
     out: Dict[str, Dict[str, Any]] = {}
     for entry in manifest_legs(manifest):
@@ -259,7 +257,9 @@ def build_event_gpx_content(
     trkseg = ET.SubElement(trk, "trkseg")
     for lon, lat in coords:
         ET.SubElement(trkseg, "trkpt", lat=str(lat), lon=str(lon))
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+        root, encoding="unicode"
+    )
 
 
 LegOccurrence = Tuple[str, int]
@@ -376,7 +376,9 @@ def _recipe_leg_order(
 ) -> List[str]:
     """Leg ids in recipe traversal order (union across events, first-seen wins)."""
     del manifest  # kept for call-site compatibility
-    return [cid for cid, _occ in _recipe_occurrence_order(legs_by_id, event_ids, recipes)]
+    return [
+        cid for cid, _occ in _recipe_occurrence_order(legs_by_id, event_ids, recipes)
+    ]
 
 
 def build_course_segments_from_library(
@@ -414,9 +416,9 @@ def build_course_segments_from_library(
         if not events:
             continue
         length_km = float(ch["length_km"])
-        leg_description = (
-            str(entry.get("description") or entry.get("flow_notes") or "").strip()
-        )
+        leg_description = str(
+            entry.get("description") or entry.get("flow_notes") or ""
+        ).strip()
         seg_label = (entry.get("seg_label") or ch.get("name") or cid).strip()
         if occ > 1:
             seg_label = f"{seg_label} ({occ})"
@@ -474,9 +476,7 @@ def export_library_to_course(
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        stitch_warnings.extend(
-            validate_recipe_stitch(library_dir, seq, legs_by_id)
-        )
+        stitch_warnings.extend(validate_recipe_stitch(library_dir, seq, legs_by_id))
     stitch_warnings.extend(validate_corridor_pairings(legs_by_id, recipes))
 
     segments = build_course_segments_from_library(manifest, legs_by_id, event_ids)
@@ -491,7 +491,11 @@ def export_library_to_course(
     recipe_lengths: Dict[str, float] = {}
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
-        seq = [str(c).strip() for c in (recipes.get(key) or []) if str(c).strip() in legs_by_id]
+        seq = [
+            str(c).strip()
+            for c in (recipes.get(key) or [])
+            if str(c).strip() in legs_by_id
+        ]
         if not seq:
             recipe_lengths[eid] = 0.0
             continue
@@ -524,9 +528,7 @@ def write_package_exports(
     (package_dir / "flow.csv").write_text(bundle["flow_csv"], encoding="utf-8")
 
     manifest = bundle["manifest"]
-    legs_by_id = load_leg_library(
-        library_dir, manifest
-    )
+    legs_by_id = load_leg_library(library_dir, manifest)
     if write_event_gpx:
         for eid in (manifest.get("recipes") or {}).keys():
             gpx = build_event_gpx_content(eid, manifest, legs_by_id)
