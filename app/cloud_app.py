@@ -3,6 +3,7 @@ Cloud-mode entrypoint for the skinny, read-only UI (locations + dashboard).
 
 Issue #740: Dashboard, Analysis Inputs, session on all routes; landing on /dashboard.
 """
+
 import logging
 import os
 
@@ -10,10 +11,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.cloud_middleware import CloudSessionMiddleware
-from app.routes.cloud_ui import router as cloud_ui_router
+from app.routes.api_dashboard import router as api_dashboard_router
 from app.routes.api_locations import router as locations_router
 from app.routes.api_segments import router as segments_router
-from app.routes.api_dashboard import router as api_dashboard_router
+from app.routes.cloud_ui import router as cloud_ui_router
 from app.utils.env import env_str
 from app.utils.run_id import get_available_days, get_run_directory
 

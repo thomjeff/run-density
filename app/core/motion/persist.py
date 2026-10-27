@@ -72,7 +72,9 @@ def build_and_persist_motion_for_day(
         package_id=package_id,
         day=day_code,
         gun_by_event=gun_by_event,
-        course_hash=hash_course_file(Path(course_json_path) if course_json_path else None),
+        course_hash=hash_course_file(
+            Path(course_json_path) if course_json_path else None
+        ),
         runners_hash=hash_runners_inputs(runner_paths) if runner_paths else None,
         guns_hash=hash_guns(gun_by_event),
         generated_at_iso=datetime.now(timezone.utc).isoformat(),
@@ -82,7 +84,9 @@ def build_and_persist_motion_for_day(
     meta_path = motion_dir / MOTION_METADATA_FILENAME
 
     # Deterministic column order + row order already enforced in build.
-    samples.to_parquet(samples_path, index=False, compression="zstd", compression_level=3)
+    samples.to_parquet(
+        samples_path, index=False, compression="zstd", compression_level=3
+    )
 
     snapshot_cols = [
         c
@@ -91,9 +95,13 @@ def build_and_persist_motion_for_day(
     ]
     snapshot = runners_df.loc[:, snapshot_cols].copy()
     snapshot_path = motion_dir / MOTION_RUNNERS_SNAPSHOT_FILENAME
-    snapshot.to_parquet(snapshot_path, index=False, compression="zstd", compression_level=3)
+    snapshot.to_parquet(
+        snapshot_path, index=False, compression="zstd", compression_level=3
+    )
 
-    meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    meta_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     logger.info(
         "Motion persisted for %s: %s rows → %s",

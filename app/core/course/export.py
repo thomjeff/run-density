@@ -7,9 +7,9 @@ Issue #732: Pipeline-compatible CSV/GPX for the current course.
 import csv
 import io
 import json
+import xml.etree.ElementTree as ET
 import zipfile
 from typing import Any, Dict, List, Optional, Sequence
-import xml.etree.ElementTree as ET
 
 from app.utils.constants import COURSE_EVENT_IDS
 
@@ -140,7 +140,9 @@ def _stored_event_kms(
     return vals
 
 
-def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> List[Dict[str, tuple]]:
+def _event_cumulative_distances(
+    segments: List[Dict], event_ids: List[str]
+) -> List[Dict[str, tuple]]:
     """
     For each event, compute per-segment from_km/to_km as cumulative distance along
     only the segments that include that event (so half skips segments 2/3, etc.).
@@ -174,7 +176,9 @@ def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> L
     return result
 
 
-def enrich_segments_event_distances(segments: List[Dict], event_ids: List[str] = None) -> None:
+def enrich_segments_event_distances(
+    segments: List[Dict], event_ids: List[str] = None
+) -> None:
     """
     Mutate each segment to add per-event from_km/to_km (e.g. full_from_km, full_to_km, 10k_from_km, 10k_to_km).
     Uses cumulative distance along only segments that include that event. Events not on the segment get 0, 0.
@@ -226,7 +230,15 @@ def build_segments_csv(course: Dict[str, Any], fmt: str = "pipeline") -> str:
         )
     else:
         header = (
-            ["seg_id", "seg_label", "pin_start_label", "pin_end_label", "width_m", "schema", "direction"]
+            [
+                "seg_id",
+                "seg_label",
+                "pin_start_label",
+                "pin_end_label",
+                "width_m",
+                "schema",
+                "direction",
+            ]
             + event_ids
             + event_cols
             + length_cols
@@ -270,12 +282,27 @@ def build_segments_csv(course: Dict[str, Any], fmt: str = "pipeline") -> str:
                 event_km.extend([km_fmt(ev_from), km_fmt(ev_to)])
         seg_len = round(to_km - from_km, KM_DECIMALS)
         zero_km = km_fmt(0.0) if use_pipeline else _format_km(0.0)
-        lengths = [km_fmt(seg_len) if eid.lower() in seg_events else zero_km for eid in event_ids]
+        lengths = [
+            km_fmt(seg_len) if eid.lower() in seg_events else zero_km
+            for eid in event_ids
+        ]
         description = seg.get("description", "")
         if use_pipeline:
-            row = [seg_id, seg_label, width_m, schema, direction] + yn + event_km + lengths + [description]
+            row = (
+                [seg_id, seg_label, width_m, schema, direction]
+                + yn
+                + event_km
+                + lengths
+                + [description]
+            )
         else:
-            row = [seg_id, seg_label, pin_start, pin_end, width_m, schema, direction] + yn + event_km + lengths + [description]
+            row = (
+                [seg_id, seg_label, pin_start, pin_end, width_m, schema, direction]
+                + yn
+                + event_km
+                + lengths
+                + [description]
+            )
         w.writerow(row)
     return out.getvalue()
 
@@ -287,7 +314,21 @@ def build_flow_csv(course: Dict[str, Any]) -> str:
     segments = course.get("segments") or []
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["seg_id", "seg_label", "event_a", "event_b", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "flow_type", "direction", "notes"])
+    w.writerow(
+        [
+            "seg_id",
+            "seg_label",
+            "event_a",
+            "event_b",
+            "from_km_a",
+            "to_km_a",
+            "from_km_b",
+            "to_km_b",
+            "flow_type",
+            "direction",
+            "notes",
+        ]
+    )
     for i, seg in enumerate(segments):
         seg_id = _segment_display_id(i)
         seg_label = seg.get("seg_label", "")
@@ -296,7 +337,21 @@ def build_flow_csv(course: Dict[str, Any]) -> str:
         events = seg.get("events") or ["full"]
         event_a = events[0] if events else "full"
         event_b = event_a
-        w.writerow([seg_id, seg_label, event_a, event_b, from_km, to_km, from_km, to_km, "overtake", seg.get("direction", "uni"), ""])
+        w.writerow(
+            [
+                seg_id,
+                seg_label,
+                event_a,
+                event_b,
+                from_km,
+                to_km,
+                from_km,
+                to_km,
+                "overtake",
+                seg.get("direction", "uni"),
+                "",
+            ]
+        )
     return out.getvalue()
 
 
@@ -322,7 +377,9 @@ def build_locations_csv(
     else:
         codes = [normalize_resource_code(c) for c in registry]
 
-    locations = [loc for loc in (course.get("locations") or []) if isinstance(loc, dict)]
+    locations = [
+        loc for loc in (course.get("locations") or []) if isinstance(loc, dict)
+    ]
     stamp_pass_identity(locations)
     course["locations"] = locations
 
@@ -344,10 +401,14 @@ def build_gpx_line_coordinates(
     track_name: str = "Leg",
 ) -> str:
     """Build GPX 1.1 with one track from [[lon, lat], ...] coordinates."""
-    root = ET.Element(_gpx_tag("gpx"), version="1.1", creator="Run-Density Course Mapping")
+    root = ET.Element(
+        _gpx_tag("gpx"), version="1.1", creator="Run-Density Course Mapping"
+    )
     root.set("xmlns", GPX_NS)
     if len(coordinates) < 2:
-        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+            root, encoding="unicode"
+        )
     trk = ET.SubElement(root, _gpx_tag("trk"))
     name_el = ET.SubElement(trk, _gpx_tag("name"))
     name_el.text = track_name or "Leg"
@@ -357,21 +418,29 @@ def build_gpx_line_coordinates(
             continue
         lon, lat = float(pt[0]), float(pt[1])
         ET.SubElement(trkseg, _gpx_tag("trkpt"), lat=str(lat), lon=str(lon))
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+        root, encoding="unicode"
+    )
 
 
 def build_gpx(course: Dict[str, Any], course_name: str = "") -> str:
     """Build GPX 1.1 with one track from course.geometry (LineString)."""
-    root = ET.Element(_gpx_tag("gpx"), version="1.1", creator="Run-Density Course Mapping")
+    root = ET.Element(
+        _gpx_tag("gpx"), version="1.1", creator="Run-Density Course Mapping"
+    )
     root.set("xmlns", GPX_NS)
 
     geometry = course.get("geometry")
     if not geometry or geometry.get("type") != "LineString":
-        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+            root, encoding="unicode"
+        )
 
     coords = geometry.get("coordinates") or []
     if len(coords) < 2:
-        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+            root, encoding="unicode"
+        )
 
     trk = ET.SubElement(root, _gpx_tag("trk"))
     name_el = ET.SubElement(trk, _gpx_tag("name"))
@@ -379,7 +448,9 @@ def build_gpx(course: Dict[str, Any], course_name: str = "") -> str:
     trkseg = ET.SubElement(trk, _gpx_tag("trkseg"))
     for lon, lat in coords:
         ET.SubElement(trkseg, _gpx_tag("trkpt"), lat=str(lat), lon=str(lon))
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+        root, encoding="unicode"
+    )
 
 
 def build_course_json(course: Dict[str, Any]) -> str:
@@ -387,7 +458,9 @@ def build_course_json(course: Dict[str, Any]) -> str:
     return json.dumps(course, indent=2, ensure_ascii=False)
 
 
-def export_course_zip(course: Dict[str, Any], course_id: str, course_name: str = "") -> bytes:
+def export_course_zip(
+    course: Dict[str, Any], course_id: str, course_name: str = ""
+) -> bytes:
     """Build a zip with segments.csv, flow.csv, locations.csv, course.gpx, and course.json."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

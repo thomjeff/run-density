@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from app.core.motion.occupancy import PinPlace, _filter_events, _planar_inside_mask
 from app.core.motion.movement_drilldown import (
     COUNT_SEMANTICS,
     COUNT_SEMANTICS_NOTE,
@@ -18,6 +17,7 @@ from app.core.motion.movement_drilldown import (
     quintile_profile_for_runners,
     stream_key,
 )
+from app.core.motion.occupancy import PinPlace, _filter_events, _planar_inside_mask
 from app.utils.constants import (
     MOTION_QUINTILE_PARTNER_DWELL_SEC,
     MOTION_STREAM_WINDOW_SEC,
@@ -84,9 +84,7 @@ def planar_crossing_events(
         for i in range(len(ts)):
             cur = bool(inside[i])
             t = int(ts[i])
-            in_range = t_min_filter is None or (
-                int(t_min_filter) <= t < t_max
-            )
+            in_range = t_min_filter is None or (int(t_min_filter) <= t < t_max)
             if cur and not prev and in_range:
                 rows.append(
                     {
@@ -270,7 +268,7 @@ def build_visit_summary(
         g["visit_km"] = labels
         for visit_km, cg in g.groupby("visit_km", sort=True):
             enter_ts = cg["enter_t"].dropna().astype(int)
-            exit_ts = cg["exit_t"].dropna().astype(int)
+            cg["exit_t"].dropna().astype(int)
             first_t = int(enter_ts.min()) if len(enter_ts) else None
             last_t = int(enter_ts.max()) if len(enter_ts) else None
             first_bin = (first_t // window) * window if first_t is not None else None
@@ -313,7 +311,7 @@ def build_visit_summary(
     return rows
 
 
-def build_stream_passage_table(
+def build_stream_passage_table(  # noqa: C901
     samples: pd.DataFrame,
     pin: PinPlace,
     *,
@@ -343,9 +341,7 @@ def build_stream_passage_table(
     authored = list(authored_movements or [])
     quintile_lookup = build_runner_quintile_lookup(runners_df)
 
-    crossings = planar_crossing_events(
-        samples, pin, t0=t0, t1=t1, events=events
-    )
+    crossings = planar_crossing_events(samples, pin, t0=t0, t1=t1, events=events)
     enters = crossings[crossings["kind"] == "enter"].copy()
     exits = crossings[crossings["kind"] == "exit"].copy()
     episodes = pair_visit_episodes(crossings)
@@ -353,9 +349,7 @@ def build_stream_passage_table(
     event_names = sorted(
         {
             str(e).lower()
-            for e in (
-                list(enters["event"].unique()) if not enters.empty else []
-            )
+            for e in (list(enters["event"].unique()) if not enters.empty else [])
             + (list(exits["event"].unique()) if not exits.empty else [])
         }
     )
@@ -425,11 +419,7 @@ def build_stream_passage_table(
     rows: List[Dict[str, Any]] = []
     for bin_t0 in bin_starts:
         bin_t1 = bin_t0 + window
-        e_bin = (
-            enters[enters["bin_t0"] == bin_t0]
-            if not enters.empty
-            else enters
-        )
+        e_bin = enters[enters["bin_t0"] == bin_t0] if not enters.empty else enters
         x_bin = exits[exits["bin_t0"] == bin_t0] if not exits.empty else exits
 
         enters_by_event: Dict[str, int] = {}
@@ -444,13 +434,15 @@ def build_stream_passage_table(
             enters_by_event[ev] = int(e_ev["runner_id"].nunique()) if len(e_ev) else 0
             exits_by_event[ev] = int(x_ev["runner_id"].nunique()) if len(x_ev) else 0
             if len(e_ev) and e_ev["elapsed_km"].notna().any():
-                enter_km_by_event[ev] = round(
-                    float(e_ev["elapsed_km"].median()), 2
-                )
+                enter_km_by_event[ev] = round(float(e_ev["elapsed_km"].median()), 2)
             else:
                 enter_km_by_event[ev] = None
 
-            if len(e_ev) and "visit_km" in e_ev.columns and e_ev["visit_km"].notna().any():
+            if (
+                len(e_ev)
+                and "visit_km" in e_ev.columns
+                and e_ev["visit_km"].notna().any()
+            ):
                 for visit_km, vg in e_ev.groupby("visit_km", sort=True):
                     if pd.isna(visit_km):
                         continue
@@ -467,10 +459,9 @@ def build_stream_passage_table(
                     )
                     sk = stream_key(str(ev), float(visit_km))
                     # One enter row per unique runner (earliest enter in window).
-                    first_by_rid = (
-                        vg.sort_values("t", kind="mergesort")
-                        .drop_duplicates(subset=["runner_id"], keep="first")
-                    )
+                    first_by_rid = vg.sort_values(
+                        "t", kind="mergesort"
+                    ).drop_duplicates(subset=["runner_id"], keep="first")
                     visit_rows: List[Dict[str, Any]] = []
                     for _, er in first_by_rid.iterrows():
                         rid = str(er["runner_id"])
@@ -496,9 +487,7 @@ def build_stream_passage_table(
                         )
 
         concurrent_pairs = attach_quintile_matrices(
-            build_concurrent_pairs(
-                enters_by_visit, authored_movements=authored
-            ),
+            build_concurrent_pairs(enters_by_visit, authored_movements=authored),
             visit_enters,
             dwell_sec=float(MOTION_QUINTILE_PARTNER_DWELL_SEC),
         )
@@ -571,9 +560,7 @@ def build_stream_passage_table(
     span_t0 = int(bin_starts[0]) if bin_starts else t0
     span_t1 = int(bin_starts[-1] + window) if bin_starts else t1
 
-    unique_total = int(
-        enters["runner_id"].nunique() if not enters.empty else 0
-    )
+    unique_total = int(enters["runner_id"].nunique() if not enters.empty else 0)
     passages_total = int(len(enters)) if not enters.empty else 0
 
     return {

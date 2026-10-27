@@ -5,6 +5,8 @@ on:
     paths:
       - '**.py'
       - '.github/workflows/code-quality.yaml'
+      - 'pyproject.toml'
+      - '.flake8'
 
 jobs:
   lint-and-complexity:
@@ -56,7 +58,7 @@ jobs:
             echo "No app/ Python files changed; skipping flake8"
             exit 0
           fi
-          echo "$files" | xargs -r flake8 --max-complexity=15 --select=B001,C901,E,F,W
+          echo "$files" | xargs -r flake8
 
       - name: Check code formatting with black
         run: |
@@ -66,7 +68,7 @@ jobs:
             echo "No app/ Python files changed; skipping black"
             exit 0
           fi
-          echo "$files" | xargs -r black --check
+          echo "$files" | xargs -r black --check --config pyproject.toml
 
       - name: Check import sorting with isort
         run: |
@@ -76,4 +78,4 @@ jobs:
             echo "No app/ Python files changed; skipping isort"
             exit 0
           fi
-          echo "$files" | xargs -r isort --check-only --profile black
+          echo "$files" | xargs -r isort --check-only --settings-path pyproject.toml

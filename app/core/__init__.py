@@ -5,7 +5,7 @@ This package contains the core algorithmic logic for the run-density application
 
 Structure:
 - density/ - Density analysis and computation logic
-- bin/ - Bin-level analysis and geometry processing  
+- bin/ - Bin-level analysis and geometry processing
 - flow/ - Temporal flow analysis
 - gpx/ - GPX processing and coordinate generation
 

@@ -66,8 +66,7 @@ def progress_path(run_id: str) -> Path:
 
 def _empty_stage_states() -> List[Dict[str, Any]]:
     return [
-        {"id": s["id"], "label": s["label"], "state": "pending"}
-        for s in USER_STAGES
+        {"id": s["id"], "label": s["label"], "state": "pending"} for s in USER_STAGES
     ]
 
 
@@ -83,7 +82,7 @@ def normalize_phase_name(phase_name: Optional[str]) -> Optional[str]:
     return phase_name
 
 
-def build_progress_payload(
+def build_progress_payload(  # noqa: C901
     *,
     run_id: str,
     status: str,

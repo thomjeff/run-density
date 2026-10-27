@@ -17,8 +17,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from app.core.baseline.generator import generate_runner_file
 from app.core.baseline.calculator import calculate_baseline_metrics
+from app.core.baseline.generator import generate_runner_file
 from app.core.baseline.validation import (
     validate_control_variables,
     validate_cutoff_time_format,
@@ -81,7 +81,9 @@ def _now_iso() -> str:
 def _read_manifest(dataset_dir: Path) -> Dict[str, Any]:
     path = dataset_dir / DATASET_MANIFEST_NAME
     if not path.is_file():
-        raise FileNotFoundError(f"Runner dataset manifest not found: {dataset_dir.name}")
+        raise FileNotFoundError(
+            f"Runner dataset manifest not found: {dataset_dir.name}"
+        )
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     if not isinstance(data, dict):
@@ -130,7 +132,9 @@ def load_runner_dataset(dataset_id: str) -> Dict[str, Any]:
         if live:
             public["summary"] = live
     except (OSError, ValueError) as exc:
-        logger.warning("Could not recompute runner dataset summary for %s: %s", did, exc)
+        logger.warning(
+            "Could not recompute runner dataset summary for %s: %s", did, exc
+        )
     return public
 
 
@@ -154,7 +158,9 @@ def list_runner_datasets() -> List[Dict[str, Any]]:
 def dataset_covers_events(
     dataset: Mapping[str, Any], required_events: Sequence[str]
 ) -> bool:
-    have = {str(e).strip().lower() for e in (dataset.get("events") or []) if str(e).strip()}
+    have = {
+        str(e).strip().lower() for e in (dataset.get("events") or []) if str(e).strip()
+    }
     need = [str(e).strip().lower() for e in required_events if str(e).strip()]
     if not need:
         return False
@@ -199,7 +205,11 @@ def _write_dataset_tree(
         staging.rename(dest)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
-        if dest.exists() and dest.is_dir() and not (dest / DATASET_MANIFEST_NAME).is_file():
+        if (
+            dest.exists()
+            and dest.is_dir()
+            and not (dest / DATASET_MANIFEST_NAME).is_file()
+        ):
             shutil.rmtree(dest, ignore_errors=True)
         raise
     return dest
@@ -289,9 +299,7 @@ def create_scenario_dataset(
         filename = f"{event_name}{RUNNERS_FILENAME_SUFFIX}"
         runners_path = source_dir / filename
         if not runners_path.is_file():
-            raise FileNotFoundError(
-                f"Source dataset is missing {filename}"
-            )
+            raise FileNotFoundError(f"Source dataset is missing {filename}")
         baseline_df = pd.read_csv(runners_path)
         if "start_offset" not in baseline_df.columns:
             raise ValueError(
@@ -331,7 +339,9 @@ def create_scenario_dataset(
     )
 
 
-def assign_runner_dataset(config_id: str, dataset_id: str) -> Dict[str, Any]:
+def assign_runner_dataset(  # noqa: C901
+    config_id: str, dataset_id: str
+) -> Dict[str, Any]:
     """
     Atomically assign a dataset to a package and freeze required CSVs.
 
@@ -360,7 +370,10 @@ def assign_runner_dataset(config_id: str, dataset_id: str) -> Dict[str, Any]:
         if not src.is_file():
             raise ValueError(f"Dataset file missing: {name}")
 
-    staging = package_path / f"{_STAGING_PREFIX}assign_runners_{dataset['dataset_id']}{_PARTIAL_SUFFIX}"
+    staging = (
+        package_path
+        / f"{_STAGING_PREFIX}assign_runners_{dataset['dataset_id']}{_PARTIAL_SUFFIX}"
+    )
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True, exist_ok=False)

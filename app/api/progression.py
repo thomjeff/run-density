@@ -21,7 +21,11 @@ router = APIRouter()
 
 
 def _run_day(run_id: Optional[str], day: Optional[str]):
-    from app.utils.run_id import get_latest_run_id, get_run_directory, resolve_selected_day
+    from app.utils.run_id import (
+        get_latest_run_id,
+        get_run_directory,
+        resolve_selected_day,
+    )
 
     if not run_id:
         run_id = get_latest_run_id()

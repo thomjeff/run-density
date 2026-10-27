@@ -14,7 +14,10 @@ from app.core.baseline.storage import (
     save_baseline_metrics,
     save_generated_files,
 )
-from app.core.baseline.validation import validate_runner_file, validate_control_variables
+from app.core.baseline.validation import (
+    validate_control_variables,
+    validate_runner_file,
+)
 
 __all__ = [
     "calculate_baseline_metrics",

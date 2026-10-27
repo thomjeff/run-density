@@ -9,11 +9,20 @@ Issue #758: Export segments.csv from course.json into config package.
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from app.core.v2.start_time import START_TIME_MAX_MINUTES, START_TIME_MIN_MINUTES
 from app.core.config_package import (
     assign_runner_dataset,
     assign_runner_dataset_or_delete_package,
@@ -46,7 +55,6 @@ from app.core.config_package.legs import (
     reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
     sync_leg_metadata_into_course,
-    sync_leg_locations_if_applied,
     update_package_leg,
     update_package_leg_geometry,
 )
@@ -86,8 +94,8 @@ from app.core.config_package.segment_recipes import (
     save_package_recipes,
     seed_reference_segment_library,
 )
-from app.core.config_package.storage import validate_config_id
 from app.core.locations.suggest_events import suggest_location_events
+from app.core.v2.start_time import START_TIME_MAX_MINUTES, START_TIME_MIN_MINUTES
 from app.utils.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -191,7 +199,9 @@ class UpdateLegGeometryRequest(BaseModel):
 
 
 class RemoveLegLocationRequest(BaseModel):
-    leg_loc_key: str = Field(..., min_length=3, description="Leg location key, e.g. 01:0")
+    leg_loc_key: str = Field(
+        ..., min_length=3, description="Leg location key, e.g. 01:0"
+    )
 
 
 class SaveSegmentRecipesRequest(BaseModel):
@@ -523,9 +533,11 @@ async def api_junction_nearby_segments(
                 "config_id": config_id,
                 "lat": body.lat,
                 "lon": body.lon,
-                "radius_m": body.radius_m
-                if body.radius_m is not None
-                else JUNCTION_SEGMENT_PROXIMITY_M,
+                "radius_m": (
+                    body.radius_m
+                    if body.radius_m is not None
+                    else JUNCTION_SEGMENT_PROXIMITY_M
+                ),
                 "segments": nearby,
             }
         )
@@ -699,9 +711,14 @@ async def api_get_package_leg_geometry(
             LEG_SOURCE_ORG,
             effective_leg_source,
         )
-        from app.core.config_package.segment_recipes import load_package_segment_manifest
+        from app.core.config_package.segment_recipes import (
+            load_package_segment_manifest,
+        )
 
-        if effective_leg_source(load_package_segment_manifest(config_id)) == LEG_SOURCE_ORG:
+        if (
+            effective_leg_source(load_package_segment_manifest(config_id))
+            == LEG_SOURCE_ORG
+        ):
             feature = get_org_leg_line_geojson(leg_id)
         else:
             feature = get_leg_line_geojson(config_id, leg_id)
@@ -1231,7 +1248,9 @@ async def api_copy_org_leg(
     require_auth(request)
     try:
         payload = body
-        state = copy_org_leg(leg_id, leg_label=payload.leg_label, reverse=payload.reverse)
+        state = copy_org_leg(
+            leg_id, leg_label=payload.leg_label, reverse=payload.reverse
+        )
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -1334,7 +1353,9 @@ async def api_replace_org_leg_gpx(
         data = await file.read()
         if not data:
             raise ValueError("GPX file is empty")
-        state = update_org_leg(leg_id, {}, gpx_bytes=data, gpx_filename=file.filename or "leg.gpx")
+        state = update_org_leg(
+            leg_id, {}, gpx_bytes=data, gpx_filename=file.filename or "leg.gpx"
+        )
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -1372,7 +1393,9 @@ async def api_update_org_leg_geometry(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/publish-to-org")
+@router.post(
+    "/api/config/packages/{config_id}/segment-library/legs/{leg_id}/publish-to-org"
+)
 async def api_publish_leg_to_org_library(
     request: Request,
     config_id: str,
@@ -1389,7 +1412,9 @@ async def api_publish_leg_to_org_library(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/api/config/packages/{config_id}/segment-library/import-org-leg/{org_leg_id}")
+@router.post(
+    "/api/config/packages/{config_id}/segment-library/import-org-leg/{org_leg_id}"
+)
 async def api_import_org_leg(
     request: Request,
     config_id: str,
@@ -1482,9 +1507,7 @@ async def api_apply_segment_recipes(
     try:
         result = apply_package_recipes(config_id, export_csv=True)
         course = load_config_course(config_id)
-        return JSONResponse(
-            content={"ok": True, **result, "course": course}
-        )
+        return JSONResponse(content={"ok": True, **result, "course": course})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
@@ -1600,7 +1623,9 @@ async def api_run_package_analysis(
         result = submit_v2_analysis(payload, background_tasks)
         if isinstance(result, JSONResponse):
             return result
-        return JSONResponse(content={"ok": True, **result.model_dump(), "payload": payload})
+        return JSONResponse(
+            content={"ok": True, **result.model_dump(), "payload": payload}
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
@@ -1613,7 +1638,9 @@ async def api_run_package_analysis(
         )
 
 
-@router.get("/api/config/packages/{config_id}/segment-library/events/{event_id}/preview")
+@router.get(
+    "/api/config/packages/{config_id}/segment-library/events/{event_id}/preview"
+)
 async def api_event_route_preview(
     request: Request,
     config_id: str,

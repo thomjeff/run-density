@@ -8,9 +8,9 @@ uvicorn access lines do not land in the run log.
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ class RunLogHandler:
         self.run_id = run_id
         if runflow_root is None:
             from app.utils.run_id import get_runflow_root
+
             runflow_root = get_runflow_root()
         self.runflow_root = runflow_root
         self.log_dir = runflow_root / "analysis" / run_id / "logs"
@@ -66,13 +67,13 @@ class RunLogHandler:
                 self.app_logger.setLevel(logging.INFO)
 
             start_time = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            self.app_logger.info(
-                "Run %s started at %s", self.run_id, start_time
-            )
+            self.app_logger.info("Run %s started at %s", self.run_id, start_time)
             logger.debug("Run logging initialized: %s", self.log_file)
 
         except Exception as e:
-            logger.warning("Failed to initialize run logging for %s: %s", self.run_id, e)
+            logger.warning(
+                "Failed to initialize run logging for %s: %s", self.run_id, e
+            )
             self.file_handler = None
 
         return self
@@ -100,7 +101,9 @@ class RunLogHandler:
                 logger.debug("Run logging finalized: %s", self.log_file)
 
             except Exception as e:
-                logger.warning("Failed to finalize run logging for %s: %s", self.run_id, e)
+                logger.warning(
+                    "Failed to finalize run logging for %s: %s", self.run_id, e
+                )
             finally:
                 self.file_handler = None
 

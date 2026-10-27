@@ -212,9 +212,7 @@ def build_strip(
         "reopened_at": (reopened_entry or {}).get("reopened_at"),
         "operator": None,
         "linked": list(linked),
-        "map_href": (
-            f"/locations?run_id={run_id}&loc_id={loc_id}"
-        ),
+        "map_href": (f"/locations?run_id={run_id}&loc_id={loc_id}"),
         "lat": row.get("lat"),
         "lon": row.get("lon"),
     }
@@ -285,9 +283,7 @@ def assemble_board(
             now_hhmmss=now,
             status=status,
             reopened_entry=entry,
-            linked=linked_for(
-                locations, loc_id, reopened_map, resources_available
-            ),
+            linked=linked_for(locations, loc_id, reopened_map, resources_available),
             available=resources_available,
             run_id=run_id,
         )
@@ -308,9 +304,7 @@ def assemble_board(
         "columns": {
             "closed": _sort_active(closed),
             "reopen_next": _sort_active(reopen_next),
-            "reopened": _sort_reopened(
-                reopened, state.get("activity") or []
-            ),
+            "reopened": _sort_reopened(reopened, state.get("activity") or []),
         },
         "counts": {
             "closed": len(closed),

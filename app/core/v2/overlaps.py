@@ -7,12 +7,12 @@ as bidirectional in flow.csv, and writes CSVs + summary metadata.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 import csv
 import logging
 import math
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -74,9 +74,13 @@ def _compute_entry_exit_seconds(
     _require_columns(runners_df, ["pace", "start_offset"], "runners data")
     pace_values = pd.to_numeric(runners_df["pace"], errors="coerce")
     if pace_values.isna().any() or (pace_values <= 0).any():
-        raise ValueError("runners data missing valid pace values for overlap report generation.")
+        raise ValueError(
+            "runners data missing valid pace values for overlap report generation."
+        )
     pace_sec_per_km = pace_values.to_numpy() * 60.0
-    start_offset_sec = pd.to_numeric(runners_df["start_offset"], errors="coerce").fillna(0).to_numpy()
+    start_offset_sec = (
+        pd.to_numeric(runners_df["start_offset"], errors="coerce").fillna(0).to_numpy()
+    )
     start_time_sec = float(start_time_minutes) * 60.0
     entry_times = start_time_sec + start_offset_sec + pace_sec_per_km * float(from_km)
     exit_times = start_time_sec + start_offset_sec + pace_sec_per_km * float(to_km)
@@ -105,9 +109,18 @@ def _minute_series(
 
     for minute_start in minute_starts:
         minute_end = minute_start + 60
-        entries = int(np.searchsorted(entry_sorted, minute_end, side="left") - np.searchsorted(entry_sorted, minute_start, side="left"))
-        exits = int(np.searchsorted(exit_sorted, minute_end, side="left") - np.searchsorted(exit_sorted, minute_start, side="left"))
-        concurrent = int(np.searchsorted(entry_sorted, minute_end, side="left") - np.searchsorted(exit_sorted, minute_start, side="left"))
+        entries = int(
+            np.searchsorted(entry_sorted, minute_end, side="left")
+            - np.searchsorted(entry_sorted, minute_start, side="left")
+        )
+        exits = int(
+            np.searchsorted(exit_sorted, minute_end, side="left")
+            - np.searchsorted(exit_sorted, minute_start, side="left")
+        )
+        concurrent = int(
+            np.searchsorted(entry_sorted, minute_end, side="left")
+            - np.searchsorted(exit_sorted, minute_start, side="left")
+        )
         metrics.append({"concurrent": concurrent, "entries": entries, "exits": exits})
 
     return [float(s) for s in minute_starts], metrics
@@ -176,7 +189,16 @@ def generate_bidirectional_overlap_reports(
     flow_df = analysis_context.get_flow_df()
     _require_columns(
         flow_df,
-        ["seg_id", "event_a", "event_b", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "direction"],
+        [
+            "seg_id",
+            "event_a",
+            "event_b",
+            "from_km_a",
+            "to_km_a",
+            "from_km_b",
+            "to_km_b",
+            "direction",
+        ],
         "flow.csv",
     )
     _require_columns(all_runners_df, ["event", "pace", "start_offset"], "runners data")
@@ -244,10 +266,16 @@ def generate_bidirectional_overlap_reports(
             event_b_label = f"{event_b}_b"
 
         if event_a not in start_times or event_b not in start_times:
-            raise ValueError(f"Missing start_time for event pair {event_a}/{event_b} in day {day.value}.")
+            raise ValueError(
+                f"Missing start_time for event pair {event_a}/{event_b} in day {day.value}."
+            )
 
-        runners_a = all_runners_df[all_runners_df["event"].astype(str).str.lower() == event_a]
-        runners_b = all_runners_df[all_runners_df["event"].astype(str).str.lower() == event_b]
+        runners_a = all_runners_df[
+            all_runners_df["event"].astype(str).str.lower() == event_a
+        ]
+        runners_b = all_runners_df[
+            all_runners_df["event"].astype(str).str.lower() == event_b
+        ]
         if runners_a.empty or runners_b.empty:
             continue
 
@@ -256,8 +284,12 @@ def generate_bidirectional_overlap_reports(
         from_km_b = float(row["from_km_b"])
         to_km_b = float(row["to_km_b"])
 
-        entry_a, exit_a = _compute_entry_exit_seconds(runners_a, start_times[event_a], from_km_a, to_km_a)
-        entry_b, exit_b = _compute_entry_exit_seconds(runners_b, start_times[event_b], from_km_b, to_km_b)
+        entry_a, exit_a = _compute_entry_exit_seconds(
+            runners_a, start_times[event_a], from_km_a, to_km_a
+        )
+        entry_b, exit_b = _compute_entry_exit_seconds(
+            runners_b, start_times[event_b], from_km_b, to_km_b
+        )
         if entry_a.size == 0 or entry_b.size == 0:
             continue
 
@@ -284,7 +316,11 @@ def generate_bidirectional_overlap_reports(
         )
 
         seg_label = str(row.get("seg_label") or "")
-        if not seg_label and segments_df is not None and "seg_label" in segments_df.columns:
+        if (
+            not seg_label
+            and segments_df is not None
+            and "seg_label" in segments_df.columns
+        ):
             seg_match = segments_df[segments_df["seg_id"] == seg_id]
             if not seg_match.empty:
                 seg_label = str(seg_match.iloc[0].get("seg_label", ""))
@@ -305,8 +341,12 @@ def generate_bidirectional_overlap_reports(
                 overlap_start=_format_hhmm_from_seconds(overlap_start),
                 overlap_end=_format_hhmm_from_seconds(overlap_end),
                 overlap_duration_minutes=round((overlap_end - overlap_start) / 60.0, 2),
-                peak_concurrent_a=max(m["concurrent"] for m in metrics_a) if metrics_a else 0,
-                peak_concurrent_b=max(m["concurrent"] for m in metrics_b) if metrics_b else 0,
+                peak_concurrent_a=(
+                    max(m["concurrent"] for m in metrics_a) if metrics_a else 0
+                ),
+                peak_concurrent_b=(
+                    max(m["concurrent"] for m in metrics_b) if metrics_b else 0
+                ),
                 csv_filename=csv_filename,
             )
         )

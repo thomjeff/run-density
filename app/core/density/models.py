@@ -5,12 +5,13 @@ Contains dataclasses and data structures for density analysis.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
 class DensityConfig:
     """Configuration for density analysis calculations."""
+
     bin_seconds: int = 30
     threshold_areal: float = 1.2  # runners/m^2
     threshold_crowd: float = 2.0  # runners/m
@@ -23,6 +24,7 @@ class DensityConfig:
 @dataclass(frozen=True)
 class SegmentMeta:
     """Metadata for a segment used in density calculations."""
+
     segment_id: str
     from_km: float
     to_km: float
@@ -32,12 +34,12 @@ class SegmentMeta:
     # Flow fields retained for completeness (used by temporal_flow.py, not by density):
     event_a: str = ""  # First event for this segment
     event_b: str = ""  # Second event for this segment
-    
+
     @property
     def segment_length_m(self) -> float:
         """Calculate segment length in meters."""
         return (self.to_km - self.from_km) * 1000
-    
+
     @property
     def area_m2(self) -> float:
         """Calculate segment area in square meters."""
@@ -47,6 +49,7 @@ class SegmentMeta:
 @dataclass(frozen=True)
 class DensityResult:
     """Result of density analysis for a single time bin."""
+
     segment_id: str
     t_start: str
     t_end: str
@@ -61,6 +64,7 @@ class DensityResult:
 @dataclass(frozen=True)
 class EventViewSummary:
     """Per-event summary of density analysis for a segment."""
+
     event: str
     n_event_runners: int
     active_start: Optional[str] = None
@@ -80,21 +84,22 @@ class EventViewSummary:
     contrib_breakdown_at_peak: Dict[str, int] = None
     sustained_periods: List[Dict[str, Any]] = None
     flags: List[str] = None
-    
+
     def __post_init__(self):
         if self.events_at_peak is None:
-            object.__setattr__(self, 'events_at_peak', [])
+            object.__setattr__(self, "events_at_peak", [])
         if self.contrib_breakdown_at_peak is None:
-            object.__setattr__(self, 'contrib_breakdown_at_peak', {})
+            object.__setattr__(self, "contrib_breakdown_at_peak", {})
         if self.sustained_periods is None:
-            object.__setattr__(self, 'sustained_periods', [])
+            object.__setattr__(self, "sustained_periods", [])
         if self.flags is None:
-            object.__setattr__(self, 'flags', [])
+            object.__setattr__(self, "flags", [])
 
 
 @dataclass(frozen=True)
 class DensitySummary:
     """Summary of density analysis for a segment."""
+
     segment_id: str
     peak_areal_density: float
     peak_areal_time_window: List[str]
@@ -119,11 +124,11 @@ class DensitySummary:
     active_p95_crowd: float = 0.0
     active_mean_areal: float = 0.0
     active_mean_crowd: float = 0.0
-    
+
     # TOT metrics for active window
     active_tot_areal_sec: int = 0
     active_tot_crowd_sec: int = 0
-    
+
     # Peak timestamps for operational planning
     active_peak_areal_time: Optional[str] = None
     active_peak_crowd_time: Optional[str] = None

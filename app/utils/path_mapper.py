@@ -26,7 +26,9 @@ DEFAULT_RUNFLOW_ROOT_CONTAINER = "/app/runflow"
 
 def get_host_runflow_root() -> Path:
     """Host (or rewrite) root for Runflow storage."""
-    raw = env_str("RUNFLOW_ROOT_HOST", "") or env_str("RUNFLOW_ROOT", DEFAULT_RUNFLOW_ROOT)
+    raw = env_str("RUNFLOW_ROOT_HOST", "") or env_str(
+        "RUNFLOW_ROOT", DEFAULT_RUNFLOW_ROOT
+    )
     return Path(raw).expanduser()
 
 

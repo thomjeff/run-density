@@ -15,14 +15,14 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.utils.run_id import generate_run_id, validate_run_id, is_legacy_date_format
+from app.utils.constants import RUN_ID_MIN_LENGTH
+from app.utils.env import detect_runtime_environment, detect_storage_target
 from app.utils.metadata import (
     create_run_metadata,
+    mark_run_complete,
     write_metadata_json,
-    mark_run_complete
 )
-from app.utils.env import detect_runtime_environment, detect_storage_target
-from app.utils.constants import RUN_ID_MIN_LENGTH
+from app.utils.run_id import generate_run_id, is_legacy_date_format, validate_run_id
 
 
 def test_uuid_generation():
@@ -35,7 +35,9 @@ def test_uuid_generation():
     run_id = generate_run_id()
     print(f"✅ Generated UUID: {run_id}")
     print(f"   Length: {len(run_id)} characters")
-    assert len(run_id) >= RUN_ID_MIN_LENGTH, f"UUID too short: {len(run_id)} < {RUN_ID_MIN_LENGTH}"
+    assert (
+        len(run_id) >= RUN_ID_MIN_LENGTH
+    ), f"UUID too short: {len(run_id)} < {RUN_ID_MIN_LENGTH}"
 
     # Generate 10-char UUID
     run_id_short = generate_run_id(length=10)
@@ -61,23 +63,23 @@ def test_uuid_validation():
     print("=" * 60)
 
     # Valid UUIDs
-    assert validate_run_id("p0ZoB1FwH6yT2d") == True
+    assert validate_run_id("p0ZoB1FwH6yT2d")
     print("✅ Valid UUID accepted: p0ZoB1FwH6yT2d")
 
-    assert validate_run_id("fX29Kd81vQ") == True
+    assert validate_run_id("fX29Kd81vQ")
     print("✅ Valid UUID accepted: fX29Kd81vQ")
 
     # Invalid UUIDs
-    assert validate_run_id("2025-11-02") == False
+    assert not validate_run_id("2025-11-02")
     print("✅ Legacy date rejected: 2025-11-02")
 
-    assert validate_run_id("abc") == False
+    assert not validate_run_id("abc")
     print("✅ Too short rejected: abc")
 
-    assert validate_run_id("") == False
+    assert not validate_run_id("")
     print("✅ Empty string rejected")
 
-    assert validate_run_id(None) == False
+    assert not validate_run_id(None)
     print("✅ None rejected")
 
 
@@ -87,10 +89,10 @@ def test_legacy_detection():
     print("Test 3: Legacy Date Detection")
     print("=" * 60)
 
-    assert is_legacy_date_format("2025-11-02") == True
+    assert is_legacy_date_format("2025-11-02")
     print("✅ Detected legacy format: 2025-11-02")
 
-    assert is_legacy_date_format("p0ZoB1FwH6") == False
+    assert not is_legacy_date_format("p0ZoB1FwH6")
     print("✅ UUID not detected as legacy: p0ZoB1FwH6")
 
 
@@ -132,7 +134,7 @@ def test_metadata_creation(run_id):
     # Create metadata
     metadata = create_run_metadata(run_id, test_run_path, status="in_progress")
 
-    print(f"✅ Created metadata:")
+    print("✅ Created metadata:")
     print(f"   run_id: {metadata['run_id']}")
     print(f"   status: {metadata['status']}")
     print(f"   runtime_env: {metadata['runtime_env']}")
@@ -165,7 +167,8 @@ def test_metadata_creation(run_id):
 
     # Verify status updated
     import json
-    with open(completed_path, 'r') as f:
+
+    with open(completed_path, "r") as f:
         updated_metadata = json.load(f)
 
     assert updated_metadata["status"] == "complete"
@@ -173,6 +176,7 @@ def test_metadata_creation(run_id):
 
     # Cleanup
     import shutil
+
     shutil.rmtree("/tmp/test_runflow")
     print("✅ Cleanup complete")
 
@@ -206,6 +210,7 @@ def main():
     except Exception as e:
         print(f"\n❌ UNEXPECTED ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

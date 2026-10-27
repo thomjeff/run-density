@@ -124,22 +124,19 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ## Code Quality
 
-Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the Create `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan (not Execute). See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
+PRs run **GitHub Actions** Code Quality (`.github/workflows/code-quality.yaml`) on changed `app/` Python files, and **combined-image verify** (`.github/workflows/combined-image-verify.yaml`) for Create Build / Plan. See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md). Settings live in `.flake8` and `pyproject.toml` (#940). `main` is not branch-protected; treat a red Code Quality run as a blocker anyway.
 
 ### Quality Checks (On Pull Requests)
-The CI pipeline runs automated checks on all Python code changes:
 
-1. **flake8** - Complexity and lint checks
-   - Max complexity: 15
-   - Checks: B001 (bare exceptions), C901 (complexity), E/F/W (style)
+1. **flake8** — `.flake8`
+   - Line length **88** (same as black). `E501` is ignored; black wraps what it can
+   - Max complexity: 15 (`C901`). Existing leftovers are `# noqa: C901`; new functions must stay under 15
+   - Also blocks unused names (`F`), bare `except` (`B001` / `E722`), and remaining E/W style
+   - Ignores black conflicts (`E203`, `W503`) and leftover `sys.path` then import (`E402`)
 
-2. **black** - Code formatting
-   - Ensures consistent code style
+2. **black** — `pyproject.toml`, line length 88
 
-3. **isort** - Import sorting
-   - Maintains organized imports with black profile
-
-All checks must pass before code can be merged to main.
+3. **isort** — `pyproject.toml`, black profile, line length 88
 
 ---
 

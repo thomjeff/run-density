@@ -426,8 +426,12 @@ def _analyze_pair(
                 f"{primary_label}_entries": met_pri[i]["entries"],
                 f"{primary_label}_exits": met_pri[i]["exits"],
                 f"{secondary_label}_count": cb,
-                f"{secondary_label}_entries": met_sec[i]["entries"] if i < len(met_sec) else 0,
-                f"{secondary_label}_exits": met_sec[i]["exits"] if i < len(met_sec) else 0,
+                f"{secondary_label}_entries": (
+                    met_sec[i]["entries"] if i < len(met_sec) else 0
+                ),
+                f"{secondary_label}_exits": (
+                    met_sec[i]["exits"] if i < len(met_sec) else 0
+                ),
                 "both_present": bool(ca > 0 and cb > 0),
             }
         )
@@ -438,7 +442,9 @@ def _analyze_pair(
         w1 = m_pri[idxs[-1]] + 60
     else:
         w0, w1 = t0, t1
-        notes.append("No minute with both streams concurrent; window falls back to full span.")
+        notes.append(
+            "No minute with both streams concurrent; window falls back to full span."
+        )
 
     # Unique by role × event
     unique: Dict[str, Dict[str, int]] = {primary_label: {}, secondary_label: {}}
@@ -514,7 +520,7 @@ def build_stream_parts(
     return parts, notes
 
 
-def analyze_interaction(
+def analyze_interaction(  # noqa: C901
     ix: Dict[str, Any],
     nearby_by_id: Dict[str, Dict[str, Any]],
     runners_by_event: Dict[str, pd.DataFrame],
@@ -538,7 +544,9 @@ def analyze_interaction(
                 crossing_events.append(e)
         if not crossing_events:
             crossing_events = events
-            notes.append("Could not refine crossing events via From∩To; using interaction events.")
+            notes.append(
+                "Could not refine crossing events via From∩To; using interaction events."
+            )
 
         crossed_events = []
         for e in events:
@@ -546,7 +554,9 @@ def analyze_interaction(
                 crossed_events.append(e)
         if not crossed_events:
             crossed_events = events
-            notes.append("Conflicts stream missing for some events; using interaction events.")
+            notes.append(
+                "Conflicts stream missing for some events; using interaction events."
+            )
 
         pri_parts, n1 = build_stream_parts(
             seg_id=from_seg,
@@ -566,7 +576,9 @@ def analyze_interaction(
         )
         notes.extend(n1 + n2)
         # Annotate To for mapping
-        notes.append(f"Cross path {from_seg}→{to_seg} conflicts {conflicts}; side={ix.get('side')}")
+        notes.append(
+            f"Cross path {from_seg}→{to_seg} conflicts {conflicts}; side={ix.get('side')}"
+        )
         for e in crossing_events:
             notes.append(
                 f"map crossing {e}: {from_seg}@{_node_km_for_segment(nearby_by_id, from_seg, e)}km "

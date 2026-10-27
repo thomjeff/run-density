@@ -7,7 +7,8 @@ Matches the API specification in runflow_v2/docs/api_v2.md.
 Phase 2: API Route (Issue #496)
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.v2.start_time import (
@@ -20,10 +21,10 @@ from app.core.v2.start_time import (
 class V2EventRequest(BaseModel):
     """
     Event request model matching api_v2.md event structure.
-    
+
     Issue #553: Extended to include event_duration_minutes and updated start_time range.
     Issue #798 Phase 2: start_time bounds from app.core.v2.start_time.
-    
+
     Attributes:
         name: Event name (lowercase, e.g., "full", "half", "10k")
         day: Day code (fri, sat, sun, mon)
@@ -32,6 +33,7 @@ class V2EventRequest(BaseModel):
         runners_file: Name of runners CSV file (relative to /data)
         gpx_file: Name of GPX file (relative to /data)
     """
+
     name: str = Field(..., description="Event name (lowercase)")
     day: str = Field(..., description="Day code (fri, sat, sun, mon)")
     start_time: int = Field(
@@ -40,17 +42,19 @@ class V2EventRequest(BaseModel):
         le=START_TIME_MAX_MINUTES,
         description=START_TIME_RANGE_DESCRIPTION,
     )
-    event_duration_minutes: int = Field(..., ge=1, le=500, description="Event duration in minutes (1-500)")
+    event_duration_minutes: int = Field(
+        ..., ge=1, le=500, description="Event duration in minutes (1-500)"
+    )
     runners_file: str = Field(..., description="Name of runners CSV file")
     gpx_file: str = Field(..., description="Name of GPX file")
-    
-    @field_validator('name')
+
+    @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
         """Normalize event name to lowercase."""
         return v.lower()
-    
-    @field_validator('day')
+
+    @field_validator("day")
     @classmethod
     def validate_day(cls, v: str) -> str:
         """Normalize day code to lowercase."""
@@ -60,11 +64,11 @@ class V2EventRequest(BaseModel):
 class V2AnalyzeRequest(BaseModel):
     """
     Main request model for POST /runflow/v2/analyze.
-    
+
     Issue #553: Extended to include description field and removed defaults (fail-fast).
     Issue #573: Extended to include event_group field for Runner Experience Score (RES) calculation.
     Issue #680: Extended to include data_dir field for flexible data directory configuration.
-    
+
     Attributes:
         description: Optional description for the analysis (max 254 characters)
         data_dir: Optional data directory path (defaults to DATA_ROOT env var or 'data')
@@ -78,14 +82,31 @@ class V2AnalyzeRequest(BaseModel):
         enableAudit: Enable detailed flow audit generation ('y' or 'n', default 'n')
             When 'y', generates detailed CSV shard files with runner pair overtake information
     """
-    description: Optional[str] = Field(None, max_length=254, description="Optional description for the analysis (max 254 characters)")
-    data_dir: Optional[str] = Field(None, description="Data directory path (defaults to DATA_ROOT env var or 'data')")
+
+    description: Optional[str] = Field(
+        None,
+        max_length=254,
+        description="Optional description for the analysis (max 254 characters)",
+    )
+    data_dir: Optional[str] = Field(
+        None,
+        description="Data directory path (defaults to DATA_ROOT env var or 'data')",
+    )
     segments_file: str = Field(..., description="Name of segments CSV file")
     locations_file: str = Field(..., description="Name of locations CSV file")
     flow_file: str = Field(..., description="Name of flow CSV file")
-    events: List[V2EventRequest] = Field(..., min_length=1, description="List of events to analyze")
-    event_group: Optional[Dict[str, str]] = Field(None, description="Optional event grouping for RES calculation (format: {\"group_id\": \"event1, event2, ...\"})")
-    enableAudit: str = Field(default='n', pattern='^[yn]$', description="Enable detailed flow audit generation ('y' or 'n')")
+    events: List[V2EventRequest] = Field(
+        ..., min_length=1, description="List of events to analyze"
+    )
+    event_group: Optional[Dict[str, str]] = Field(
+        None,
+        description='Optional event grouping for RES calculation (format: {"group_id": "event1, event2, ..."})',
+    )
+    enableAudit: str = Field(
+        default="n",
+        pattern="^[yn]$",
+        description="Enable detailed flow audit generation ('y' or 'n')",
+    )
     through: Optional[str] = Field(
         default="full",
         description="Staged pipeline stop: full | trajectory | locations (#860)",
@@ -97,7 +118,7 @@ class V2AnalyzeRequest(BaseModel):
         from app.core.v2.through import normalize_through
 
         return normalize_through(v)
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -113,7 +134,7 @@ class V2AnalyzeRequest(BaseModel):
                         "start_time": 510,
                         "event_duration_minutes": 120,
                         "runners_file": "10k_runners.csv",
-                        "gpx_file": "10k.gpx"
+                        "gpx_file": "10k.gpx",
                     },
                     {
                         "name": "half",
@@ -121,14 +142,11 @@ class V2AnalyzeRequest(BaseModel):
                         "start_time": 540,
                         "event_duration_minutes": 180,
                         "runners_file": "half_runners.csv",
-                        "gpx_file": "half.gpx"
-                    }
+                        "gpx_file": "half.gpx",
+                    },
                 ],
-                "event_group": {
-                    "sat/10k": "10k",
-                    "sun/half": "half"
-                },
-                "enableAudit": "n"
+                "event_group": {"sat/10k": "10k", "sun/half": "half"},
+                "enableAudit": "n",
             }
         }
     }
@@ -136,6 +154,7 @@ class V2AnalyzeRequest(BaseModel):
 
 class V2OutputPaths(BaseModel):
     """Output paths for a specific day."""
+
     day: str = Field(..., description="Day code (fri, sat, sun, mon)")
     reports: str = Field(..., description="Path to reports directory")
     bins: str = Field(..., description="Path to bins directory")
@@ -147,31 +166,34 @@ class V2OutputPaths(BaseModel):
 class V2AnalyzeResponse(BaseModel):
     """
     Response model for POST /runflow/v2/analyze.
-    
+
     Attributes:
         run_id: Unique run identifier (UUID)
         status: Status of the analysis ("success" or error details)
         days: List of processed day codes
         output_paths: Dictionary mapping day codes to output paths
     """
+
     run_id: str = Field(..., description="Unique run identifier (UUID)")
     status: str = Field(default="success", description="Status of the analysis")
     days: List[str] = Field(..., description="List of processed day codes")
-    output_paths: Dict[str, V2OutputPaths] = Field(..., description="Output paths per day")
+    output_paths: Dict[str, V2OutputPaths] = Field(
+        ..., description="Output paths per day"
+    )
 
 
 class V2ErrorResponse(BaseModel):
     """
     Error response model matching Issue #553 error format.
-    
+
     Issue #553: Updated to match error response format with status, code, and error fields.
-    
+
     Attributes:
         status: Status string ("ERROR")
         code: HTTP error code (400, 404, 406, 422, 500)
         error: Error message with details
     """
+
     status: str = Field(default="ERROR", description="Status string")
     code: int = Field(..., description="HTTP error code (400, 404, 406, 422, 500)")
     error: str = Field(..., description="Error message with details")
-

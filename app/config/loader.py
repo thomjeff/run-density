@@ -164,11 +164,15 @@ def build_analysis_context(
 
     runners = data_files.get("runners")
     if not isinstance(runners, dict) or not runners:
-        raise AnalysisConfigError("analysis.json missing required field: data_files.runners")
+        raise AnalysisConfigError(
+            "analysis.json missing required field: data_files.runners"
+        )
 
     gpx = data_files.get("gpx")
     if not isinstance(gpx, dict) or not gpx:
-        raise AnalysisConfigError("analysis.json missing required field: data_files.gpx")
+        raise AnalysisConfigError(
+            "analysis.json missing required field: data_files.gpx"
+        )
 
     _validate_segments_csv_fields(segments_path)
 
@@ -177,9 +181,16 @@ def build_analysis_context(
         if event_name:
             _validate_event_file_mapping(runners, "runners", event_name)
             _validate_event_file_mapping(gpx, "gpx", event_name)
-            runners_path = _resolve_path(str(runners.get(event_name.lower()) or runners.get(event_name)), data_dir)
-            gpx_path = _resolve_path(str(gpx.get(event_name.lower()) or gpx.get(event_name)), data_dir)
-            _validate_data_file_exists(runners_path, f"runners file for event '{event_name}'")
+            runners_path = _resolve_path(
+                str(runners.get(event_name.lower()) or runners.get(event_name)),
+                data_dir,
+            )
+            gpx_path = _resolve_path(
+                str(gpx.get(event_name.lower()) or gpx.get(event_name)), data_dir
+            )
+            _validate_data_file_exists(
+                runners_path, f"runners file for event '{event_name}'"
+            )
             _validate_data_file_exists(gpx_path, f"gpx file for event '{event_name}'")
 
     return AnalysisContext(
@@ -194,10 +205,14 @@ def build_analysis_context(
     )
 
 
-def _resolve_required_path(data_files: Dict[str, Any], key: str, data_dir: Path) -> Path:
+def _resolve_required_path(
+    data_files: Dict[str, Any], key: str, data_dir: Path
+) -> Path:
     value = data_files.get(key)
     if not value:
-        raise AnalysisConfigError(f"analysis.json missing required field: data_files.{key}")
+        raise AnalysisConfigError(
+            f"analysis.json missing required field: data_files.{key}"
+        )
     if not isinstance(value, str):
         raise AnalysisConfigError(
             f"analysis.json field data_files.{key} must be a string path"
@@ -205,7 +220,9 @@ def _resolve_required_path(data_files: Dict[str, Any], key: str, data_dir: Path)
     return _resolve_path(value, data_dir)
 
 
-def _resolve_optional_path(data_files: Dict[str, Any], key: str, data_dir: Path) -> Optional[Path]:
+def _resolve_optional_path(
+    data_files: Dict[str, Any], key: str, data_dir: Path
+) -> Optional[Path]:
     value = data_files.get(key)
     if not value:
         return None
@@ -232,7 +249,9 @@ def _require_top_level_field(analysis_config: Dict[str, Any], field: str) -> Non
 
 def _require_field(container: Dict[str, Any], field: str, scope: str) -> None:
     if container.get(field) in (None, ""):
-        raise AnalysisConfigError(f"analysis.json missing required field: {scope}.{field}")
+        raise AnalysisConfigError(
+            f"analysis.json missing required field: {scope}.{field}"
+        )
 
 
 def _validate_segments_csv_fields(segments_path: Path) -> None:
@@ -263,7 +282,9 @@ def _validate_segments_csv_fields(segments_path: Path) -> None:
         )
 
 
-def _validate_event_file_mapping(mapping: Dict[str, Any], mapping_name: str, event_name: str) -> None:
+def _validate_event_file_mapping(
+    mapping: Dict[str, Any], mapping_name: str, event_name: str
+) -> None:
     normalized_event = event_name.lower()
     if normalized_event not in mapping and event_name not in mapping:
         raise AnalysisConfigError(

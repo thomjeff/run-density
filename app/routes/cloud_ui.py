@@ -5,23 +5,24 @@ Provides a password-gated Dashboard + Locations UI for a single run_id.
 Issue #735: Loc Sheets index and per-sheet HTML URLs.
 Issue #740: Dashboard landing, session on all routes (middleware).
 """
+
 import json
 import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Request, Form, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
+from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.common.config import load_reporting
-from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.auth import (
-    validate_password,
-    create_session_response,
     clear_session_response,
+    create_session_response,
     is_session_valid,
+    validate_password,
 )
+from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.env import env_str
 from app.utils.run_id import get_available_days, get_run_directory
 
@@ -40,7 +41,9 @@ def _get_cloud_run_id() -> str:
         raise HTTPException(status_code=500, detail="CLOUD_RUN_ID is not configured")
     run_dir = get_run_directory(run_id)
     if not run_dir.exists():
-        raise HTTPException(status_code=500, detail=f"Run directory not found for run_id={run_id}")
+        raise HTTPException(
+            status_code=500, detail=f"Run directory not found for run_id={run_id}"
+        )
     return run_id
 
 
@@ -48,18 +51,16 @@ def _get_cloud_context(request: Request) -> dict:
     run_id = _get_cloud_run_id()
     available_days = get_available_days(run_id)
     if not available_days:
-        raise HTTPException(status_code=500, detail=f"No day folders found for run_id={run_id}")
+        raise HTTPException(
+            status_code=500, detail=f"No day folders found for run_id={run_id}"
+        )
 
     return {
         "request": request,
-        "meta": {
-            "run_timestamp": "cloud",
-            "environment": "cloud",
-            "run_hash": run_id
-        },
+        "meta": {"run_timestamp": "cloud", "environment": "cloud", "run_hash": run_id},
         "cloud_mode": True,
         "cloud_run_id_json": json.dumps(run_id),
-        "cloud_available_days_json": json.dumps(available_days)
+        "cloud_available_days_json": json.dumps(available_days),
     }
 
 
@@ -78,7 +79,9 @@ async def login(request: Request, password: str = Form(...)):
         return create_session_response("/dashboard", request)
     context = _get_cloud_context(request)
     context["error"] = "Incorrect password. Please try again."
-    return templates.TemplateResponse(request, "pages/password.html", context, status_code=401)
+    return templates.TemplateResponse(
+        request, "pages/password.html", context, status_code=401
+    )
 
 
 @router.get("/logout")
@@ -128,10 +131,14 @@ async def cloud_locsheet_html_short(request: Request, day: str, loc_id: str):
     if not loc_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid loc_id")
     run_dir = get_run_directory(run_id)
-    html_path = Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    html_path = (
+        Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    )
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
-    return FileResponse(html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS)
+    return FileResponse(
+        html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS
+    )
 
 
 @router.get("/locsheets", response_class=HTMLResponse)
@@ -139,7 +146,9 @@ async def cloud_locsheets(request: Request, day: Optional[str] = Query(None)):
     """Day-based index of location sheets (session: CloudSessionMiddleware)."""
     run_id = _get_cloud_run_id()
     available_days = get_available_days(run_id)
-    selected_day = (day or "").strip().lower() or (available_days[0] if available_days else "")
+    selected_day = (day or "").strip().lower() or (
+        available_days[0] if available_days else ""
+    )
     if selected_day not in available_days:
         selected_day = available_days[0] if available_days else ""
 
@@ -166,7 +175,11 @@ async def cloud_locsheet_html(request: Request, run_id: str, day: str, loc_id: s
     if not loc_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid loc_id")
     run_dir = get_run_directory(run_id)
-    html_path = Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    html_path = (
+        Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    )
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
-    return FileResponse(html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS)
+    return FileResponse(
+        html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS
+    )

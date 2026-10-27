@@ -65,7 +65,9 @@ def compare_locations_frames(
     for key in extra:
         diffs.append({"kind": "extra_row", "key": key})
 
-    cols = [c for c in timing_columns if c in baseline.columns and c in candidate.columns]
+    cols = [
+        c for c in timing_columns if c in baseline.columns and c in candidate.columns
+    ]
     for key in sorted(set(base_map) & set(cand_map), key=str):
         left = base_map[key]
         right = cand_map[key]
@@ -111,6 +113,4 @@ def compare_locations_csv(
 ) -> List[Dict[str, Any]]:
     baseline = pd.read_csv(baseline_path)
     candidate = pd.read_csv(candidate_path)
-    return compare_locations_frames(
-        baseline, candidate, tolerance_sec=tolerance_sec
-    )
+    return compare_locations_frames(baseline, candidate, tolerance_sec=tolerance_sec)

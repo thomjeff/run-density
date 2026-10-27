@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, Set, Tuple
 
-from app.core.config_package.org_leg_library import get_org_legs_dir, load_org_leg_manifest
+from app.core.config_package.org_leg_library import (
+    get_org_legs_dir,
+    load_org_leg_manifest,
+)
 from app.core.config_package.segment_recipes import (
     load_package_segment_manifest,
     package_segment_library_dir,
 )
-from app.core.config_package.storage import resolve_config_package_path, validate_config_id
+from app.core.config_package.storage import (
+    resolve_config_package_path,
+    validate_config_id,
+)
 from app.core.course.segment_library import manifest_legs
 
 LEG_SOURCE_ORG = "org"
@@ -70,9 +76,7 @@ def combined_manifest_for_apply(config_id: str) -> Tuple[Path, Dict[str, Any]]:
     combined = dict(leg_manifest)
     combined["recipes"] = pkg_manifest.get("recipes") or {}
     combined["flow_overrides"] = (
-        pkg_manifest.get("flow_overrides")
-        or leg_manifest.get("flow_overrides")
-        or []
+        pkg_manifest.get("flow_overrides") or leg_manifest.get("flow_overrides") or []
     )
     combined["label"] = pkg_manifest.get("label") or leg_manifest.get("label") or ""
     return lib_dir, combined

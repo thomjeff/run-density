@@ -11,11 +11,15 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pandas as pd
 
-from app.core.config_package.junctions import JUNCTIONS_NAME, empty_junctions_doc, validate_junctions_doc
+from app.core.config_package.junctions import (
+    JUNCTIONS_NAME,
+    empty_junctions_doc,
+    validate_junctions_doc,
+)
 from app.core.junction_flow import (
     analyze_junctions_doc,
     prepare_runners_by_event,
@@ -34,7 +38,11 @@ def load_junctions_from_data_dir(data_dir: str | Path) -> Dict[str, Any]:
     """Load and validate junctions.json from the analysis package directory."""
     path = Path(data_dir) / JUNCTIONS_NAME
     if not path.is_file():
-        logger.info("No %s in %s — Junction Flow will write empty results", JUNCTIONS_NAME, data_dir)
+        logger.info(
+            "No %s in %s — Junction Flow will write empty results",
+            JUNCTIONS_NAME,
+            data_dir,
+        )
         return empty_junctions_doc()
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
@@ -86,7 +94,9 @@ def analyze_junction_flow_v2(
             continue
         day_result = analyze_junctions_doc(junctions_doc, runners_by_event, day_guns)
         results[day] = day_result
-        n_ix = sum(len(j.get("interactions") or []) for j in day_result.get("junctions") or [])
+        n_ix = sum(
+            len(j.get("interactions") or []) for j in day_result.get("junctions") or []
+        )
         logger.info(
             "[Phase 4.3] Junction Flow day=%s junctions=%s interactions=%s",
             day.value,

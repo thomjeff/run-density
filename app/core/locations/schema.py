@@ -245,7 +245,9 @@ def normalize_location_record(
     out["onepage"] = _yn(out.get("onepage"), "n")
     for key in ("buffer", "interval"):
         try:
-            out[key] = int(float(out[key])) if out[key] not in (None, "") else defaults[key]
+            out[key] = (
+                int(float(out[key])) if out[key] not in (None, "") else defaults[key]
+            )
         except (TypeError, ValueError):
             out[key] = defaults[key]
 

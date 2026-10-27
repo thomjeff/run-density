@@ -22,6 +22,7 @@ from app.core.config_package.location_ids import (
 from app.core.config_package.location_keys import ensure_location_key
 from app.core.config_package.segment_recipes import (
     load_package_segment_manifest,
+    package_recipe_event_ids,
     package_segment_library_dir,
     save_package_segment_manifest,
 )
@@ -40,19 +41,16 @@ from app.core.course.segment_library import (
     set_manifest_legs,
     set_segment_leg_id,
 )
-from app.core.config_package.segment_recipes import package_recipe_event_ids
 from app.utils.constants import (
+    COURSE_EVENT_IDS,
     DEFAULT_FLOW_TYPE,
     FLOW_TYPE_VALUES,
     LEG_MAP_NO_SNAP_LOCATION_TYPES,
-    COURSE_EVENT_IDS,
     LOCATION_PLACEMENT_CHOICES,
     LOCATION_TYPE_CHOICES,
     OFF_COURSE_LOCATION_TYPES,
     ON_COURSE_LOCATION_TYPES,
-    SEGMENT_DIRECTION_CHOICES,
     SEGMENT_DIRECTION_VALUES,
-    SEGMENT_SCHEMA_CHOICES,
     SEGMENT_SCHEMA_VALUES,
 )
 
@@ -174,7 +172,9 @@ def _normalize_segment_schema(schema: Any) -> str:
 def _normalize_segment_direction(direction: Any) -> str:
     value = str(direction or "uni").strip()
     if value not in SEGMENT_DIRECTION_VALUES:
-        raise ValueError(f"direction must be one of: {', '.join(SEGMENT_DIRECTION_VALUES)}")
+        raise ValueError(
+            f"direction must be one of: {', '.join(SEGMENT_DIRECTION_VALUES)}"
+        )
     return value
 
 
@@ -187,9 +187,7 @@ def _normalize_flow_type(flow_type: Any) -> str:
 
 def _leg_description(entry: Dict[str, Any]) -> str:
     """Unified segment description from manifest leg (description preferred over legacy flow_notes)."""
-    return (
-        str(entry.get("description") or entry.get("flow_notes") or "").strip()
-    )
+    return str(entry.get("description") or entry.get("flow_notes") or "").strip()
 
 
 def _normalize_leg_description(description: Any) -> str:
@@ -222,9 +220,7 @@ def _normalize_flow_notes(notes: Any) -> str:
     return str(notes or "").strip()[:500]
 
 
-def apply_leg_pairing(
-    legs: List[Dict[str, Any]], leg_id: str, target_id: Any
-) -> bool:
+def apply_leg_pairing(legs: List[Dict[str, Any]], leg_id: str, target_id: Any) -> bool:
     """
     Set or clear the symmetric corridor pairing between two legs (Issue #785).
 
@@ -292,7 +288,7 @@ def _sanitize_location_proxy_timing(loc: Dict[str, Any]) -> None:
         loc["seg_id"] = ""
 
 
-def _normalize_locations(
+def _normalize_locations(  # noqa: C901
     raw: Any,
     *,
     assign_keys: bool = True,
@@ -309,7 +305,9 @@ def _normalize_locations(
         label = str(item.get("loc_label") or item.get("label") or "").strip()
         if not label:
             continue
-        loc_type = str(item.get("loc_type") or item.get("type") or "course").strip().lower()
+        loc_type = (
+            str(item.get("loc_type") or item.get("type") or "course").strip().lower()
+        )
         if loc_type not in allowed_types:
             loc_type = "course"
         try:
@@ -393,7 +391,9 @@ def leg_row_from_entry(
         start_lon, start_lat = coords[0][0], coords[0][1]
         end_lon, end_lat = coords[-1][0], coords[-1][1]
     locations = _normalize_locations(entry.get("locations"))
-    leg_label = (entry.get("seg_label") or loaded.get("name") or entry.get("id") or "").strip()
+    leg_label = (
+        entry.get("seg_label") or loaded.get("name") or entry.get("id") or ""
+    ).strip()
     start_label = (entry.get("start_label") or "").strip()
     end_label = (entry.get("end_label") or "").strip()
     if not start_label and leg_label:
@@ -454,7 +454,9 @@ def create_package_leg(
     if _find_leg_index(legs, new_id) >= 0:
         raise ValueError(f"Leg id already exists: {new_id}")
 
-    label = (leg_label or Path(filename).stem.replace("_", " ")).strip() or f"Leg {new_id}"
+    label = (
+        leg_label or Path(filename).stem.replace("_", " ")
+    ).strip() or f"Leg {new_id}"
     safe_name = f"{new_id}_{_slugify(label)}.gpx"
     dest = lib_dir / safe_name
     dest.write_bytes(gpx_bytes)
@@ -492,12 +494,14 @@ def create_package_leg(
         sync_leg_metadata_if_applied(cid)
     except FileNotFoundError:
         pass
-    from app.core.config_package.segment_recipes import get_package_segment_library_state
+    from app.core.config_package.segment_recipes import (
+        get_package_segment_library_state,
+    )
 
     return get_package_segment_library_state(cid)
 
 
-def update_package_leg(
+def update_package_leg(  # noqa: C901
     config_id: str,
     leg_id: str,
     fields: Dict[str, Any],
@@ -519,7 +523,10 @@ def update_package_leg(
     entry = dict(legs[idx])
     if "leg_label" in fields or "seg_label" in fields:
         entry["seg_label"] = str(
-            fields.get("leg_label") or fields.get("seg_label") or entry.get("seg_label") or ""
+            fields.get("leg_label")
+            or fields.get("seg_label")
+            or entry.get("seg_label")
+            or ""
         ).strip()
     if "start_label" in fields:
         entry["start_label"] = str(fields.get("start_label") or "").strip()
@@ -544,15 +551,22 @@ def update_package_leg(
         if gpx_filename:
             file_name = Path(str(gpx_filename)).name
         else:
-            file_name = entry.get("file") or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
+            file_name = (
+                entry.get("file")
+                or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
+            )
         dest = lib_dir / Path(file_name).name
         dest.write_bytes(gpx_bytes)
         entry["file"] = dest.name
         parsed = parse_leg_gpx(dest)
         if not entry.get("start_label"):
-            entry["start_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[0]
+            entry["start_label"] = _default_endpoint_labels(
+                entry.get("seg_label", ""), parsed
+            )[0]
         if not entry.get("end_label"):
-            entry["end_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[1]
+            entry["end_label"] = _default_endpoint_labels(
+                entry.get("seg_label", ""), parsed
+            )[1]
 
     authoring_keys = (
         "leg_label",
@@ -583,14 +597,15 @@ def update_package_leg(
         except FileNotFoundError:
             pass
     elif any(
-        key in fields
-        for key in ("start_label", "end_label", "leg_label", "seg_label")
+        key in fields for key in ("start_label", "end_label", "leg_label", "seg_label")
     ):
         try:
             merge_leg_locations_into_course(cid)
         except FileNotFoundError:
             pass
-    from app.core.config_package.segment_recipes import get_package_segment_library_state
+    from app.core.config_package.segment_recipes import (
+        get_package_segment_library_state,
+    )
 
     return get_package_segment_library_state(cid)
 
@@ -616,7 +631,9 @@ def delete_package_leg(config_id: str, leg_id: str) -> Dict[str, Any]:
     _remove_leg_from_recipes(manifest, leg_id)
     set_manifest_legs(manifest, legs)
     save_package_segment_manifest(cid, manifest)
-    from app.core.config_package.segment_recipes import get_package_segment_library_state
+    from app.core.config_package.segment_recipes import (
+        get_package_segment_library_state,
+    )
 
     return get_package_segment_library_state(cid)
 
@@ -641,12 +658,14 @@ def leg_id_from_export_filename(filename: str) -> Optional[str]:
     return None
 
 
-def merge_leg_export_into_entry(
+def merge_leg_export_into_entry(  # noqa: C901
     entry: Dict[str, Any],
     leg_export: Dict[str, Any],
 ) -> None:
     """Apply exported leg metadata and locations onto a manifest leg entry."""
-    label = str(leg_export.get("leg_label") or leg_export.get("seg_label") or "").strip()
+    label = str(
+        leg_export.get("leg_label") or leg_export.get("seg_label") or ""
+    ).strip()
     if label:
         entry["seg_label"] = label
     for key in ("start_label", "end_label", "description"):
@@ -736,7 +755,9 @@ def _leg_export_files(
             "locations": row["locations"],
         },
     }
-    json_bytes = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    json_bytes = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode(
+        "utf-8"
+    )
     return gpx_path.read_bytes(), json_bytes
 
 
@@ -1087,9 +1108,7 @@ def validate_locations_for_export(course: Dict[str, Any]) -> List[str]:
 
     Validates segment references and proxy_loc_id targets.
     """
-    segments = [
-        s for s in (course.get("segments") or []) if isinstance(s, dict)
-    ]
+    segments = [s for s in (course.get("segments") or []) if isinstance(s, dict)]
     valid_seg_ids = _valid_segment_ids(segments)
     locations = [
         loc for loc in (course.get("locations") or []) if isinstance(loc, dict)
@@ -1130,7 +1149,9 @@ def validate_locations_for_export(course: Dict[str, Any]) -> List[str]:
             errors.append(
                 f'Location "{label}" (id={lid}): proxy_loc_id {proxy_id} not found'
             )
-        if _proxy_loc_id_is_set(proxy_val) and _parse_location_seg_ids(loc.get("seg_id")):
+        if _proxy_loc_id_is_set(proxy_val) and _parse_location_seg_ids(
+            loc.get("seg_id")
+        ):
             errors.append(
                 f'Location "{label}" (id={lid}): set only proxy_loc_id or seg_id, not both (Issue #751)'
             )
@@ -1148,9 +1169,7 @@ def refresh_course_location_seg_ids(config_id: str) -> Dict[str, Any]:
     """Refresh all location seg_ids from course segments; persist course.json."""
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    segments = [
-        s for s in (course.get("segments") or []) if isinstance(s, dict)
-    ]
+    segments = [s for s in (course.get("segments") or []) if isinstance(s, dict)]
     locations = course.get("locations") or []
     unmapped: List[Dict[str, Any]] = []
     updated = refresh_location_seg_ids_from_segments(
@@ -1171,9 +1190,7 @@ def _event_flags_for_segment(
     on_seg = set()
     if seg:
         on_seg = {
-            str(e).strip().lower()
-            for e in (seg.get("events") or [])
-            if str(e).strip()
+            str(e).strip().lower() for e in (seg.get("events") or []) if str(e).strip()
         }
     flags: Dict[str, str] = {}
     for eid in event_ids:
@@ -1182,7 +1199,7 @@ def _event_flags_for_segment(
     return flags
 
 
-def merge_leg_locations_into_course(
+def merge_leg_locations_into_course(  # noqa: C901
     config_id: str,
     *,
     leg_manifest: Optional[Dict[str, Any]] = None,
@@ -1221,9 +1238,7 @@ def merge_leg_locations_into_course(
         _lib_dir, manifest, _leg_source, _pkg_manifest = resolve_leg_library(cid)
     recipe_ids = recipe_leg_ids_from_package(cid)
     course = load_config_course(cid)
-    segments = [
-        s for s in (course.get("segments") or []) if isinstance(s, dict)
-    ]
+    segments = [s for s in (course.get("segments") or []) if isinstance(s, dict)]
     try:
         package_events = list(package_recipe_event_ids(cid))
     except (FileNotFoundError, ValueError):
@@ -1274,9 +1289,7 @@ def merge_leg_locations_into_course(
             )
         ):
             key = leg_loc_key(leg_id, i)
-            loc_key = str(
-                loc.get("pass_key") or loc.get("location_key") or ""
-            ).strip()
+            loc_key = str(loc.get("pass_key") or loc.get("location_key") or "").strip()
             prev = existing_by_loc_key.get(loc_key) if loc_key else None
             if prev is None:
                 prev = existing_by_leg_loc_key.get(key)
@@ -1500,7 +1513,7 @@ def _leg_id_for_segment(seg: Dict[str, Any], leg_order: Sequence[str]) -> str:
     return ""
 
 
-def sync_leg_metadata_into_course(config_id: str) -> bool:
+def sync_leg_metadata_into_course(config_id: str) -> bool:  # noqa: C901
     """
     Refresh combined-course segment fields from segment-library leg metadata.
 
@@ -1562,19 +1575,22 @@ def sync_leg_metadata_into_course(config_id: str) -> bool:
         if str(seg.get("description") or "").strip() != row["description"]:
             seg["description"] = row["description"]
             updated = True
-        if str(seg.get("schema") or "on_course_open").strip() != str(
-            row["schema"] or "on_course_open"
-        ).strip():
+        if (
+            str(seg.get("schema") or "on_course_open").strip()
+            != str(row["schema"] or "on_course_open").strip()
+        ):
             seg["schema"] = row["schema"]
             updated = True
-        if str(seg.get("direction") or "uni").strip() != str(
-            row["direction"] or "uni"
-        ).strip():
+        if (
+            str(seg.get("direction") or "uni").strip()
+            != str(row["direction"] or "uni").strip()
+        ):
             seg["direction"] = row["direction"]
             updated = True
-        if str(seg.get("flow_type") or DEFAULT_FLOW_TYPE).strip().lower() != str(
-            row["flow_type"] or DEFAULT_FLOW_TYPE
-        ).strip().lower():
+        if (
+            str(seg.get("flow_type") or DEFAULT_FLOW_TYPE).strip().lower()
+            != str(row["flow_type"] or DEFAULT_FLOW_TYPE).strip().lower()
+        ):
             seg["flow_type"] = row["flow_type"]
             updated = True
         try:
@@ -1606,7 +1622,7 @@ def sync_leg_metadata_if_applied(config_id: str) -> bool:
     return sync_leg_metadata_into_course(config_id)
 
 
-def sync_leg_location_metadata_from_course(config_id: str) -> bool:
+def sync_leg_location_metadata_from_course(config_id: str) -> bool:  # noqa: C901
     """
     Push location edits from package course.json into a package-local leg library.
 

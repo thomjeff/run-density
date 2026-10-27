@@ -15,8 +15,8 @@ warnings.warn(
     stacklevel=2,
 )
 
-from app.core.reports.density.template_engine import (  # noqa: E402,F401
-    DensityReportTemplateEngine,
+from app.core.reports.density.template_engine import DensityReportTemplateEngine
+from app.core.reports.density.template_engine import (
     DensityReportTemplateEngine as NewDensityTemplateEngine,
 )
 

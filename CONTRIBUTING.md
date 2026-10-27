@@ -99,7 +99,7 @@ docker logs runflow-create --tail 100
 docker logs runflow-execute --tail 100
 ```
 
-Run a plan from the Create UI or Postman when the change affects analysis. Combined-image and lint checks run in GitHub Actions on the PR.
+Run a plan from the Create UI or Postman when the change affects analysis. Combined-image and lint checks run in GitHub Actions on the PR. Lint settings are `.flake8` and `pyproject.toml` (line length 88).
 
 ---
 

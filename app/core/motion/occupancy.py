@@ -198,9 +198,7 @@ def _passage_times_for_stream(
         for i in range(1, len(km)):
             cur = km[i] - center
             # Arrive at / cross the reference; do not double-count leaving center.
-            crossed = (prev * cur < 0.0) or (
-                abs(cur) < 1e-12 and abs(prev) >= 1e-12
-            )
+            crossed = (prev * cur < 0.0) or (abs(cur) < 1e-12 and abs(prev) >= 1e-12)
             if crossed:
                 out.append((str(rid), str(event).lower(), int(ts[i])))
             prev = cur
@@ -290,9 +288,7 @@ def query_occupancy(
     if "instantaneous" in wanted:
         if t is None:
             raise ValueError("instantaneous requires t")
-        payload = instantaneous_occupancy(
-            samples, place, t=int(t), events=events
-        )
+        payload = instantaneous_occupancy(samples, place, t=int(t), events=events)
         if not include_runner_ids:
             payload = {k: v for k, v in payload.items() if k != "runner_ids"}
         result["metrics"]["instantaneous"] = payload
@@ -302,9 +298,7 @@ def query_occupancy(
         raise ValueError("window metrics require t0 and t1")
 
     if "window_uniques" in wanted:
-        payload = window_uniques(
-            samples, place, t0=int(t0), t1=int(t1), events=events
-        )
+        payload = window_uniques(samples, place, t0=int(t0), t1=int(t1), events=events)
         if not include_runner_ids:
             payload = {k: v for k, v in payload.items() if k != "runner_ids"}
         result["metrics"]["window_uniques"] = payload
@@ -314,9 +308,7 @@ def query_occupancy(
             samples, place, t0=int(t0), t1=int(t1), events=events
         )
         if not include_passage_rows:
-            payload = {
-                k: v for k, v in payload.items() if k != "passage_rows"
-            }
+            payload = {k: v for k, v in payload.items() if k != "passage_rows"}
         result["metrics"]["throughput"] = payload
 
     return result
@@ -347,9 +339,7 @@ def build_places_from_passes(
             continue
         lat = float(row["lat"])
         lon = float(row["lon"])
-        center = estimate_center_seg_km(
-            samples, seg_id=seg_id, lat=lat, lon=lon
-        )
+        center = estimate_center_seg_km(samples, seg_id=seg_id, lat=lat, lon=lon)
         if center is None:
             continue
         buffer_m = float(default_buffer_m)
@@ -579,9 +569,7 @@ def _planar_inside_mask(samples: pd.DataFrame, pin: PinPlace) -> pd.Series:
         return pd.Series(False, index=samples.index)
     # Cheap bbox pad (~20%) then exact haversine.
     pad_deg = (float(pin.radius_m) * 1.2) / 111320.0
-    rough = (
-        (samples["lat"].astype(float) - float(pin.lat)).abs() <= pad_deg
-    ) & (
+    rough = ((samples["lat"].astype(float) - float(pin.lat)).abs() <= pad_deg) & (
         (samples["lon"].astype(float) - float(pin.lon)).abs() <= pad_deg * 1.5
     )
     if not bool(rough.any()):
@@ -780,13 +768,9 @@ def query_planar_occupancy(
         result["metrics"]["window_uniques"] = payload
 
     if "throughput" in wanted:
-        payload = planar_throughput(
-            samples, pin, t0=int(t0), t1=int(t1), events=events
-        )
+        payload = planar_throughput(samples, pin, t0=int(t0), t1=int(t1), events=events)
         if not include_passage_rows:
-            payload = {
-                k: v for k, v in payload.items() if k != "passage_rows"
-            }
+            payload = {k: v for k, v in payload.items() if k != "passage_rows"}
         result["metrics"]["throughput"] = payload
 
     return result

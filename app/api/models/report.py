@@ -4,12 +4,14 @@ Pydantic Models for Report API
 Request and response models for report generation endpoints.
 """
 
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
 
 
 class ReportRequest(BaseModel):
     """Request model for report generation."""
+
     report_type: str = Field(..., alias="reportType")  # "density" or "flow"
     segment_ids: Optional[List[str]] = None
     config: Optional[Dict[str, Any]] = None
@@ -18,6 +20,7 @@ class ReportRequest(BaseModel):
 
 class ReportResponse(BaseModel):
     """Response model for report generation."""
+
     success: bool
     report_data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -25,6 +28,7 @@ class ReportResponse(BaseModel):
 
 class CombinedReportRequest(BaseModel):
     """Request model for combined report generation."""
+
     pace_csv: str
     segments_csv: str
     start_times: Dict[str, float]
@@ -37,6 +41,7 @@ class CombinedReportRequest(BaseModel):
 
 class CombinedReportResponse(BaseModel):
     """Response model for combined report generation."""
+
     success: bool
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None

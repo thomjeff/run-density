@@ -8,9 +8,10 @@ Phase 7: UI & API Surface Updates (Issue #501)
 Issue #682: Updated to use runflow/analysis/{run_id} structure
 """
 
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 from app.core.v2.models import Day, Event
@@ -23,14 +24,14 @@ logger = logging.getLogger(__name__)
 def get_ui_artifacts_path(run_id: str, day: Day) -> Path:
     """
     Get the UI artifacts directory path for a specific day.
-    
+
     Args:
         run_id: Unique run identifier (UUID)
         day: Day enum (fri, sat, sun, mon)
-        
+
     Returns:
         Path object for the UI artifacts directory
-        
+
     Example:
         >>> path = get_ui_artifacts_path("abc123", Day.SUN)
         >>> str(path)
@@ -38,6 +39,7 @@ def get_ui_artifacts_path(run_id: str, day: Day) -> Path:
     """
     # Issue #682: Use centralized get_run_directory() for correct path
     from app.utils.run_id import get_run_directory
+
     run_dir = get_run_directory(run_id)
     ui_path = run_dir / day.value / "ui"
     return ui_path
@@ -48,22 +50,22 @@ def aggregate_full_run_data(
     density_results: Dict[str, Any],
     flow_results: Dict[str, Any],
     segments_df: pd.DataFrame,
-    all_runners_df: pd.DataFrame
+    all_runners_df: pd.DataFrame,
 ) -> Dict[str, Any]:
     """
     Aggregate data from all days/events to create full run scope for artifacts.
-    
+
     This function collects data from all days and events to ensure artifacts
     contain complete context (all segments, all events) even though they're
     stored per-day.
-    
+
     Args:
         events: All events from the run (across all days)
         density_results: Density results dict keyed by day
         flow_results: Flow results dict keyed by day
         segments_df: Full segments DataFrame
         all_runners_df: Full runners DataFrame (all events)
-        
+
     Returns:
         Dictionary with aggregated data for artifact generation
     """
@@ -72,23 +74,23 @@ def aggregate_full_run_data(
     for day_results in density_results.values():
         if isinstance(day_results, dict):
             aggregated_density.update(day_results)
-    
+
     # Aggregate flow results from all days
     aggregated_flow = {}
     for day_results in flow_results.values():
         if isinstance(day_results, dict):
             aggregated_flow.update(day_results)
-    
+
     return {
         "events": events,
         "density_results": aggregated_density,
         "flow_results": aggregated_flow,
         "segments_df": segments_df,
-        "runners_df": all_runners_df
+        "runners_df": all_runners_df,
     }
 
 
-def generate_ui_artifacts_per_day(
+def generate_ui_artifacts_per_day(  # noqa: C901
     run_id: str,
     day: Day,
     events: List[Event],
@@ -98,14 +100,14 @@ def generate_ui_artifacts_per_day(
     all_runners_df: pd.DataFrame,
     data_dir: str,
     environment: str = "local",
-    analysis_context: Optional[Any] = None
+    analysis_context: Optional[Any] = None,
 ) -> Optional[Path]:
     """
     Generate UI artifacts for a specific day with day-scoped data.
-    
+
     CRITICAL: Artifacts must only contain segments for the specified day, not all segments.
     This function filters all data (bins, metrics, geojson, heatmaps) by day segments.
-    
+
     Args:
         run_id: Unique run identifier (UUID)
         day: Day enum for path organization
@@ -117,44 +119,51 @@ def generate_ui_artifacts_per_day(
         data_dir: Base directory for data files
         environment: Environment name ("local" or "cloud")
         analysis_context: Optional AnalysisContext instance to reuse (Issue #673: performance optimization)
-        
+
     Returns:
         Path to UI artifacts directory, or None if generation failed
-        
+
     Note:
         Artifacts are stored in runflow/analysis/{run_id}/{day}/ui/ and contain
         ONLY segments for that specific day (day-scoped).
-        
+
         Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     try:
         logger.debug(f"Generating UI artifacts for day {day.value} (day-scoped)")
-        
+
         # Get UI artifacts path for this day
         ui_path = get_ui_artifacts_path(run_id, day)
         ui_path.mkdir(parents=True, exist_ok=True)
-        
+
         # CRITICAL: Get day-specific events and segments
         from app.core.v2.bins import filter_segments_by_events
+
         day_events = [e for e in events if e.day == day]
         day_segments_df = filter_segments_by_events(segments_df, day_events)
-        day_segment_ids = set(day_segments_df['seg_id'].astype(str).unique())
-        
+        day_segment_ids = set(day_segments_df["seg_id"].astype(str).unique())
+
         logger.debug(
             f"Day {day.value}: Filtering artifacts to {len(day_segment_ids)} segments: "
             f"{sorted(list(day_segment_ids))[:10]}{'...' if len(day_segment_ids) > 10 else ''}"
         )
-        
+
         # Calculate flow segment counts from day-specific flow results only
         overtaking_segments = 0
         co_presence_segments = 0
-        
+
         try:
             # Issue #548 Bug 3: Transform flow_results structure
             # flow_results from v2 flow analysis has structure: {Day: {"ok": True, "segments": [...], ...}}
             # Need to convert segments list to dict keyed by seg_id
-            day_flow_result = flow_results.get(day, {})  # Get by Day enum, not day.value
-            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
+            day_flow_result = flow_results.get(
+                day, {}
+            )  # Get by Day enum, not day.value
+            if (
+                isinstance(day_flow_result, dict)
+                and day_flow_result.get("ok")
+                and "segments" in day_flow_result
+            ):
                 # Transform segments list to dict keyed by seg_id
                 segments_list = day_flow_result.get("segments", [])
                 day_flow_dict = {}
@@ -163,30 +172,36 @@ def generate_ui_artifacts_per_day(
                         seg_id = segment.get("seg_id")
                         if seg_id:
                             day_flow_dict[seg_id] = segment
-                
+
                 # Now count segments with overtaking/co-presence activity
                 overtaking_segments_set = set()
                 copresence_segments_set = set()
-                
+
                 for seg_id, flow_data in day_flow_dict.items():
                     if isinstance(flow_data, dict):
                         # Check for overtaking activity
                         overtaking_a = flow_data.get("overtaking_a", 0)
                         overtaking_b = flow_data.get("overtaking_b", 0)
-                        if (isinstance(overtaking_a, (int, float)) and overtaking_a > 0) or \
-                           (isinstance(overtaking_b, (int, float)) and overtaking_b > 0):
+                        if (
+                            isinstance(overtaking_a, (int, float)) and overtaking_a > 0
+                        ) or (
+                            isinstance(overtaking_b, (int, float)) and overtaking_b > 0
+                        ):
                             overtaking_segments_set.add(seg_id)
-                        
+
                         # Check for co-presence activity
                         copresence_a = flow_data.get("copresence_a", 0)
                         copresence_b = flow_data.get("copresence_b", 0)
-                        if (isinstance(copresence_a, (int, float)) and copresence_a > 0) or \
-                           (isinstance(copresence_b, (int, float)) and copresence_b > 0):
+                        if (
+                            isinstance(copresence_a, (int, float)) and copresence_a > 0
+                        ) or (
+                            isinstance(copresence_b, (int, float)) and copresence_b > 0
+                        ):
                             copresence_segments_set.add(seg_id)
-                
+
                 overtaking_segments = len(overtaking_segments_set)
                 co_presence_segments = len(copresence_segments_set)
-                
+
                 logger.debug(
                     f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
                     f"{co_presence_segments} co-presence (from {len(segments_list)} segments)"
@@ -198,8 +213,10 @@ def generate_ui_artifacts_per_day(
                     f"has_segments={'segments' in day_flow_result if isinstance(day_flow_result, dict) else False}"
                 )
         except Exception as e:
-            logger.warning(f"Could not calculate flow segment counts: {e}", exc_info=True)
-        
+            logger.warning(
+                f"Could not calculate flow segment counts: {e}", exc_info=True
+            )
+
         # Call the internal function with day-scoped data
         try:
             artifacts_dir = _export_ui_artifacts_v2(
@@ -214,26 +231,34 @@ def generate_ui_artifacts_per_day(
                 overtaking_segments=overtaking_segments,
                 co_presence_segments=co_presence_segments,
                 environment=environment,
-                analysis_context=analysis_context
+                analysis_context=analysis_context,
             )
-            
+
             if artifacts_dir:
-                logger.debug(f"✅ UI artifacts generated for day {day.value}: {artifacts_dir}")
+                logger.debug(
+                    f"✅ UI artifacts generated for day {day.value}: {artifacts_dir}"
+                )
                 return artifacts_dir
             else:
-                logger.warning(f"UI artifact generation returned None for day {day.value}")
+                logger.warning(
+                    f"UI artifact generation returned None for day {day.value}"
+                )
                 return None
-                
+
         except Exception as e:
-            logger.error(f"Error generating UI artifacts for day {day.value}: {e}", exc_info=True)
+            logger.error(
+                f"Error generating UI artifacts for day {day.value}: {e}", exc_info=True
+            )
             return None
-            
+
     except Exception as e:
-        logger.error(f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True
+        )
         return None
 
 
-def _export_ui_artifacts_v2(
+def _export_ui_artifacts_v2(  # noqa: C901
     run_id: str,
     day: Day,
     day_events: List[Event],
@@ -245,20 +270,20 @@ def _export_ui_artifacts_v2(
     overtaking_segments: int,
     co_presence_segments: int,
     environment: str,
-    analysis_context: Optional[Any] = None
+    analysis_context: Optional[Any] = None,
 ) -> Optional[Path]:
     """
     Internal wrapper for v1 artifact generation functions adapted for v2 structure.
-    
+
     CRITICAL: This function filters all artifacts by day segments to ensure day-scoping.
-    
+
     This function calls v1 artifact generation functions directly, but:
     1. Filters bins by day segments before generating artifacts
     2. Filters segment_metrics by day segments
     3. Filters segments.geojson by day segments
     4. Filters heatmaps by day segments
     5. Writes artifacts to v2 day-scoped path structure
-    
+
     Args:
         run_id: Unique run identifier
         day: Day enum for path organization
@@ -267,66 +292,81 @@ def _export_ui_artifacts_v2(
         overtaking_segments: Count of segments with overtaking (full run)
         co_presence_segments: Count of segments with co-presence (full run)
         environment: Environment name
-        
+
     Returns:
         Path to UI artifacts directory
     """
     import json
+
     from app.core.artifacts.frontend import (
-        generate_meta_json,
-        generate_segment_metrics_json,
+        generate_density_schema_json,
         generate_flags_json,
         generate_flow_json,
+        generate_health_json,
+        generate_meta_json,
+        generate_segment_metrics_json,
         generate_segments_geojson,
-        generate_density_schema_json,
-        generate_health_json
     )
     from app.core.artifacts.heatmaps import export_heatmaps_and_captions
     from app.core.artifacts.segment_maps import export_segment_map_pngs
-    
+
     # Get UI artifacts path
     ui_path = get_ui_artifacts_path(run_id, day)
     ui_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Issue #574: Create subdirectories for organized artifact structure
     metadata_dir = ui_path / "metadata"
     metrics_dir = ui_path / "metrics"
     geospatial_dir = ui_path / "geospatial"
     visualizations_dir = ui_path / "visualizations"
-    
+
     metadata_dir.mkdir(exist_ok=True)
     metrics_dir.mkdir(exist_ok=True)
     geospatial_dir.mkdir(exist_ok=True)
     visualizations_dir.mkdir(exist_ok=True)
-    
-    logger.debug(f"Generating UI artifacts in {ui_path} (day-scoped to {len(day_segment_ids)} segments)")
-    logger.debug(f"Issue #574: Using organized structure: metadata/, metrics/, geospatial/, visualizations/")
-    
+
+    logger.debug(
+        f"Generating UI artifacts in {ui_path} (day-scoped to {len(day_segment_ids)} segments)"
+    )
+    logger.debug(
+        "Issue #574: Using organized structure: metadata/, metrics/, geospatial/, visualizations/"
+    )
+
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
-    aggregated_bins_for_flags = None  # Issue #528: Keep original bins with 'rate' column for flagging
+    aggregated_bins_for_flags = (
+        None  # Issue #528: Keep original bins with 'rate' column for flagging
+    )
     temp_reports = None
     heatmap_reports = None
-    
+
     try:
         # Aggregate bins from all days first
         aggregated_bins = _aggregate_bins_from_all_days(run_id)
         if aggregated_bins is not None and not aggregated_bins.empty:
             # Issue #528: Keep a copy with 'rate' column for flagging before renaming
             aggregated_bins_for_flags = aggregated_bins.copy()
-            
+
             # Normalize column names for v1 functions
             # v1 expects 'rate_p_s' but v2 bins.parquet has 'rate'
-            if 'rate' in aggregated_bins.columns and 'rate_p_s' not in aggregated_bins.columns:
-                aggregated_bins = aggregated_bins.rename(columns={'rate': 'rate_p_s'})
+            if (
+                "rate" in aggregated_bins.columns
+                and "rate_p_s" not in aggregated_bins.columns
+            ):
+                aggregated_bins = aggregated_bins.rename(columns={"rate": "rate_p_s"})
             # v1 expects 'segment_id' but v2 might have 'seg_id'
             segment_col = None
-            if 'seg_id' in aggregated_bins.columns and 'segment_id' not in aggregated_bins.columns:
-                aggregated_bins = aggregated_bins.rename(columns={'seg_id': 'segment_id'})
-                segment_col = 'segment_id'
-            elif 'segment_id' in aggregated_bins.columns:
-                segment_col = 'segment_id'
-            
+            if (
+                "seg_id" in aggregated_bins.columns
+                and "segment_id" not in aggregated_bins.columns
+            ):
+                aggregated_bins = aggregated_bins.rename(
+                    columns={"seg_id": "segment_id"}
+                )
+                segment_col = "segment_id"
+            elif "segment_id" in aggregated_bins.columns:
+                segment_col = "segment_id"
+
             # CRITICAL FIX: Filter bins to only include day segments
             if segment_col:
                 bins_before = len(aggregated_bins)
@@ -334,21 +374,33 @@ def _export_ui_artifacts_v2(
                     aggregated_bins[segment_col].astype(str).isin(day_segment_ids)
                 ].copy()
                 # Also filter the flags copy
-                flags_segment_col = 'segment_id' if 'segment_id' in aggregated_bins_for_flags.columns else ('seg_id' if 'seg_id' in aggregated_bins_for_flags.columns else segment_col)
+                flags_segment_col = (
+                    "segment_id"
+                    if "segment_id" in aggregated_bins_for_flags.columns
+                    else (
+                        "seg_id"
+                        if "seg_id" in aggregated_bins_for_flags.columns
+                        else segment_col
+                    )
+                )
                 aggregated_bins_for_flags = aggregated_bins_for_flags[
-                    aggregated_bins_for_flags[flags_segment_col].astype(str).isin(day_segment_ids)
+                    aggregated_bins_for_flags[flags_segment_col]
+                    .astype(str)
+                    .isin(day_segment_ids)
                 ].copy()
                 logger.debug(
                     f"   ✅ Filtered bins: {bins_before} -> {len(aggregated_bins)} rows "
                     f"for day {day.value} ({len(day_segment_ids)} segments)"
                 )
-            
+
             # Create temporary reports structure for v1 functions
             temp_reports = ui_path.parent / "reports_temp"
             temp_bins_dir = temp_reports / "bins"
             temp_bins_dir.mkdir(parents=True, exist_ok=True)
             aggregated_bins.to_parquet(temp_bins_dir / "bins.parquet", index=False)
-            logger.debug(f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports")
+            logger.debug(
+                f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports"
+            )
 
             # Prepare a dedicated reports directory for heatmaps so we can
             # bypass flag-only filtering in v1 load_bin_data when necessary.
@@ -357,7 +409,10 @@ def _export_ui_artifacts_v2(
             heatmap_bins_dir.mkdir(parents=True, exist_ok=True)
 
             heatmap_bins = aggregated_bins.copy()
-            if "flag_severity" in heatmap_bins.columns and heatmap_bins["flag_severity"].eq("none").all():
+            if (
+                "flag_severity" in heatmap_bins.columns
+                and heatmap_bins["flag_severity"].eq("none").all()
+            ):
                 heatmap_bins = heatmap_bins.drop(columns=["flag_severity"])
                 logger.debug(
                     "   ℹ️ Heatmap bins contain only 'none' flag_severity; dropping column to keep all bins"
@@ -369,7 +424,7 @@ def _export_ui_artifacts_v2(
             logger.warning("   ⚠️  No bins data available from any day")
     except Exception as e:
         logger.warning(f"   ⚠️  Could not aggregate/filter bins: {e}")
-    
+
     try:
         # 1. Generate meta.json (Issue #574: in metadata/ subdirectory)
         logger.debug("1️⃣  Generating meta.json...")
@@ -377,67 +432,101 @@ def _export_ui_artifacts_v2(
         # Add day information for v2
         meta["day"] = day.value
         (metadata_dir / "meta.json").write_text(json.dumps(meta, indent=2))
-        logger.debug(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value} (in metadata/)")
-        
+        logger.debug(
+            f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value} (in metadata/)"
+        )
+
         # 2. Generate segment_metrics.json (day-scoped)
         logger.debug("2️⃣  Generating segment_metrics.json...")
         try:
-            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+            if (
+                aggregated_bins is not None
+                and not aggregated_bins.empty
+                and temp_reports
+            ):
                 segment_metrics = generate_segment_metrics_json(temp_reports)
                 # Issue #603: peak_rate is now computed from worst bin in generate_segment_metrics_json()
                 # No need for separate peak_rate calculation
-                
+
                 # CRITICAL FIX: Filter segment_metrics to only include day segments
                 segment_metrics_filtered = {
                     seg_id: metrics
                     for seg_id, metrics in segment_metrics.items()
                     if str(seg_id) in day_segment_ids
                 }
-                
+
                 segment_metrics = segment_metrics_filtered
-                
+
                 # Issue #616: Enrich segment_metrics with correct schema from segments_df
                 # bins.parquet may not have schema_key column, so we get schema from segments_df (SSOT)
-                if segments_df is not None and not segments_df.empty and 'schema' in segments_df.columns:
-                    schema_lookup = dict(zip(segments_df['seg_id'].astype(str), segments_df['schema']))
+                if (
+                    segments_df is not None
+                    and not segments_df.empty
+                    and "schema" in segments_df.columns
+                ):
+                    schema_lookup = dict(
+                        zip(segments_df["seg_id"].astype(str), segments_df["schema"])
+                    )
                     enriched_count = 0
                     for seg_id, metrics in segment_metrics.items():
                         if str(seg_id) in schema_lookup:
                             correct_schema = schema_lookup[str(seg_id)]
                             # Only update if schema is different (avoid overwriting correct values)
-                            if metrics.get('schema') != correct_schema:
-                                metrics['schema'] = correct_schema
+                            if metrics.get("schema") != correct_schema:
+                                metrics["schema"] = correct_schema
                                 enriched_count += 1
                     if enriched_count > 0:
                         logger.debug(
                             f"   ✅ Enriched {enriched_count} segments with correct schema from segments_df"
                         )
-                
+
                 logger.debug(
                     f"   ✅ segment_metrics.json: {len(segment_metrics)} segments "
                     f"(day-scoped to {day.value})"
                 )
             else:
-                logger.warning("   ⚠️  No bins data available, generating empty segment_metrics")
+                logger.warning(
+                    "   ⚠️  No bins data available, generating empty segment_metrics"
+                )
                 segment_metrics = {}
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate segment_metrics: {e}")
             segment_metrics = {}
-        
+
         # Calculate summary metrics
-        peak_density_overall = max((seg.get("peak_density", 0.0) for seg in segment_metrics.values()), default=0.0)
-        peak_rate_overall = max((seg.get("peak_rate", 0.0) for seg in segment_metrics.values()), default=0.0)
-        
+        peak_density_overall = max(
+            (seg.get("peak_density", 0.0) for seg in segment_metrics.values()),
+            default=0.0,
+        )
+        peak_rate_overall = max(
+            (seg.get("peak_rate", 0.0) for seg in segment_metrics.values()), default=0.0
+        )
+
         # 3. Generate flags.json
         logger.debug("3️⃣  Generating flags.json...")
         try:
             # Issue #528: Use bins with 'rate' column (not 'rate_p_s') for flagging
-            if aggregated_bins_for_flags is not None and not aggregated_bins_for_flags.empty and temp_reports:
+            if (
+                aggregated_bins_for_flags is not None
+                and not aggregated_bins_for_flags.empty
+                and temp_reports
+            ):
                 # Ensure bins have required columns for flagging
-                required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los_class', 'flag_severity', 'flag_reason'}
+                required_cols = {
+                    "segment_id",
+                    "t_start",
+                    "t_end",
+                    "density",
+                    "rate",
+                    "los_class",
+                    "flag_severity",
+                    "flag_reason",
+                }
                 missing_cols = required_cols - set(aggregated_bins_for_flags.columns)
                 if missing_cols:
-                    raise ValueError(f"Bins DataFrame missing required columns for flagging: {missing_cols}")
+                    raise ValueError(
+                        f"Bins DataFrame missing required columns for flagging: {missing_cols}"
+                    )
                 else:
                     # Save bins with 'rate' column to temp_reports for generate_flags_json
                     # This overwrites the bins.parquet saved earlier (which had 'rate_p_s')
@@ -445,23 +534,32 @@ def _export_ui_artifacts_v2(
                     temp_bins_path = Path(temp_reports) / "bins" / "bins.parquet"
                     temp_bins_path.parent.mkdir(parents=True, exist_ok=True)
                     aggregated_bins_for_flags.to_parquet(temp_bins_path, index=False)
-                    logger.debug(f"   📊 Saved {len(aggregated_bins_for_flags)} bins with 'rate' column for flagging")
+                    logger.debug(
+                        f"   📊 Saved {len(aggregated_bins_for_flags)} bins with 'rate' column for flagging"
+                    )
                     flags = generate_flags_json(temp_reports, segment_metrics)
-            elif aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+            elif (
+                aggregated_bins is not None
+                and not aggregated_bins.empty
+                and temp_reports
+            ):
                 # Fallback: try with aggregated_bins if aggregated_bins_for_flags not available
-                logger.warning("   ⚠️  Using aggregated_bins (may have 'rate_p_s' instead of 'rate')")
+                logger.warning(
+                    "   ⚠️  Using aggregated_bins (may have 'rate_p_s' instead of 'rate')"
+                )
                 flags = generate_flags_json(temp_reports, segment_metrics)
             else:
                 flags = []
         except Exception as e:
             logger.error(f"   ❌ Could not generate flags: {e}")
             import traceback
+
             logger.debug(f"   Traceback: {traceback.format_exc()}")
             raise
-        
+
         segments_with_flags = len(flags)
         flagged_bins = sum(flag.get("flagged_bins", 0) for flag in flags)
-        
+
         # Add summary metrics
         segment_metrics_with_summary = {
             "peak_density": round(peak_density_overall, 4),
@@ -470,27 +568,35 @@ def _export_ui_artifacts_v2(
             "flagged_bins": flagged_bins,
             "overtaking_segments": overtaking_segments,
             "co_presence_segments": co_presence_segments,
-            **segment_metrics
+            **segment_metrics,
         }
-        
+
         # Issue #574: Write to metrics/ subdirectory
-        (metrics_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics_with_summary, indent=2))
-        logger.debug(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary (in metrics/)")
-        
+        (metrics_dir / "segment_metrics.json").write_text(
+            json.dumps(segment_metrics_with_summary, indent=2)
+        )
+        logger.debug(
+            f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary (in metrics/)"
+        )
+
         (metrics_dir / "flags.json").write_text(json.dumps(flags, indent=2))
         logger.debug(f"   ✅ flags.json: {len(flags)} flagged segments (in metrics/)")
-        
+
         # 4. Generate flow.json
         logger.debug("4️⃣  Generating flow.json...")
         try:
-            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+            if (
+                aggregated_bins is not None
+                and not aggregated_bins.empty
+                and temp_reports
+            ):
                 flow = generate_flow_json(temp_reports)
             else:
                 flow = {
                     "schema_version": "1.0.0",
                     "units": {"rate": "persons_per_second", "time": "ISO8601"},
                     "rows": [],
-                    "summaries": []
+                    "summaries": [],
                 }
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate flow.json: {e}")
@@ -498,13 +604,15 @@ def _export_ui_artifacts_v2(
                 "schema_version": "1.0.0",
                 "units": {"rate": "persons_per_second", "time": "ISO8601"},
                 "rows": [],
-                "summaries": []
+                "summaries": [],
             }
-        
+
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "flow.json").write_text(json.dumps(flow, indent=2))
-        logger.debug(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)")
-        
+        logger.debug(
+            f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)"
+        )
+
         # 5. Generate segments.geojson (day-scoped)
         # Issue #655: segments.geojson generation does NOT require bins - it only needs segments.csv and GPX files
         # generate_segments_geojson loads segments.csv from analysis.json and GPX courses for the day's events
@@ -517,11 +625,15 @@ def _export_ui_artifacts_v2(
             if not temp_reports:
                 temp_reports = ui_path.parent / "reports_temp"
                 temp_reports.mkdir(parents=True, exist_ok=True)
-                logger.debug(f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}")
-            
+                logger.debug(
+                    f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}"
+                )
+
             # Generate segments.geojson - this works independently of bins
             # Issue #673: Pass analysis_context to avoid redundant file I/O (analysis.json, segments.csv loading)
-            segments_geojson = generate_segments_geojson(temp_reports, analysis_context=analysis_context)
+            segments_geojson = generate_segments_geojson(
+                temp_reports, analysis_context=analysis_context
+            )
 
             # CRITICAL FIX: Filter features to only include day segments
             if "features" in segments_geojson:
@@ -545,7 +657,7 @@ def _export_ui_artifacts_v2(
                     f"   ✅ Filtered segments.geojson: {original_count} -> "
                     f"{len(segments_geojson['features'])} features for day {day.value}"
                 )
-                
+
                 # Issue #655: HARD FAIL if segments.geojson has 0 features after filtering
                 # This indicates a critical failure - segments.geojson is required for UI
                 if len(segments_geojson["features"]) == 0:
@@ -560,33 +672,38 @@ def _export_ui_artifacts_v2(
                     logger.error(error_msg)
                     logger.error("=" * 80)
                     raise RuntimeError(error_msg)
-                
+
                 # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
                 # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
                 if segments_df is not None and not segments_df.empty:
                     for feature in segments_geojson["features"]:
                         seg_id = _feature_segment_id(feature)
                         if seg_id:
-                            seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                            seg_row = segments_df[segments_df["seg_id"] == seg_id]
                             if not seg_row.empty:
                                 events = []
                                 # Issue #548 Bug 1: Use lowercase column names to match CSV format
-                                if seg_row.iloc[0].get('full') == 'y':
-                                    events.append('full')
-                                if seg_row.iloc[0].get('half') == 'y':
-                                    events.append('half')
-                                if seg_row.iloc[0].get('10k') == 'y' or seg_row.iloc[0].get('10K') == 'y':
-                                    events.append('10k')
-                                if seg_row.iloc[0].get('elite') == 'y':
-                                    events.append('elite')
-                                if seg_row.iloc[0].get('open') == 'y':
-                                    events.append('open')
-                                
+                                if seg_row.iloc[0].get("full") == "y":
+                                    events.append("full")
+                                if seg_row.iloc[0].get("half") == "y":
+                                    events.append("half")
+                                if (
+                                    seg_row.iloc[0].get("10k") == "y"
+                                    or seg_row.iloc[0].get("10K") == "y"
+                                ):
+                                    events.append("10k")
+                                if seg_row.iloc[0].get("elite") == "y":
+                                    events.append("elite")
+                                if seg_row.iloc[0].get("open") == "y":
+                                    events.append("open")
+
                                 # Add events to feature properties
                                 props = feature.get("properties", {})
                                 props["events"] = events
                                 feature["properties"] = props
-                    logger.debug(f"   ✅ Added events property to segments.geojson features from segments_df")
+                    logger.debug(
+                        "   ✅ Added events property to segments.geojson features from segments_df"
+                    )
             else:
                 # segments_geojson exists but has no "features" key - this is an error
                 error_msg = (
@@ -604,6 +721,7 @@ def _export_ui_artifacts_v2(
         except Exception as e:
             # For other exceptions, log the full traceback and raise as RuntimeError to stop the pipeline
             import traceback
+
             error_msg = (
                 f"CRITICAL: Failed to generate segments.geojson for day {day.value}: {e}\n"
                 f"Traceback: {traceback.format_exc()}\n"
@@ -614,39 +732,53 @@ def _export_ui_artifacts_v2(
             logger.error(error_msg)
             logger.error("=" * 80)
             raise RuntimeError(error_msg) from e
-        
+
         # Issue #574: Write to geospatial/ subdirectory
-        (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
-        logger.debug(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
+        (geospatial_dir / "segments.geojson").write_text(
+            json.dumps(segments_geojson, indent=2)
+        )
+        logger.debug(
+            f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)"
+        )
 
         # 5.1. Generate segment map snapshots
         logger.debug("5️⃣.1️⃣  Generating segment map snapshots...")
         segment_maps_dir = visualizations_dir / "segment_maps"
         with log_span("Segment maps", log=logger, always_info=True):
             segment_map_count = export_segment_map_pngs(
-            segments_geojson=segments_geojson,
-            segment_metrics=segment_metrics,
-            output_dir=segment_maps_dir
-        )
+                segments_geojson=segments_geojson,
+                segment_metrics=segment_metrics,
+                output_dir=segment_maps_dir,
+            )
         logger.debug(
             f"   ✅ Segment maps: {segment_map_count} PNGs (in visualizations/segment_maps/)"
         )
-        
+
         # 5.5. Generate flow_segments.json (Issue #628)
         logger.debug("5️⃣.5️⃣  Generating flow_segments.json...")
         try:
             day_flow_result = flow_results.get(day, {})
-            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
-                flow_segments = _generate_flow_segments_json(flow_results, day_segment_ids, day)
+            if (
+                isinstance(day_flow_result, dict)
+                and day_flow_result.get("ok")
+                and "segments" in day_flow_result
+            ):
+                flow_segments = _generate_flow_segments_json(
+                    flow_results, day_segment_ids, day
+                )
             else:
                 flow_segments = {}
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate flow_segments.json: {e}")
             flow_segments = {}
-        
+
         # Issue #628: Write to metrics/ subdirectory
-        (metrics_dir / "flow_segments.json").write_text(json.dumps(flow_segments, indent=2))
-        logger.debug(f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)")
+        (metrics_dir / "flow_segments.json").write_text(
+            json.dumps(flow_segments, indent=2)
+        )
+        logger.debug(
+            f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)"
+        )
 
         # Issue #845/#847: additive segment-parent summary. Never fail the pipeline.
         try:
@@ -655,51 +787,71 @@ def _export_ui_artifacts_v2(
 
             day_dir = get_run_directory(run_id) / day.value
             summary_path = write_segment_flow_summary(day_dir, day.value)
-            logger.debug("   ✅ %s written", summary_path.name if summary_path else "flow_segments_by_seg.json")
+            logger.debug(
+                "   ✅ %s written",
+                summary_path.name if summary_path else "flow_segments_by_seg.json",
+            )
         except Exception as e:
             logger.warning("   ⚠️  Could not generate flow_segments_by_seg.json: %s", e)
-        
+
         # 5.6. Generate zone_captions.json (Issue #628)
         logger.debug("5️⃣.6️⃣  Generating zone_captions.json...")
         try:
             day_flow_result = flow_results.get(day, {})
-            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
-                zone_captions = _generate_zone_captions_json(flow_results, day_segment_ids, day, segments_df)
+            if (
+                isinstance(day_flow_result, dict)
+                and day_flow_result.get("ok")
+                and "segments" in day_flow_result
+            ):
+                zone_captions = _generate_zone_captions_json(
+                    flow_results, day_segment_ids, day, segments_df
+                )
             else:
                 zone_captions = []
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate zone_captions.json: {e}")
             zone_captions = []
-        
+
         # Issue #628: Write to visualizations/ subdirectory
-        (visualizations_dir / "zone_captions.json").write_text(json.dumps(zone_captions, indent=2))
-        logger.debug(f"   ✅ zone_captions.json: {len(zone_captions)} zone captions (in visualizations/)")
-        
+        (visualizations_dir / "zone_captions.json").write_text(
+            json.dumps(zone_captions, indent=2)
+        )
+        logger.debug(
+            f"   ✅ zone_captions.json: {len(zone_captions)} zone captions (in visualizations/)"
+        )
+
         # 6. Generate schema_density.json (Issue #574: in metadata/ subdirectory)
         logger.debug("6️⃣  Generating schema_density.json...")
-        schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
-        (metadata_dir / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
-        logger.debug(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')} (in metadata/)")
-        
+        schema_density = generate_density_schema_json(
+            meta.get("dataset_version", "unknown")
+        )
+        (metadata_dir / "schema_density.json").write_text(
+            json.dumps(schema_density, indent=2)
+        )
+        logger.debug(
+            f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')} (in metadata/)"
+        )
+
         # 7. Generate health.json (Issue #574: in metadata/ subdirectory)
         logger.debug("7️⃣  Generating health.json...")
         # Note: generate_health_json expects ui_path, but we'll pass it and then move the file
         health = generate_health_json(ui_path, run_id, environment)
         (metadata_dir / "health.json").write_text(json.dumps(health, indent=2))
-        logger.debug(f"   ✅ health.json generated (in metadata/)")
-        
+        logger.debug("   ✅ health.json generated (in metadata/)")
+
         # 8. Generate heatmaps and captions
         logger.debug("Generating heatmaps and captions...")
         try:
             if heatmap_reports and heatmap_reports.exists():
                 with log_span("Heatmaps", log=logger, always_info=True):
                     export_heatmaps_and_captions(run_id, heatmap_reports, None)
-                
+
                 # Move heatmaps and captions to day-scoped UI directory
                 # Check multiple possible source locations
                 import shutil
+
                 runflow_root = get_runflow_root()
-                
+
                 # Heatmaps can be in multiple locations:
                 # 1. runflow/analysis/{run_id}/heatmaps/ (run level - most common)
                 # 2. runflow/analysis/{run_id}/ui/heatmaps/ (ui subdirectory)
@@ -707,27 +859,38 @@ def _export_ui_artifacts_v2(
                 # Issue #682: Updated to use runflow/analysis/{run_id} structure
                 heatmaps_source = None
                 for possible_path in [
-                    runflow_root / "analysis" / run_id / "heatmaps",  # Run level (most common)
-                    runflow_root / "analysis" / run_id / "ui" / "heatmaps",  # UI subdirectory
-                    Path("/app/artifacts") / run_id / "ui" / "heatmaps"  # Legacy
+                    runflow_root
+                    / "analysis"
+                    / run_id
+                    / "heatmaps",  # Run level (most common)
+                    runflow_root
+                    / "analysis"
+                    / run_id
+                    / "ui"
+                    / "heatmaps",  # UI subdirectory
+                    Path("/app/artifacts") / run_id / "ui" / "heatmaps",  # Legacy
                 ]:
                     if possible_path.exists():
                         heatmaps_source = possible_path
                         break
-                
+
                 # Captions can be in:
                 # 1. runflow/analysis/{run_id}/ui/captions.json (most common)
                 # 2. artifacts/{run_id}/ui/captions.json (legacy)
                 # Issue #682: Updated to use runflow/analysis/{run_id} structure
                 captions_source = None
                 for possible_path in [
-                    runflow_root / "analysis" / run_id / "ui" / "captions.json",  # UI subdirectory
-                    Path("/app/artifacts") / run_id / "ui" / "captions.json"  # Legacy
+                    runflow_root
+                    / "analysis"
+                    / run_id
+                    / "ui"
+                    / "captions.json",  # UI subdirectory
+                    Path("/app/artifacts") / run_id / "ui" / "captions.json",  # Legacy
                 ]:
                     if possible_path.exists():
                         captions_source = possible_path
                         break
-                
+
                 # Issue #574: Move heatmaps to visualizations/ subdirectory
                 if heatmaps_source and heatmaps_source.exists():
                     heatmaps_dest = visualizations_dir  # visualizations/ subdirectory
@@ -744,31 +907,38 @@ def _export_ui_artifacts_v2(
 
                     # Clean up source directory if empty after move
                     try:
-                        if heatmaps_source.exists() and not any(heatmaps_source.iterdir()):
+                        if heatmaps_source.exists() and not any(
+                            heatmaps_source.iterdir()
+                        ):
                             heatmaps_source.rmdir()
                     except Exception as cleanup_err:
-                        logger.debug(f"   ⚠️  Could not remove source heatmaps dir: {cleanup_err}")
+                        logger.debug(
+                            f"   ⚠️  Could not remove source heatmaps dir: {cleanup_err}"
+                        )
 
                     logger.debug(
                         f"   ✅ Heatmaps filtered and moved: {heatmaps_moved} PNGs "
                         f"for day {day.value} ({len(day_segment_ids)} segments) (in visualizations/)"
                     )
                 else:
-                    logger.warning(f"   ⚠️  Heatmaps not found at expected locations")
-                
+                    logger.warning("   ⚠️  Heatmaps not found at expected locations")
+
                 # Issue #574: Move captions.json to visualizations/ subdirectory
                 if captions_source and captions_source.exists():
                     captions_dest = visualizations_dir / "captions.json"
                     if captions_dest.exists():
                         captions_dest.unlink()
                     shutil.move(str(captions_source), str(captions_dest))
-                    logger.debug(f"   ✅ Captions moved to {captions_dest} (in visualizations/)")
+                    logger.debug(
+                        f"   ✅ Captions moved to {captions_dest} (in visualizations/)"
+                    )
                 else:
-                    logger.warning(f"   ⚠️  Captions not found at expected locations")
-                
+                    logger.warning("   ⚠️  Captions not found at expected locations")
+
                 # Clean up empty /ui folder at run level (Issue #501: Remove empty ui folder)
                 # Issue #682: Use centralized get_run_directory() for correct path
                 from app.utils.run_id import get_run_directory
+
                 run_dir = get_run_directory(run_id)
                 run_level_ui = run_dir / "ui"
                 if run_level_ui.exists() and run_level_ui.is_dir():
@@ -777,28 +947,36 @@ def _export_ui_artifacts_v2(
                         contents = list(run_level_ui.iterdir())
                         if len(contents) == 0:
                             run_level_ui.rmdir()
-                            logger.debug(f"   ✅ Removed empty run-level /ui folder: {run_level_ui}")
+                            logger.debug(
+                                f"   ✅ Removed empty run-level /ui folder: {run_level_ui}"
+                            )
                         else:
-                            logger.debug(f"   Run-level /ui folder not empty, keeping: {contents}")
+                            logger.debug(
+                                f"   Run-level /ui folder not empty, keeping: {contents}"
+                            )
                     except Exception as e:
                         logger.warning(f"   ⚠️  Could not remove empty /ui folder: {e}")
             else:
-                logger.warning("   ⚠️  Skipping heatmaps (no heatmap_reports directory)")
+                logger.warning(
+                    "   ⚠️  Skipping heatmaps (no heatmap_reports directory)"
+                )
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate heatmaps/captions: {e}")
-        
+
         # Clean up temporary directory
         if temp_reports and temp_reports.exists():
             import shutil
+
             shutil.rmtree(temp_reports)
 
         if heatmap_reports and heatmap_reports.exists():
             import shutil
+
             shutil.rmtree(heatmap_reports)
-        
+
         logger.debug(f"✅ All UI artifacts generated for day {day.value}")
         return ui_path
-        
+
     except Exception as e:
         logger.error(f"Error generating UI artifacts: {e}", exc_info=True)
         return None
@@ -807,27 +985,28 @@ def _export_ui_artifacts_v2(
 def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     """
     Aggregate bins.parquet from all days into a single DataFrame.
-    
+
     Args:
         run_id: Unique run identifier
-        
+
     Returns:
         Aggregated DataFrame with bins from all days, or None if no bins found
     """
     # Issue #682: Use centralized get_run_directory() for correct path
     from app.utils.run_id import get_run_directory
+
     run_path = get_run_directory(run_id)
-    
+
     if not run_path.exists():
         logger.warning(f"Run directory not found: {run_path}")
         return None
-    
+
     all_bins = []
-    
+
     # Collect bins from all day directories
     # Issue #574: Bins are stored in {day}/bins/bins.parquet, not {day}/reports/bins.parquet
     for day_dir in run_path.iterdir():
-        if day_dir.is_dir() and day_dir.name in ['fri', 'sat', 'sun', 'mon']:
+        if day_dir.is_dir() and day_dir.name in ["fri", "sat", "sun", "mon"]:
             bins_parquet = day_dir / "bins" / "bins.parquet"
             if bins_parquet.exists():
                 try:
@@ -836,62 +1015,62 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
                     logger.debug(f"Loaded {len(day_bins)} bins from {day_dir.name}")
                 except Exception as e:
                     logger.warning(f"Could not load bins from {day_dir.name}: {e}")
-    
+
     if not all_bins:
         logger.warning("No bins found in any day directory")
         return None
-    
+
     # Concatenate all bins
     aggregated = pd.concat(all_bins, ignore_index=True)
     logger.debug(f"Aggregated {len(aggregated)} bins from {len(all_bins)} day(s)")
-    
+
     return aggregated
 
 
-def _generate_flow_segments_json(
-    flow_results: Dict[str, Any],
-    day_segment_ids: set,
-    day: Any  # Day enum
+def _generate_flow_segments_json(  # noqa: C901
+    flow_results: Dict[str, Any], day_segment_ids: set, day: Any  # Day enum
 ) -> Dict[str, Any]:
     """
     Generate flow_segments.json for Flow UI.
-    
+
     Issue #628: Creates segment-level data with worst zone metrics and nested zones.
     Each segment+event-pair combination gets one entry with worst zone metrics.
-    
+
     Args:
         flow_results: Flow results dict keyed by Day enum
         day_segment_ids: Set of segment IDs for the specific day
         day: Day enum for filtering
-        
+
     Returns:
         Dictionary keyed by composite key (seg_id_event_a_event_b)
     """
-    from app.core.flow.flow import select_worst_zone, ConflictZone
-    
+    from app.core.flow.flow import ConflictZone, select_worst_zone
+
     flow_segments = {}
-    
+
     # Get day-specific flow results
     day_flow_result = flow_results.get(day, {})
     if not isinstance(day_flow_result, dict) or not day_flow_result.get("ok"):
         logger.warning(f"Day {day.value} flow_results not available or invalid")
         return flow_segments
-    
+
     segments_list = day_flow_result.get("segments", [])
     if not segments_list:
         logger.debug(f"Day {day.value}: No segments in flow results")
         return flow_segments
-    
+
     for segment in segments_list:
         if not isinstance(segment, dict):
             continue
-            
+
         seg_id = segment.get("seg_id", "")
         event_a = segment.get("event_a", "")
         event_b = segment.get("event_b", "")
-        
+
         # Issue #628: Debug logging for D1 (full / full) to investigate missing segment
-        is_d1_full_full = (str(seg_id) == "D1" and str(event_a) == "full" and str(event_b) == "full")
+        is_d1_full_full = (
+            str(seg_id) == "D1" and str(event_a) == "full" and str(event_b) == "full"
+        )
         if is_d1_full_full:
             logger.debug(
                 f"Day {day.value}: Found D1 (full / full) in flow_results - "
@@ -899,17 +1078,19 @@ def _generate_flow_segments_json(
                 f"has_zones_key={'zones' in segment}, zones_type={type(segment.get('zones'))}, "
                 f"zones_value={segment.get('zones')}, zones_len={len(segment.get('zones', []))}"
             )
-        
+
         # Only include day-scoped segments
         # Issue #628: Normalize segment ID check - flow_results may have composite IDs (e.g., "A2a")
         # while day_segment_ids contains base IDs (e.g., "A2"). Check both composite and base ID.
         seg_id_str = str(seg_id)
-        base_seg_id = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+        base_seg_id = seg_id_str.rstrip("abcdefghijklmnopqrstuvwxyz")
         if seg_id_str not in day_segment_ids and base_seg_id not in day_segment_ids:
             if is_d1_full_full:
-                logger.warning(f"Day {day.value}: D1 (full / full) filtered out - not in day_segment_ids (seg_id_str={seg_id_str}, base_seg_id={base_seg_id}, day_segment_ids sample={sorted(day_segment_ids)[:10]})")
+                logger.warning(
+                    f"Day {day.value}: D1 (full / full) filtered out - not in day_segment_ids (seg_id_str={seg_id_str}, base_seg_id={base_seg_id}, day_segment_ids sample={sorted(day_segment_ids)[:10]})"
+                )
             continue
-        
+
         # Skip segments without zones
         zones = segment.get("zones", [])
         if not zones:
@@ -919,10 +1100,10 @@ def _generate_flow_segments_json(
                     f"(zones type: {type(zones)}, zones value: {zones}, zones len: {len(zones) if zones else 0})"
                 )
             continue
-        
+
         # Create composite key
         composite_key = f"{seg_id}_{event_a}_{event_b}"
-        
+
         # Get segment-level metadata
         segment_label = segment.get("segment_label", "")
         flow_type = segment.get("flow_type", "overtake")
@@ -930,11 +1111,11 @@ def _generate_flow_segments_json(
         total_b = segment.get("total_b", 0)
         width_m = segment.get("width_m", 0.0)
         has_convergence = segment.get("has_convergence", False)
-        
+
         # Convert zones to ConflictZone objects if needed (for select_worst_zone)
         conflict_zones = []
         zone_dicts = []
-        
+
         for zone in zones:
             if isinstance(zone, ConflictZone):
                 conflict_zones.append(zone)
@@ -950,48 +1131,106 @@ def _generate_flow_segments_json(
                         conflict_zones.append(conflict_zone)
                 except Exception as e:
                     logger.debug(f"Could not convert zone dict to ConflictZone: {e}")
-        
+
         # Select worst zone
         worst_zone = select_worst_zone(conflict_zones) if conflict_zones else None
-        
+
         # Calculate worst zone metrics
         worst_zone_data = None
         if worst_zone:
-            worst_metrics = worst_zone.metrics if isinstance(worst_zone, ConflictZone) else worst_zone.get("metrics", {})
-            worst_zone_index = worst_zone.zone_index if isinstance(worst_zone, ConflictZone) else worst_zone.get("zone_index", 0)
-            worst_cp_km = worst_zone.cp.km if isinstance(worst_zone, ConflictZone) and worst_zone.cp else worst_zone.get("cp", {}).get("km", 0)
-            worst_cp_type = worst_zone.cp.type if isinstance(worst_zone, ConflictZone) and worst_zone.cp else worst_zone.get("cp", {}).get("type", "")
-            worst_zone_source = worst_zone.source if isinstance(worst_zone, ConflictZone) else worst_zone.get("source", "")
-            
-            overtaking_a = worst_metrics.get("overtaking_a", 0) if isinstance(worst_metrics, dict) else 0
-            overtaking_b = worst_metrics.get("overtaking_b", 0) if isinstance(worst_metrics, dict) else 0
-            copresence_a = worst_metrics.get("copresence_a", 0) if isinstance(worst_metrics, dict) else 0
-            copresence_b = worst_metrics.get("copresence_b", 0) if isinstance(worst_metrics, dict) else 0
-            
+            worst_metrics = (
+                worst_zone.metrics
+                if isinstance(worst_zone, ConflictZone)
+                else worst_zone.get("metrics", {})
+            )
+            worst_zone_index = (
+                worst_zone.zone_index
+                if isinstance(worst_zone, ConflictZone)
+                else worst_zone.get("zone_index", 0)
+            )
+            worst_cp_km = (
+                worst_zone.cp.km
+                if isinstance(worst_zone, ConflictZone) and worst_zone.cp
+                else worst_zone.get("cp", {}).get("km", 0)
+            )
+            worst_cp_type = (
+                worst_zone.cp.type
+                if isinstance(worst_zone, ConflictZone) and worst_zone.cp
+                else worst_zone.get("cp", {}).get("type", "")
+            )
+            worst_zone_source = (
+                worst_zone.source
+                if isinstance(worst_zone, ConflictZone)
+                else worst_zone.get("source", "")
+            )
+
+            overtaking_a = (
+                worst_metrics.get("overtaking_a", 0)
+                if isinstance(worst_metrics, dict)
+                else 0
+            )
+            overtaking_b = (
+                worst_metrics.get("overtaking_b", 0)
+                if isinstance(worst_metrics, dict)
+                else 0
+            )
+            copresence_a = (
+                worst_metrics.get("copresence_a", 0)
+                if isinstance(worst_metrics, dict)
+                else 0
+            )
+            copresence_b = (
+                worst_metrics.get("copresence_b", 0)
+                if isinstance(worst_metrics, dict)
+                else 0
+            )
+
             # Calculate percentages
             pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
             pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
-            
+
             worst_zone_data = {
                 "zone_index": worst_zone_index,
                 "zone_count": len(zones),
-                "display": str(worst_zone_index),  # Issue #628: Show only zone_index, not zone_index/zone_count
+                "display": str(
+                    worst_zone_index
+                ),  # Issue #628: Show only zone_index, not zone_index/zone_count
                 "cp_km": round(float(worst_cp_km), 2),
                 "cp_type": str(worst_cp_type),
                 "zone_source": str(worst_zone_source),
                 "overtaking_a": int(overtaking_a),
                 "overtaking_b": int(overtaking_b),
-                "overtaken_a": int(worst_metrics.get("overtaken_a", 0) if isinstance(worst_metrics, dict) else 0),
-                "overtaken_b": int(worst_metrics.get("overtaken_b", 0) if isinstance(worst_metrics, dict) else 0),
+                "overtaken_a": int(
+                    worst_metrics.get("overtaken_a", 0)
+                    if isinstance(worst_metrics, dict)
+                    else 0
+                ),
+                "overtaken_b": int(
+                    worst_metrics.get("overtaken_b", 0)
+                    if isinstance(worst_metrics, dict)
+                    else 0
+                ),
                 "copresence_a": int(copresence_a),
                 "copresence_b": int(copresence_b),
                 "pct_a": pct_a,
                 "pct_b": pct_b,
-                "unique_encounters": int(worst_metrics.get("unique_encounters", 0) if isinstance(worst_metrics, dict) else 0),
-                "participants_involved": int(worst_metrics.get("participants_involved", 0) if isinstance(worst_metrics, dict) else 0),
-                "multi_category_runners": int(worst_metrics.get("multi_category_runners", 0) if isinstance(worst_metrics, dict) else 0)
+                "unique_encounters": int(
+                    worst_metrics.get("unique_encounters", 0)
+                    if isinstance(worst_metrics, dict)
+                    else 0
+                ),
+                "participants_involved": int(
+                    worst_metrics.get("participants_involved", 0)
+                    if isinstance(worst_metrics, dict)
+                    else 0
+                ),
+                "multi_category_runners": int(
+                    worst_metrics.get("multi_category_runners", 0)
+                    if isinstance(worst_metrics, dict)
+                    else 0
+                ),
             }
-        
+
         # Build segment entry
         flow_segments[composite_key] = {
             "seg_id": seg_id,
@@ -1007,8 +1246,10 @@ def _generate_flow_segments_json(
             "zones": zone_dicts,
             "flow_id": segment.get("flow_id") or composite_key,
         }
-    
-    logger.debug(f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries")
+
+    logger.debug(
+        f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries"
+    )
     return flow_segments
 
 
@@ -1016,7 +1257,7 @@ def _normalize_zone_dict(zone: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize zone dict to standard format."""
     metrics = zone.get("metrics", {})
     cp = zone.get("cp", {})
-    
+
     return {
         "zone_index": zone.get("zone_index", 0),
         "cp_km": round(float(cp.get("km", 0)), 2) if isinstance(cp, dict) else 0.0,
@@ -1026,22 +1267,40 @@ def _normalize_zone_dict(zone: Dict[str, Any]) -> Dict[str, Any]:
         "zone_end_km_a": round(float(zone.get("zone_end_km_a", 0)), 2),
         "zone_start_km_b": round(float(zone.get("zone_start_km_b", 0)), 2),
         "zone_end_km_b": round(float(zone.get("zone_end_km_b", 0)), 2),
-        "overtaking_a": int(metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0),
-        "overtaking_b": int(metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0),
-        "overtaken_a": int(metrics.get("overtaken_a", 0) if isinstance(metrics, dict) else 0),
-        "overtaken_b": int(metrics.get("overtaken_b", 0) if isinstance(metrics, dict) else 0),
-        "copresence_a": int(metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0),
-        "copresence_b": int(metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0),
-        "unique_encounters": int(metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0),
-        "participants_involved": int(metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0),
-        "multi_category_runners": int(metrics.get("multi_category_runners", 0) if isinstance(metrics, dict) else 0)
+        "overtaking_a": int(
+            metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0
+        ),
+        "overtaking_b": int(
+            metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0
+        ),
+        "overtaken_a": int(
+            metrics.get("overtaken_a", 0) if isinstance(metrics, dict) else 0
+        ),
+        "overtaken_b": int(
+            metrics.get("overtaken_b", 0) if isinstance(metrics, dict) else 0
+        ),
+        "copresence_a": int(
+            metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0
+        ),
+        "copresence_b": int(
+            metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0
+        ),
+        "unique_encounters": int(
+            metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0
+        ),
+        "participants_involved": int(
+            metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0
+        ),
+        "multi_category_runners": int(
+            metrics.get("multi_category_runners", 0) if isinstance(metrics, dict) else 0
+        ),
     }
 
 
 def _zone_to_dict(zone: Any) -> Dict[str, Any]:
     """Convert ConflictZone object to dict."""
     from app.core.flow.flow import ConflictZone
-    
+
     if isinstance(zone, ConflictZone):
         metrics = zone.metrics
         return {
@@ -1061,7 +1320,7 @@ def _zone_to_dict(zone: Any) -> Dict[str, Any]:
             "copresence_b": int(metrics.get("copresence_b", 0)),
             "unique_encounters": int(metrics.get("unique_encounters", 0)),
             "participants_involved": int(metrics.get("participants_involved", 0)),
-            "multi_category_runners": int(metrics.get("multi_category_runners", 0))
+            "multi_category_runners": int(metrics.get("multi_category_runners", 0)),
         }
     return _normalize_zone_dict(zone)
 
@@ -1069,21 +1328,24 @@ def _zone_to_dict(zone: Any) -> Dict[str, Any]:
 def _dict_to_conflict_zone(zone_dict: Dict[str, Any]) -> Optional[Any]:
     """
     Convert zone dict to ConflictZone for select_worst_zone.
-    
+
     Note: This creates a minimal ConflictZone-like object for selection purposes only.
     """
     from app.core.flow.flow import ConvergencePoint
-    
+
     try:
         cp_dict = zone_dict.get("cp", {})
-        cp = ConvergencePoint(
-            km=float(cp_dict.get("km", 0)),
-            type=str(cp_dict.get("type", "unknown"))
-        ) if cp_dict else None
-        
+        cp = (
+            ConvergencePoint(
+                km=float(cp_dict.get("km", 0)), type=str(cp_dict.get("type", "unknown"))
+            )
+            if cp_dict
+            else None
+        )
+
         if cp is None:
             return None
-        
+
         # Create minimal ConflictZone-like object
         # Note: select_worst_zone only needs metrics and cp.km, so we can create a minimal object
         class MinimalConflictZone:
@@ -1097,13 +1359,13 @@ def _dict_to_conflict_zone(zone_dict: Dict[str, Any]) -> Optional[Any]:
                 self.zone_end_km_a = zone_dict.get("zone_end_km_a", 0)
                 self.zone_start_km_b = zone_dict.get("zone_start_km_b", 0)
                 self.zone_end_km_b = zone_dict.get("zone_end_km_b", 0)
-        
+
         metrics = zone_dict.get("metrics", {})
         return MinimalConflictZone(
             zone_index=zone_dict.get("zone_index", 0),
             cp=cp,
             source=zone_dict.get("source", ""),
-            metrics=metrics
+            metrics=metrics,
         )
     except Exception as e:
         logger.debug(f"Could not create ConflictZone from dict: {e}")
@@ -1114,13 +1376,13 @@ def _generate_zone_captions_json(
     flow_results: Dict[str, Any],
     day_segment_ids: set,
     day: Any,  # Day enum
-    segments_df: pd.DataFrame
+    segments_df: pd.DataFrame,
 ) -> List[Dict[str, Any]]:
     """
     Generate zone_captions.json for Flow UI.
-    
+
     Issue #628: Creates narrative captions for each zone following density caption pattern.
-    
+
     Returns array of caption objects with explicit keys:
     [
       {
@@ -1137,55 +1399,55 @@ def _generate_zone_captions_json(
       },
       ...
     ]
-    
+
     Args:
         flow_results: Flow results dict keyed by Day enum
         day_segment_ids: Set of segment IDs for the specific day
         day: Day enum for filtering
         segments_df: Segments DataFrame for metadata lookup
-        
+
     Returns:
         List of caption dictionaries
     """
     zone_captions = []
-    
+
     # Get day-specific flow results
     day_flow_result = flow_results.get(day, {})
     if not isinstance(day_flow_result, dict) or not day_flow_result.get("ok"):
         logger.warning(f"Day {day.value} flow_results not available or invalid")
         return zone_captions
-    
+
     segments_list = day_flow_result.get("segments", [])
     if not segments_list:
         logger.debug(f"Day {day.value}: No segments in flow results")
         return zone_captions
-    
+
     for segment in segments_list:
         if not isinstance(segment, dict):
             continue
-            
+
         seg_id = segment.get("seg_id", "")
         event_a = segment.get("event_a", "")
         event_b = segment.get("event_b", "")
-        
+
         # Only include day-scoped segments
         # Issue #628: Normalize segment ID check - flow_results may have composite IDs (e.g., "A2a")
         # while day_segment_ids contains base IDs (e.g., "A2"). Check both composite and base ID.
         seg_id_str = str(seg_id)
-        base_seg_id = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+        base_seg_id = seg_id_str.rstrip("abcdefghijklmnopqrstuvwxyz")
         if seg_id_str not in day_segment_ids and base_seg_id not in day_segment_ids:
             continue
-        
+
         # Skip segments without zones
         zones = segment.get("zones", [])
         if not zones:
             continue
-        
+
         # Get segment metadata for label
         segment_label = segment.get("segment_label", "")
         total_a = segment.get("total_a", 0)
         total_b = segment.get("total_b", 0)
-        
+
         # Generate caption for each zone
         for zone in zones:
             # Normalize zone to dict format
@@ -1194,10 +1456,10 @@ def _generate_zone_captions_json(
             else:
                 # Convert ConflictZone to dict
                 zone_dict = _zone_to_dict(zone)
-            
+
             zone_index = zone_dict.get("zone_index", 0)
             metrics = zone_dict  # Metrics are at top level in normalized dict
-            
+
             # Extract zone metrics
             overtaking_a = metrics.get("overtaking_a", 0)
             overtaking_b = metrics.get("overtaking_b", 0)
@@ -1208,19 +1470,23 @@ def _generate_zone_captions_json(
             participants_involved = metrics.get("participants_involved", 0)
             unique_encounters = metrics.get("unique_encounters", 0)
             multi_category_runners = metrics.get("multi_category_runners", 0)
-            
+
             # Calculate zone length in meters
             zone_start_km_a = metrics.get("zone_start_km_a", 0)
             zone_end_km_a = metrics.get("zone_end_km_a", 0)
             zone_length_m = int((zone_end_km_a - zone_start_km_a) * 1000)
-            
+
             # Calculate co-presence percentages
-            copresence_pct_a = round((copresence_a / total_a * 100), 1) if total_a > 0 else 0.0
-            copresence_pct_b = round((copresence_b / total_b * 100), 1) if total_b > 0 else 0.0
-            
+            copresence_pct_a = (
+                round((copresence_a / total_a * 100), 1) if total_a > 0 else 0.0
+            )
+            copresence_pct_b = (
+                round((copresence_b / total_b * 100), 1) if total_b > 0 else 0.0
+            )
+
             # Calculate overtaking ratio
             overtaking_ratio = _calculate_overtaking_ratio(overtaking_a, overtaking_b)
-            
+
             # Generate summary text
             summary = _build_zone_caption_summary(
                 seg_id=seg_id,
@@ -1236,9 +1502,9 @@ def _generate_zone_captions_json(
                 overtaken_a=overtaken_a,
                 overtaken_b=overtaken_b,
                 overtaking_ratio=overtaking_ratio,
-                participants_involved=participants_involved
+                participants_involved=participants_involved,
             )
-            
+
             # Build caption object
             caption = {
                 "seg_id": seg_id,
@@ -1261,11 +1527,11 @@ def _generate_zone_captions_json(
                 "overtaking_ratio": overtaking_ratio,
                 "unique_encounters": int(unique_encounters),
                 "participants_involved": int(participants_involved),
-                "multi_category_runners": int(multi_category_runners)
+                "multi_category_runners": int(multi_category_runners),
             }
-            
+
             zone_captions.append(caption)
-    
+
     logger.debug(f"Generated zone_captions.json: {len(zone_captions)} zone captions")
     return zone_captions
 
@@ -1273,7 +1539,7 @@ def _generate_zone_captions_json(
 def _calculate_overtaking_ratio(overtaking_a: int, overtaking_b: int) -> str:
     """
     Calculate overtaking ratio as simplified fraction.
-    
+
     Examples:
         (555, 275) -> "2:1" (Half:10K)
         (127, 0) -> "127:0"
@@ -1282,23 +1548,23 @@ def _calculate_overtaking_ratio(overtaking_a: int, overtaking_b: int) -> str:
     """
     if overtaking_a == 0 and overtaking_b == 0:
         return "0:0"
-    
+
     if overtaking_a == 0:
         return f"0:{overtaking_b}"
-    
+
     if overtaking_b == 0:
         return f"{overtaking_a}:0"
-    
+
     # Find GCD for simplified ratio
     def gcd(a: int, b: int) -> int:
         while b:
             a, b = b, a % b
         return a
-    
+
     common = gcd(overtaking_b, overtaking_a)
     simplified_a = overtaking_a // common
     simplified_b = overtaking_b // common
-    
+
     return f"{simplified_b}:{simplified_a}"  # event_b:event_a
 
 
@@ -1316,34 +1582,36 @@ def _build_zone_caption_summary(
     overtaken_a: int,
     overtaken_b: int,
     overtaking_ratio: str,
-    participants_involved: int
+    participants_involved: int,
 ) -> str:
     """
     Build narrative summary caption for a zone.
-    
+
     Issue #628: Updated format - removed repetitive segment info, use lowercase event names.
-    
+
     Example:
-    "89.6% of 10k runners and 100% of half runners were co-present. 
-    555 half runners overtook 275 10k runners, forming a 2:1 overtaking ratio. 
-    Meanwhile, 127 fast 10k runners overtook slower half runners. 
+    "89.6% of 10k runners and 100% of half runners were co-present.
+    555 half runners overtook 275 10k runners, forming a 2:1 overtaking ratio.
+    Meanwhile, 127 fast 10k runners overtook slower half runners.
     This zone demonstrates peak congestion and bidirectional overtaking pressure."
     """
     summary_parts = []
-    
+
     # Co-presence statement
     copresence_parts = []
     if copresence_pct_a > 0:
         copresence_parts.append(f"{copresence_pct_a}% of {event_a} runners")
     if copresence_pct_b > 0:
         copresence_parts.append(f"{copresence_pct_b}% of {event_b} runners")
-    
+
     if copresence_parts:
         if len(copresence_parts) == 1:
             summary_parts.append(f"{copresence_parts[0]} were co-present.")
         else:
-            summary_parts.append(f"{', '.join(copresence_parts[:-1])} and {copresence_parts[-1]} were co-present.")
-    
+            summary_parts.append(
+                f"{', '.join(copresence_parts[:-1])} and {copresence_parts[-1]} were co-present."
+            )
+
     # Overtaking statement (primary direction)
     # Issue #628: Use lowercase event names to match main table style
     if overtaking_b > 0 and overtaking_a > 0:
@@ -1361,7 +1629,7 @@ def _build_zone_caption_summary(
             f"{overtaking_a} {event_a} runners overtook at least 1 {event_b} runner, "
             f"and no {event_b} runners overtook a {event_a} runner."
         )
-    
+
     # Overtaken context (adds clarity on who was overtaken)
     if overtaken_a > 0 and overtaking_b > 0:
         summary_parts.append(
@@ -1371,15 +1639,19 @@ def _build_zone_caption_summary(
         summary_parts.append(
             f"{overtaken_b} {event_b} runners were overtaken by at least 1 {event_a} runner."
         )
-    
+
     # Overall characterization
     if participants_involved > 500:
-        summary_parts.append("This zone demonstrates peak congestion and bidirectional overtaking pressure.")
+        summary_parts.append(
+            "This zone demonstrates peak congestion and bidirectional overtaking pressure."
+        )
     elif participants_involved > 200:
-        summary_parts.append("This zone shows significant interaction with bidirectional overtaking.")
+        summary_parts.append(
+            "This zone shows significant interaction with bidirectional overtaking."
+        )
     elif participants_involved > 100:
         summary_parts.append("This zone has moderate interaction between events.")
     else:
         summary_parts.append("This zone shows limited interaction between events.")
-    
+
     return " ".join(summary_parts)

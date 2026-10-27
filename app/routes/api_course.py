@@ -8,7 +8,7 @@ Snap-to-road: proxy to OSRM (public or configurable) to avoid CORS.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, status
@@ -43,6 +43,7 @@ def _routing_base_for_profile(profile: str) -> str:
             return legacy.rstrip("/")
     return OSRM_PROFILE_BASES[key]
 
+
 from app.core.course.storage import (
     create_course_directory,
     delete_course,
@@ -70,7 +71,11 @@ def resolve_course_data_dir(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="config_dir must not be empty",
             )
-        if Path(normalized).name != normalized or "/" in normalized or "\\" in normalized:
+        if (
+            Path(normalized).name != normalized
+            or "/" in normalized
+            or "\\" in normalized
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid config_dir: {config_dir}",
@@ -132,12 +137,16 @@ async def api_list_courses(
     try:
         root = resolve_course_data_dir(data_dir=data_dir, config_dir=config_dir)
         courses = list_courses(root)
-        return JSONResponse(content={"ok": True, "data_dir": str(root), "courses": courses})
+        return JSONResponse(
+            content={"ok": True, "data_dir": str(root), "courses": courses}
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("List courses failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.post("")
@@ -165,7 +174,9 @@ async def api_create_course(request: CreateCourseRequest) -> JSONResponse:
         raise
     except Exception as e:
         logger.exception("Create course failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.get("/route/segment")
@@ -195,7 +206,10 @@ async def api_route_segment(
         data = resp.json()
         if data.get("code") != "Ok" or not data.get("routes"):
             return JSONResponse(
-                content={"ok": False, "detail": data.get("message", data.get("code", "No route"))}
+                content={
+                    "ok": False,
+                    "detail": data.get("message", data.get("code", "No route")),
+                }
             )
         coords = data["routes"][0].get("geometry", {}).get("coordinates")
         if not coords:
@@ -205,7 +219,7 @@ async def api_route_segment(
         raise
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("Route segment failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -216,7 +230,9 @@ async def api_route_segment(
 @router.get("/{course_id}/export")
 async def api_export_course(
     course_id: str,
-    to_folder: Optional[bool] = Query(False, description="Write files to course folder instead of download"),
+    to_folder: Optional[bool] = Query(
+        False, description="Write files to course folder instead of download"
+    ),
     data_dir: Optional[str] = None,
     config_dir: Optional[str] = None,
 ) -> Response:
@@ -227,17 +243,20 @@ async def api_export_course(
         root = resolve_course_data_dir(data_dir=data_dir, config_dir=config_dir)
         course_dir = root / "courses" / course_id
         if not course_dir.exists() or not course_dir.is_dir():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
         course_data = load_course(root, course_id)
         course_name = (course_data.get("name") or "").strip() or course_id
         if to_folder:
             from app.core.course.export import (
-                build_segments_csv,
-                build_flow_csv,
-                build_locations_csv,
-                build_gpx,
                 build_course_json,
+                build_flow_csv,
+                build_gpx,
+                build_locations_csv,
+                build_segments_csv,
             )
+
             segments_csv = build_segments_csv(course_data)
             flow_csv = build_flow_csv(course_data)
             locations_csv = build_locations_csv(course_data)
@@ -254,27 +273,35 @@ async def api_export_course(
                 path = course_dir / name
                 path.write_text(content, encoding="utf-8")
                 files_written.append(name)
-            return JSONResponse(content={
-                "ok": True,
-                "course_id": course_id,
-                "path": str(course_dir),
-                "files": files_written,
-            })
+            return JSONResponse(
+                content={
+                    "ok": True,
+                    "course_id": course_id,
+                    "path": str(course_dir),
+                    "files": files_written,
+                }
+            )
         zip_bytes = export_course_zip(course_data, course_id, course_name)
         return Response(
             content=zip_bytes,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="course_{course_id}_export.zip"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="course_{course_id}_export.zip"'
+            },
         )
     except FileNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Export course failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.get("/{course_id}")
@@ -296,7 +323,9 @@ async def api_load_course(
         raise
     except Exception as e:
         logger.exception("Load course failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.delete("/{course_id}")
@@ -311,14 +340,18 @@ async def api_delete_course(
         delete_course(root, course_id)
         return JSONResponse(content={"ok": True, "id": course_id})
     except FileNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Delete course failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.put("/{course_id}")
@@ -340,4 +373,6 @@ async def api_save_course(course_id: str, request: SaveCourseRequest) -> JSONRes
         raise
     except Exception as e:
         logger.exception("Save course failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )

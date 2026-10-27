@@ -18,17 +18,21 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import yaml
 
-from app.core.config_package.location_ids import allocate_location_id, assign_unique_location_ids
-from app.core.config_package.location_keys import ensure_location_key
 from app.core.config_package.legs import (
     _event_flags_for_leg,
     _normalize_locations,
     _seg_ids_for_leg,
     leg_loc_key,
-    merge_leg_locations_into_course,
-    refresh_course_location_seg_ids,
 )
-from app.core.config_package.org_leg_library import get_org_legs_dir, load_org_leg_manifest
+from app.core.config_package.location_ids import (
+    allocate_location_id,
+    assign_unique_location_ids,
+)
+from app.core.config_package.location_keys import ensure_location_key
+from app.core.config_package.org_leg_library import (
+    get_org_legs_dir,
+    load_org_leg_manifest,
+)
 from app.core.config_package.storage import (
     list_config_packages,
     load_config_course,
@@ -39,7 +43,6 @@ from app.core.config_package.storage import (
     save_config_manifest,
     validate_config_id,
 )
-from app.utils.run_id import get_runflow_root
 from app.core.course.export import build_locations_csv
 from app.core.course.flow_csv import validate_flow_csv_text
 from app.core.course.segment_library import (
@@ -50,6 +53,7 @@ from app.core.course.segment_library import (
     manifest_legs,
 )
 from app.utils.constants import COURSE_EVENT_IDS, ON_COURSE_LOCATION_TYPES
+from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +143,9 @@ def _save_index(data: Dict[str, Any]) -> None:
         yaml.safe_dump(data, fh, sort_keys=False, allow_unicode=True)
 
 
-def _course_row_from_disk(course_id: str, index_entry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _course_row_from_disk(
+    course_id: str, index_entry: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     row = dict(index_entry or {})
     row["id"] = course_id
     course_path = _course_dir(course_id)
@@ -150,7 +156,14 @@ def _course_row_from_disk(course_id: str, index_entry: Optional[Dict[str, Any]] 
     if meta_path.is_file():
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            for key in ("name", "distance", "recipe", "saved_at", "length_km", "stitch_warnings"):
+            for key in (
+                "name",
+                "distance",
+                "recipe",
+                "saved_at",
+                "length_km",
+                "stitch_warnings",
+            ):
                 if meta.get(key) is not None and row.get(key) is None:
                     row[key] = meta.get(key)
             distance = str(row.get("distance") or distance).strip().lower()
@@ -265,7 +278,9 @@ def get_org_course_route_preview(course_id: str) -> Dict[str, Any]:
             {
                 "order": order,
                 "id": leg_id,
-                "leg_label": str(leg.get("seg_label") or leg.get("leg_label") or "").strip(),
+                "leg_label": str(
+                    leg.get("seg_label") or leg.get("leg_label") or ""
+                ).strip(),
                 "length_km": leg.get("length_km"),
                 "start_label": str(leg.get("start_label") or "").strip(),
                 "end_label": str(leg.get("end_label") or "").strip(),
@@ -292,7 +307,11 @@ def get_org_course_route_preview(course_id: str) -> Dict[str, Any]:
                         "lat": float(lat),
                         "lon": float(lon),
                         "zone": loc.get("zone"),
-                        "resources": loc.get("resources") if isinstance(loc.get("resources"), dict) else {},
+                        "resources": (
+                            loc.get("resources")
+                            if isinstance(loc.get("resources"), dict)
+                            else {}
+                        ),
                     }
                 )
         except (json.JSONDecodeError, OSError, TypeError, ValueError):
@@ -410,7 +429,9 @@ def _build_snapshot_locations(
         seg_id = _seg_ids_for_leg(segments, leg_id)
         event_flags = _event_flags_for_leg(segments, leg_id, event_ids)
         for i, loc in enumerate(
-            _normalize_locations(entry.get("locations"), used_location_keys=used_loc_keys)
+            _normalize_locations(
+                entry.get("locations"), used_location_keys=used_loc_keys
+            )
         ):
             key = leg_loc_key(leg_id, i)
             on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
@@ -596,7 +617,9 @@ def update_org_course(
     use_name = str(name or existing.get("name") or meta.get("name") or slug).strip()
     if not use_name:
         raise ValueError("name is required")
-    distance = str(existing.get("distance") or meta.get("distance") or "").strip().lower()
+    distance = (
+        str(existing.get("distance") or meta.get("distance") or "").strip().lower()
+    )
     if not distance:
         raise ValueError(f"Course {slug} has no distance")
     return save_org_course(
@@ -879,7 +902,11 @@ def build_package_race_exports(config_id: str) -> Dict[str, Any]:
     cid = validate_config_id(config_id)
     assignment = get_package_course_assignments(cid)
     assigned = assignment["assigned_courses"]
-    events = [str(e).strip().lower() for e in (assignment["package_events"] or []) if str(e).strip()]
+    events = [
+        str(e).strip().lower()
+        for e in (assignment["package_events"] or [])
+        if str(e).strip()
+    ]
     if not events:
         events = sorted(assigned.keys())
     missing = [e for e in events if e not in assigned]
@@ -952,7 +979,9 @@ def build_package_race_exports(config_id: str) -> Dict[str, Any]:
         )
         refresh_course_location_seg_ids(cid)
     except Exception:
-        logger.warning("Location merge after race build failed for %s", cid, exc_info=True)
+        logger.warning(
+            "Location merge after race build failed for %s", cid, exc_info=True
+        )
 
     export_result = export_config_package_segments(cid)
 

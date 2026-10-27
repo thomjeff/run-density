@@ -18,7 +18,10 @@ from app.core.config_package.segment_recipes import (
     package_segment_library_dir,
     save_package_segment_manifest,
 )
-from app.core.config_package.storage import resolve_config_package_path, validate_config_id
+from app.core.config_package.storage import (
+    resolve_config_package_path,
+    validate_config_id,
+)
 from app.core.course.segment_library import (
     manifest_legs,
     parse_leg_gpx,
@@ -125,7 +128,9 @@ def import_org_leg_to_package(config_id: str, org_leg_id: str) -> Dict[str, Any]
 
     The package receives a new system-assigned leg id when the org id is taken.
     """
-    from app.core.config_package.segment_recipes import get_package_segment_library_state
+    from app.core.config_package.segment_recipes import (
+        get_package_segment_library_state,
+    )
 
     cid = validate_config_id(config_id)
     org_leg_id = str(org_leg_id).strip()
@@ -157,7 +162,9 @@ def import_org_leg_to_package(config_id: str, org_leg_id: str) -> Dict[str, Any]
 
     new_id = allocate_next_leg_id(legs)
     label = str(source.get("seg_label") or org_leg_id).strip() or org_leg_id
-    dest_name = f"{new_id}_{file_name.split('_', 1)[-1] if '_' in file_name else file_name}"
+    dest_name = (
+        f"{new_id}_{file_name.split('_', 1)[-1] if '_' in file_name else file_name}"
+    )
     if not dest_name.lower().endswith(".gpx"):
         dest_name = f"{new_id}.gpx"
     shutil.copy2(src_gpx, lib_dir / dest_name)
@@ -269,7 +276,6 @@ def create_org_leg(
     locations: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Create a new leg in the org library from GPX."""
-    from app.utils.constants import DEFAULT_FLOW_TYPE
     from app.core.config_package.legs import (
         _LEG_ID_RE,
         _default_endpoint_labels,
@@ -283,6 +289,7 @@ def create_org_leg(
         _slugify,
         _validate_leg_entry,
     )
+    from app.utils.constants import DEFAULT_FLOW_TYPE
 
     org_dir = get_org_legs_dir()
     org_dir.mkdir(parents=True, exist_ok=True)
@@ -294,7 +301,9 @@ def create_org_leg(
     if _find_leg_index(legs, new_id) >= 0:
         raise ValueError(f"Leg id already exists: {new_id}")
 
-    label = (leg_label or Path(filename).stem.replace("_", " ")).strip() or f"Leg {new_id}"
+    label = (
+        leg_label or Path(filename).stem.replace("_", " ")
+    ).strip() or f"Leg {new_id}"
     safe_name = f"{new_id}_{_slugify(label)}.gpx"
     dest = org_dir / safe_name
     dest.write_bytes(gpx_bytes)
@@ -448,7 +457,9 @@ def _project_point_onto_polyline(
     return best
 
 
-def _along_track_m(coords_lonlat: Sequence[Sequence[float]], proj: Mapping[str, Any]) -> float:
+def _along_track_m(
+    coords_lonlat: Sequence[Sequence[float]], proj: Mapping[str, Any]
+) -> float:
     cum = _polyline_cum_m(coords_lonlat)
     idx = int(proj["seg_idx"])
     seg_len = cum[idx + 1] - cum[idx] if idx + 1 < len(cum) else 0.0
@@ -612,7 +623,9 @@ def copy_org_leg(
         gpx_bytes = gpx_path.read_bytes()
         start_label = source_start
         end_label = source_end
-    source_description = str(source.get("description") or source.get("flow_notes") or "").strip()
+    source_description = str(
+        source.get("description") or source.get("flow_notes") or ""
+    ).strip()
     if not source_description:
         source_description = new_label
 
@@ -696,7 +709,10 @@ def copy_split_org_leg(
         raise ValueError("Split point is too far from the route")
     split_along = _along_track_m(coords, proj)
     total_m = _polyline_cum_m(coords)[-1]
-    if split_along <= _SPLIT_ENDPOINT_EPS_M or (total_m - split_along) <= _SPLIT_ENDPOINT_EPS_M:
+    if (
+        split_along <= _SPLIT_ENDPOINT_EPS_M
+        or (total_m - split_along) <= _SPLIT_ENDPOINT_EPS_M
+    ):
         raise ValueError("Split point is too close to the start or finish")
 
     left_coords, right_coords, _split_pt = _split_coordinates(coords, proj)
@@ -709,7 +725,9 @@ def copy_split_org_leg(
     source_label = str(source.get("seg_label") or "").strip()
     source_start = str(source.get("start_label") or "")
     source_end = str(source.get("end_label") or "")
-    source_description = str(source.get("description") or source.get("flow_notes") or "").strip()
+    source_description = str(
+        source.get("description") or source.get("flow_notes") or ""
+    ).strip()
     width_m = float(source.get("width_m") or 3)
     schema = str(source.get("schema") or "on_course_open")
     direction = str(source.get("direction") or "uni")
@@ -756,7 +774,9 @@ def copy_split_org_leg(
             try:
                 delete_org_leg(first_id)
             except Exception:
-                logger.exception("Failed to roll back split leg %s after error", first_id)
+                logger.exception(
+                    "Failed to roll back split leg %s after error", first_id
+                )
         raise
 
     return {
@@ -967,7 +987,7 @@ def import_gpx_files_to_org_library(uploads: Sequence[tuple]) -> Dict[str, Any]:
     return get_org_leg_library_state()
 
 
-def update_org_leg(
+def update_org_leg(  # noqa: C901
     leg_id: str,
     fields: Dict[str, Any],
     *,
@@ -999,7 +1019,10 @@ def update_org_leg(
     entry = dict(legs[idx])
     if "leg_label" in fields or "seg_label" in fields:
         entry["seg_label"] = str(
-            fields.get("leg_label") or fields.get("seg_label") or entry.get("seg_label") or ""
+            fields.get("leg_label")
+            or fields.get("seg_label")
+            or entry.get("seg_label")
+            or ""
         ).strip()
     for key in ("start_label", "end_label", "width_m"):
         if key in fields:
@@ -1021,15 +1044,22 @@ def update_org_leg(
         if gpx_filename:
             file_name = Path(str(gpx_filename)).name
         else:
-            file_name = entry.get("file") or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
+            file_name = (
+                entry.get("file")
+                or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
+            )
         dest = org_dir / Path(file_name).name
         dest.write_bytes(gpx_bytes)
         entry["file"] = dest.name
         parsed = parse_leg_gpx(dest)
         if not entry.get("start_label"):
-            entry["start_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[0]
+            entry["start_label"] = _default_endpoint_labels(
+                entry.get("seg_label", ""), parsed
+            )[0]
         if not entry.get("end_label"):
-            entry["end_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[1]
+            entry["end_label"] = _default_endpoint_labels(
+                entry.get("seg_label", ""), parsed
+            )[1]
 
     legs[idx] = entry
     if "paired_with" in fields:
@@ -1046,7 +1076,10 @@ def update_org_leg_geometry(
     coordinates: Sequence[Sequence[float]],
 ) -> Dict[str, Any]:
     """Replace org leg GPX track from edited [lon, lat] vertices (trim/reshape)."""
-    from app.core.config_package.legs import _find_leg_index, _normalize_line_coordinates
+    from app.core.config_package.legs import (
+        _find_leg_index,
+        _normalize_line_coordinates,
+    )
     from app.core.course.export import build_gpx_line_coordinates
 
     coords = _normalize_line_coordinates(coordinates)

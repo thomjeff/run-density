@@ -156,7 +156,7 @@ Do not move tag `v3.1.0`. If a later release is needed, cut `v3.1.1` or `v3.2.0`
 
 **Gaps (do not paper over by changing product code):**
 
-- GitHub Actions `code-quality.yaml` lints **changed `app/` Python files** (flake8 / black / isort). Whole-tree `app/` flake8 still fails on pre-existing style debt and is not the PR gate.
+- GitHub Actions `code-quality.yaml` lints **changed `app/` Python files** (flake8 / black / isort) using `.flake8` and `pyproject.toml` (#940: line length 88, black-compatible ignores). Whole-tree `app/` currently passes that gate.
 - Combined-image verify (`.github/workflows/combined-image-verify.yaml`) builds, starts, and regresses the combined Create image on every PR via `scripts/verify_combined_image.sh`.
 - Saturday/Sunday `tests/e2e.py` is archived under `tests/archive/`. CI runs a unit/regression subset.
 - No registry-hosted combined `v3.1.0` digest yet.

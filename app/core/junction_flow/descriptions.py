@@ -33,9 +33,7 @@ def format_event_list(events: Sequence[str]) -> str:
     return "+".join(seen)
 
 
-def _seg_meta(
-    nearby_by_id: Dict[str, Dict[str, Any]], seg_id: str
-) -> Dict[str, Any]:
+def _seg_meta(nearby_by_id: Dict[str, Dict[str, Any]], seg_id: str) -> Dict[str, Any]:
     return nearby_by_id.get(str(seg_id) or "") or {}
 
 
@@ -45,9 +43,7 @@ def _seg_label(nearby_by_id: Dict[str, Dict[str, Any]], seg_id: str) -> str:
     return label or str(seg_id)
 
 
-def _seg_events(
-    nearby_by_id: Dict[str, Dict[str, Any]], seg_id: str
-) -> List[str]:
+def _seg_events(nearby_by_id: Dict[str, Dict[str, Any]], seg_id: str) -> List[str]:
     row = _seg_meta(nearby_by_id, seg_id)
     events = row.get("events")
     if isinstance(events, list) and events:

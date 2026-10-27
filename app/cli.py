@@ -43,7 +43,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         raise SystemExit(f"analysis.json not found at {analysis_path}")
     analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
     analysis["through"] = through
-    analysis_path.write_text(json.dumps(analysis, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    analysis_path.write_text(
+        json.dumps(analysis, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
     events = _events_from_analysis(analysis)
     data_dir = analysis.get("data_dir")
@@ -74,7 +76,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m app.cli", description="Runflow CLI")
+    parser = argparse.ArgumentParser(
+        prog="python -m app.cli", description="Runflow CLI"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     analyze = sub.add_parser(

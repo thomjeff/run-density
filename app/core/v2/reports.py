@@ -11,33 +11,29 @@ Issue #682: Updated to use runflow/analysis/{run_id} structure
 Issue #903: Locations.csv / Passes.csv live only under ``{day}/reports/``
 """
 
-from typing import Dict, List, Any, Optional, Sequence
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.v2.models import Day, Event
-from app.core.v2.timeline import DayTimeline
 from app.core.v2.performance import log_span
+from app.core.v2.timeline import DayTimeline
 
 logger = logging.getLogger(__name__)
 
 
-def get_day_output_path(
-    run_id: str,
-    day: Day,
-    category: str
-) -> Path:
+def get_day_output_path(run_id: str, day: Day, category: str) -> Path:
     """
     Generate day-partitioned output path for a specific category.
-    
+
     Args:
         run_id: Unique run identifier (UUID)
         day: Day enum (fri, sat, sun, mon)
         category: Output category (reports, bins, maps, ui)
-        
+
     Returns:
         Path object for the day-partitioned output directory
-        
+
     Example:
         >>> path = get_day_output_path("abc123", Day.SUN, "reports")
         >>> str(path)
@@ -45,35 +41,42 @@ def get_day_output_path(
     """
     # Issue #682: Use centralized get_run_directory() for correct path
     from app.utils.run_id import get_run_directory
+
     run_dir = get_run_directory(run_id)
     day_path = run_dir / day.value / category
     return day_path
 
 
-def generate_reports_per_day(
+def generate_reports_per_day(  # noqa: C901
     run_id: str,
     events: List[Event],
     timelines: List[DayTimeline],
-    density_results: Dict[Day, Dict[str, Any]],  # Issue #600: Still used for now (will be removed when Density fully refactored)
+    density_results: Dict[
+        Day, Dict[str, Any]
+    ],  # Issue #600: Still used for now (will be removed when Density fully refactored)
     segments_df: Any,  # pd.DataFrame
     all_runners_df: Any,  # pd.DataFrame
     data_dir: str,  # Data directory for loading runner files
-    segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
+    segments_file_path: Optional[
+        str
+    ] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
-    locations_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to locations file
+    locations_file_path: Optional[
+        str
+    ] = None,  # Issue #553 Phase 6.2: Path to locations file
     gpx_paths: Optional[Dict[str, str]] = None,
     report_kinds: Optional[Sequence[str]] = None,
 ) -> Dict[Day, Dict[str, str]]:
     """
     Generate all reports per day in day-partitioned structure.
-    
+
     Main entry point for v2 report generation. Iterates over days and generates:
     - Density.md
     - Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
     - Locations.csv (if applicable)
-    
+
     Issue #600: Flow report now loads from flow_results.json (SSOT) instead of in-memory flow_results.
-    
+
     Args:
         run_id: Unique run identifier (UUID)
         events: List of Event objects from API payload
@@ -82,7 +85,7 @@ def generate_reports_per_day(
         segments_df: Full segments DataFrame
         all_runners_df: Full runners DataFrame
         locations_df: Optional locations DataFrame
-        
+
     Returns:
         Dictionary mapping Day to report file paths:
         {
@@ -92,7 +95,7 @@ def generate_reports_per_day(
                 "locations": "runflow/analysis/{run_id}/sun/reports/Locations.csv",
             },
             ...
-        
+
         Issue #682: Updated to use runflow/analysis/{run_id} structure
         }
         Locations.csv / Passes.csv are written only under ``{day}/reports/``
@@ -128,18 +131,22 @@ def generate_reports_per_day(
         )
     # locations_file_path can be None if locations_file is not provided (optional)
     # But if it's provided, it should come from analysis.json
-    kinds = set(report_kinds) if report_kinds is not None else {"density", "flow", "locations"}
-    
+    kinds = (
+        set(report_kinds)
+        if report_kinds is not None
+        else {"density", "flow", "locations"}
+    )
+
     report_paths_by_day: Dict[Day, Dict[str, str]] = {}
-    
+
     for timeline in timelines:
         day = timeline.day
         day_events = timeline.events
-        
+
         # Get day output path for reports
         reports_path = get_day_output_path(run_id, day, "reports")
         reports_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Validate reports_path is for correct day
         expected_day_in_path = day.value
         if expected_day_in_path not in str(reports_path):
@@ -148,74 +155,85 @@ def generate_reports_per_day(
                 f"but got '{reports_path}'. This indicates a day-scoping bug."
             )
             raise ValueError(f"Reports path does not match day: {day.value}")
-        
+
         day_report_paths: Dict[str, str] = {}
-        
+
         # Filter segments by day events before report generation
         from app.core.v2.bins import filter_segments_by_events
+
         day_segments_df = filter_segments_by_events(segments_df, day_events)
         logger.debug(
             f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} "
             f"for events: {[e.name for e in day_events]}"
         )
-        
+
         # Generate Density.md
         if "density" in kinds and day in density_results:
             try:
                 with log_span("Density.md", log=logger, always_info=True):
                     density_path = generate_density_report_v2(
-                    run_id=run_id,
-                    day=day,
-                    day_events=day_events,
-                    density_results=density_results[day],
-                    reports_path=reports_path,
-                    data_dir=data_dir,
-                    segments_df=day_segments_df,
-                    segments_file_path=segments_file_path  # Issue #553 Phase 6.2, Issue #616
-                )
+                        run_id=run_id,
+                        day=day,
+                        day_events=day_events,
+                        density_results=density_results[day],
+                        reports_path=reports_path,
+                        data_dir=data_dir,
+                        segments_df=day_segments_df,
+                        segments_file_path=segments_file_path,  # Issue #553 Phase 6.2, Issue #616
+                    )
                 if density_path:
                     day_report_paths["density"] = str(density_path)
             except Exception as e:
-                logger.error(f"Failed to generate density report for day {day.value}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to generate density report for day {day.value}: {e}",
+                    exc_info=True,
+                )
                 # Continue with other reports even if density fails
-        
+
         # Generate Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
         # Issue #600: Load from flow_results.json (SSOT - mandatory)
         if "flow" in kinds:
             try:
                 # Issue #682: Use centralized get_run_directory() for correct path
                 from app.utils.run_id import get_run_directory
+
                 run_dir = get_run_directory(run_id)
                 computation_dir = run_dir / day.value / "computation"
                 flow_results_json_path = computation_dir / "flow_results.json"
-                
+
                 if not flow_results_json_path.exists():
                     error_msg = f"Issue #600: flow_results.json is required (SSOT) but not found at {flow_results_json_path}"
                     logger.error(error_msg)
                     raise FileNotFoundError(error_msg)
-                
-                logger.debug(f"Issue #600: Using flow_results.json as SSOT: {flow_results_json_path}")
-                
+
+                logger.debug(
+                    f"Issue #600: Using flow_results.json as SSOT: {flow_results_json_path}"
+                )
+
                 with log_span("Flow.csv", log=logger, always_info=True):
                     flow_paths = generate_flow_report_v2(
-                    run_id=run_id,
-                    day=day,
-                    day_events=day_events,
-                    flow_results_json_path=flow_results_json_path,  # Issue #600: Pass JSON path (required)
-                    reports_path=reports_path
-                )
+                        run_id=run_id,
+                        day=day,
+                        day_events=day_events,
+                        flow_results_json_path=flow_results_json_path,  # Issue #600: Pass JSON path (required)
+                        reports_path=reports_path,
+                    )
                 day_report_paths.update(flow_paths)
             except FileNotFoundError:
                 raise  # Re-raise FileNotFoundError
             except Exception as e:
-                logger.error(f"Failed to generate flow report for day {day.value}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to generate flow report for day {day.value}: {e}",
+                    exc_info=True,
+                )
                 # Continue with other reports even if flow fails
-        
+
         # Generate Locations.csv (Issue #600: Load from locations_results.json - SSOT mandatory if file exists)
         if "locations" in kinds:
             try:
                 # Issue #682: Use centralized get_run_directory() for correct path
                 from app.utils.run_id import get_run_directory
+
                 run_dir = get_run_directory(run_id)
                 computation_dir = run_dir / day.value / "computation"
                 locations_results_json_path = computation_dir / "locations_results.json"
@@ -239,33 +257,38 @@ def generate_reports_per_day(
 
                     with log_span("Locations.csv", log=logger, always_info=True):
                         locations_path = generate_locations_report_v2(
-                        run_id=run_id,
-                        day=day,
-                        day_events=day_events,
-                        locations_results_json_path=locations_results_json_path,
-                        all_runners_df=all_runners_df,
-                        reports_path=reports_path,
-                        segments_df=day_segments_df,
-                        segments_file_path=segments_file_path,
-                        gpx_paths=day_gpx_paths,
-                    )
+                            run_id=run_id,
+                            day=day,
+                            day_events=day_events,
+                            locations_results_json_path=locations_results_json_path,
+                            all_runners_df=all_runners_df,
+                            reports_path=reports_path,
+                            segments_df=day_segments_df,
+                            segments_file_path=segments_file_path,
+                            gpx_paths=day_gpx_paths,
+                        )
                     if locations_path:
                         day_report_paths["locations"] = str(locations_path)
-                        logger.debug(f"Successfully generated locations report for day {day.value}")
+                        logger.debug(
+                            f"Successfully generated locations report for day {day.value}"
+                        )
 
                         # Issue #702 / #871: HTML one-pagers for locations flagged onepage='y'
                         try:
                             from app.one_pager import generate_location_onepagers
+
                             loc_sheets_dir = reports_path / "loc_sheets"
                             loc_sheets_dir.mkdir(parents=True, exist_ok=True)
-                            with log_span("Location one-pagers", log=logger, always_info=True):
+                            with log_span(
+                                "Location one-pagers", log=logger, always_info=True
+                            ):
                                 generated = generate_location_onepagers(
-                                run_id=run_id,
-                                day=day.value,
-                                locations_results_json_path=locations_results_json_path,
-                                locations_report_csv_path=locations_path,
-                                output_dir=loc_sheets_dir,
-                            )
+                                    run_id=run_id,
+                                    day=day.value,
+                                    locations_results_json_path=locations_results_json_path,
+                                    locations_report_csv_path=locations_path,
+                                    output_dir=loc_sheets_dir,
+                                )
                             logger.info(
                                 f"Generated {generated} HTML one-pagers for day {day.value}"
                             )
@@ -286,18 +309,18 @@ def generate_reports_per_day(
                     f"Failed to generate locations report for day {day.value}: {e}",
                     exc_info=True,
                 )
-        
+
         report_paths_by_day[day] = day_report_paths
-        
+
         logger.debug(
             f"Generated {len(day_report_paths)} reports for day {day.value} "
             f"in {reports_path}"
         )
-    
+
     return report_paths_by_day
 
 
-def generate_density_report_v2(
+def generate_density_report_v2(  # noqa: C901
     run_id: str,
     day: Day,
     day_events: List[Event],
@@ -305,14 +328,16 @@ def generate_density_report_v2(
     reports_path: Path,
     data_dir: str,  # Data directory for loading runner files
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    segments_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to segments file
+    segments_file_path: Optional[
+        str
+    ] = None,  # Issue #553 Phase 6.2: Path to segments file
 ) -> Optional[Path]:
     """
     Generate day-scoped density report (Density.md).
-    
+
     Uses generate_density_report_markdown for Schema 1.0.0 format.
     Filters segments, bins, and segment_windows by day/events before report generation.
-    
+
     Args:
         run_id: Unique run identifier
         day: Day enum
@@ -320,52 +345,57 @@ def generate_density_report_v2(
         density_results: Density analysis results for this day
         reports_path: Path to reports directory for this day
         segments_df: Optional day-filtered segments DataFrame (if None, will load and filter)
-        
+
     Returns:
         Path to generated Density.md file, or None if generation failed
     """
     try:
+
         import pandas as pd
-        from pathlib import Path as PathType
+
         from app.density_report import generate_density_report_markdown
-        from app.core.v2.bins import filter_segments_by_events
         from app.utils.metadata import get_app_version
-        
+
         # Get bins directory for this day
         # Issue #682: Use centralized get_run_directory() for correct path
         from app.utils.run_id import get_run_directory
+
         run_dir = get_run_directory(run_id)
         bins_dir = run_dir / day.value / "bins"
-        
+
         # Issue #519/542: Read bins directly from bins directory (no copy)
         source_bins_parquet = bins_dir / "bins.parquet"
-        
+
         if not source_bins_parquet.exists():
-            logger.error(f"bins.parquet not found at {source_bins_parquet}, cannot generate new format report")
-            raise FileNotFoundError(f"bins.parquet required for Schema 1.0.0 density report not found at {source_bins_parquet}")
-        
+            logger.error(
+                f"bins.parquet not found at {source_bins_parquet}, cannot generate new format report"
+            )
+            raise FileNotFoundError(
+                f"bins.parquet required for Schema 1.0.0 density report not found at {source_bins_parquet}"
+            )
+
         # Issue #519/542: Perform safety check to verify bins are day-scoped (bins should already be day-scoped
         # after Issue #515 fix, but we verify as a safety check and log any issues)
         bins_df = pd.read_parquet(source_bins_parquet)
-        
+
         # Get day-filtered segments
         if segments_df is None:
             raise ValueError(
                 "segments_df is required in generate_density_report_v2. "
                 "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-        
+
         # Get list of day segment IDs
-        day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
-        
+        day_segment_ids = set(segments_df["seg_id"].astype(str).unique())
+
         # Verify bins are day-scoped (safety check - bins should already be day-scoped)
         # bins.parquet may have 'segment_id' (v1 format) or 'seg_id' (v2 format)
         segment_col = None
-        if 'segment_id' in bins_df.columns:
-            segment_col = 'segment_id'
-        elif 'seg_id' in bins_df.columns:
-            segment_col = 'seg_id'
-        
+        if "segment_id" in bins_df.columns:
+            segment_col = "segment_id"
+        elif "seg_id" in bins_df.columns:
+            segment_col = "seg_id"
+
         if segment_col:
             # Log segments found in bins for verification
             bins_segment_ids = set(bins_df[segment_col].astype(str).unique())
@@ -377,7 +407,7 @@ def generate_density_report_v2(
                 f"Day {day.value} expects {len(day_segment_ids)} segments: "
                 f"{sorted(list(day_segment_ids))}"
             )
-            
+
             # Verify bins are day-scoped (should be a no-op since bins are already day-scoped)
             unexpected_segments = bins_segment_ids - day_segment_ids
             if unexpected_segments:
@@ -390,20 +420,27 @@ def generate_density_report_v2(
                 logger.warning(
                     f"⚠️ Expected segments missing from bins for day {day.value}: {missing_segments}"
                 )
-        
+
         # Save filtered segments to reports directory (for generate_density_report_markdown)
         segments_parquet = reports_path / "segments.parquet"
         # Ensure seg_id column exists (may be renamed to segment_id in some contexts)
         segments_for_report = segments_df.copy()
-        if 'seg_id' in segments_for_report.columns and 'segment_id' not in segments_for_report.columns:
-            segments_for_report = segments_for_report.rename(columns={'seg_id': 'segment_id'})
+        if (
+            "seg_id" in segments_for_report.columns
+            and "segment_id" not in segments_for_report.columns
+        ):
+            segments_for_report = segments_for_report.rename(
+                columns={"seg_id": "segment_id"}
+            )
         segments_for_report.to_parquet(segments_parquet, index=False)
-        logger.debug(f"Saved {len(segments_for_report)} day-filtered segments to {segments_parquet}")
-        
+        logger.debug(
+            f"Saved {len(segments_for_report)} day-filtered segments to {segments_parquet}"
+        )
+
         # Generate new format report using filtered data
         try:
             app_version = get_app_version()
-            
+
             # Extract event information for start times section
             # Get event names, start times, and runner counts from runner files
             event_info = {}
@@ -412,67 +449,93 @@ def generate_density_report_v2(
                 try:
                     # Load runner file for this event to get count
                     from app.io.loader import load_runners
-                    runner_file = Path(data_dir) / event.runners_file if hasattr(event, 'runners_file') else Path(data_dir) / f"{event.name}_runners.csv"
+
+                    runner_file = (
+                        Path(data_dir) / event.runners_file
+                        if hasattr(event, "runners_file")
+                        else Path(data_dir) / f"{event.name}_runners.csv"
+                    )
                     if runner_file.exists():
                         runners_df = load_runners(str(runner_file))
                         # Filter by day if day column exists
-                        if 'day' in runners_df.columns:
-                            runners_df = runners_df[runners_df['day'].str.lower() == day.value.lower()]
+                        if "day" in runners_df.columns:
+                            runners_df = runners_df[
+                                runners_df["day"].str.lower() == day.value.lower()
+                            ]
                         runner_count = len(runners_df)
                 except Exception as e:
                     logger.debug(f"Could not get runner count for {event.name}: {e}")
-                
+
                 event_info[event.name] = {
-                    'start_time': event.start_time,
-                    'start_time_formatted': f"{int(event.start_time // 60):02d}:{int(event.start_time % 60):02d}",
-                    'runner_count': runner_count
+                    "start_time": event.start_time,
+                    "start_time_formatted": f"{int(event.start_time // 60):02d}:{int(event.start_time % 60):02d}",
+                    "runner_count": runner_count,
                 }
-            
+
             # Issue #573: Load event_groups from metadata.json for RES display
             event_groups_res = None
             try:
                 # Issue #682: Use centralized get_run_directory() for correct path
                 from app.utils.run_id import get_run_directory
+
                 run_dir = get_run_directory(run_id)
                 metadata_path = run_dir / day.value / "metadata.json"
                 if metadata_path.exists():
                     import json
+
                     metadata = json.loads(metadata_path.read_text())
                     event_groups_res = metadata.get("event_groups")
                     if event_groups_res:
-                        logger.debug(f"Loaded event_groups RES data from metadata.json for day {day.value}")
+                        logger.debug(
+                            f"Loaded event_groups RES data from metadata.json for day {day.value}"
+                        )
             except Exception as e:
-                logger.debug(f"Could not load event_groups from metadata.json for day {day.value}: {e}")
-            
+                logger.debug(
+                    f"Could not load event_groups from metadata.json for day {day.value}: {e}"
+                )
+
             # Issue #600: Get segment_metrics.json path for SSOT (mandatory)
             # Issue #682: Use centralized get_run_directory() for correct path
             from app.utils.run_id import get_run_directory
+
             run_dir = get_run_directory(run_id)
             ui_metrics_dir = run_dir / day.value / "ui" / "metrics"
             segment_metrics_json_path = ui_metrics_dir / "segment_metrics.json"
-            
+
             if not segment_metrics_json_path.exists():
                 error_msg = f"Issue #600: segment_metrics.json is required (SSOT) but not found at {segment_metrics_json_path}"
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
-            
-            logger.debug(f"Issue #600: Using segment_metrics.json as SSOT: {segment_metrics_json_path}")
-            
-            logger.debug(f"Calling generate_density_report_markdown for day {day.value}...")
+
+            logger.debug(
+                f"Issue #600: Using segment_metrics.json as SSOT: {segment_metrics_json_path}"
+            )
+
+            logger.debug(
+                f"Calling generate_density_report_markdown for day {day.value}..."
+            )
             results = generate_density_report_markdown(
                 reports_dir=str(reports_path),
-                segment_metrics_path=str(segment_metrics_json_path),  # Issue #600: Pass segment_metrics.json path (required)
+                segment_metrics_path=str(
+                    segment_metrics_json_path
+                ),  # Issue #600: Pass segment_metrics.json path (required)
                 output_path=str(reports_path / "Density.md"),
                 app_version=app_version,
                 events=event_info,  # Pass event info for dynamic start times
                 event_groups_res=event_groups_res,  # Issue #573: Pass RES data for Executive Summary
-                bins_dir=str(bins_dir)  # Issue #519/542: Pass bins_dir to avoid duplicate files
+                bins_dir=str(
+                    bins_dir
+                ),  # Issue #519/542: Pass bins_dir to avoid duplicate files
             )
-            logger.debug(f"generate_density_report_markdown returned for day {day.value}, success={results.get('success', False)}")
-            
-            if results.get('success'):
+            logger.debug(
+                f"generate_density_report_markdown returned for day {day.value}, success={results.get('success', False)}"
+            )
+
+            if results.get("success"):
                 density_path = reports_path / "Density.md"
-                logger.info(f"Generated Density.md (Schema 1.0.0) for day {day.value}: {density_path}")
+                logger.info(
+                    f"Generated Density.md (Schema 1.0.0) for day {day.value}: {density_path}"
+                )
                 return density_path
             else:
                 error_msg = f"New report format generation failed: {results.get('error', 'Unknown error')}"
@@ -480,83 +543,95 @@ def generate_density_report_v2(
                 raise RuntimeError(error_msg)
         except Exception as e:
             logger.error(f"Failed to generate new format report: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to generate Schema 1.0.0 density report: {e}") from e
-        
+            raise RuntimeError(
+                f"Failed to generate Schema 1.0.0 density report: {e}"
+            ) from e
+
     except (FileNotFoundError, RuntimeError):
         # Re-raise these errors (they're already logged)
         raise
     except Exception as e:
-        logger.error(f"Failed to generate density report for day {day.value}: {e}", exc_info=True)
-        raise RuntimeError(f"Failed to generate Schema 1.0.0 density report for day {day.value}: {e}") from e
+        logger.error(
+            f"Failed to generate density report for day {day.value}: {e}", exc_info=True
+        )
+        raise RuntimeError(
+            f"Failed to generate Schema 1.0.0 density report for day {day.value}: {e}"
+        ) from e
 
 
 # Legacy format removed - v2 only uses Schema 1.0.0 format
 
 
-def generate_flow_report_v2(
+def generate_flow_report_v2(  # noqa: C901
     run_id: str,
     day: Day,
     day_events: List[Event],
     flow_results_json_path: Path,
-    reports_path: Path
+    reports_path: Path,
 ) -> Dict[str, str]:
     """
     Generate day-scoped flow report (Flow.csv only).
-    
+
     Issue #600: Loads flow_results.json as SSOT (mandatory).
     Issue #600: Flow.md generation deprecated - only Flow.csv is used.
-    
+
     Args:
         run_id: Unique run identifier
         day: Day enum
         day_events: List of events for this day
         flow_results_json_path: Path to flow_results.json file (Issue #600 - required)
         reports_path: Path to reports directory for this day
-        
+
     Returns:
         Dictionary with flow_csv path (flow_md key removed per Issue #600)
-        
+
     Raises:
         FileNotFoundError: If flow_results.json file does not exist
         RuntimeError: If flow_results.json cannot be loaded or is invalid
     """
     import json
-    
+
     flow_paths: Dict[str, str] = {}
-    
+
     # Issue #600: Load flow_results.json as SSOT (mandatory)
     if not flow_results_json_path.exists():
         raise FileNotFoundError(
             f"Issue #600: flow_results.json is required (SSOT) but not found at {flow_results_json_path}"
         )
-    
+
     try:
-        flow_results = json.loads(flow_results_json_path.read_text(encoding='utf-8'))
-        logger.debug(f"Issue #600: Loaded flow_results.json from {flow_results_json_path}")
+        flow_results = json.loads(flow_results_json_path.read_text(encoding="utf-8"))
+        logger.debug(
+            f"Issue #600: Loaded flow_results.json from {flow_results_json_path}"
+        )
     except Exception as e:
-        logger.error(f"Failed to load flow_results.json from {flow_results_json_path}: {e}", exc_info=True)
-        raise RuntimeError(f"Issue #600: Failed to load flow_results.json from {flow_results_json_path}: {e}") from e
-    
+        logger.error(
+            f"Failed to load flow_results.json from {flow_results_json_path}: {e}",
+            exc_info=True,
+        )
+        raise RuntimeError(
+            f"Issue #600: Failed to load flow_results.json from {flow_results_json_path}: {e}"
+        ) from e
+
     try:
         # Import here to avoid circular dependencies
-        from app.flow_report import generate_temporal_flow_report
-        
+
         # Extract start_times from day_events
         # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
         # generate_flow_markdown expects minutes (float), not datetime
         start_times: Dict[str, float] = {}
-        
+
         for event in day_events:
             # start_times expects minutes after midnight (already in Event.start_time)
             start_times[event.name.lower()] = float(event.start_time)
-        
+
         # Generate flow report using existing function
         # Note: analyze_temporal_flow_segments_v2 returns results with same structure as v1
         # (it calls analyze_temporal_flow_segments internally), so we can use it directly
         if not flow_results.get("ok", False):
             logger.warning(f"Flow analysis failed for day {day.value}, skipping report")
             return flow_paths
-        
+
         # Convert v2 flow_results structure to v1 format for report generation
         # v2 structure: {"ok": True, "pairs": [...], "segments": {"pair_key": [...]}}
         # v1 structure: {"ok": True, "segments": [...]}
@@ -564,9 +639,9 @@ def generate_flow_report_v2(
         v1_flow_results = {
             "ok": flow_results.get("ok", False),
             "engine": "temporal_flow",
-            "segments": []
+            "segments": [],
         }
-        
+
         # Handle both list and dict structures for segments
         segments_data = flow_results.get("segments", [])
         if isinstance(segments_data, list):
@@ -579,12 +654,13 @@ def generate_flow_report_v2(
                     v1_flow_results["segments"].extend(pair_segments)
                 elif isinstance(pair_segments, dict):
                     v1_flow_results["segments"].append(pair_segments)
-        
+
         # Issue #600: Flow.md generation deprecated - only Flow.csv is used
         # Generate Flow.csv using v1 export function for consistency
         from app.flow_report import export_temporal_flow_csv
+
         flow_csv_path = reports_path / "Flow.csv"
-        
+
         # export_temporal_flow_csv expects a directory path, not a file path
         # It will create Flow.csv inside that directory with timestamp
         try:
@@ -594,8 +670,10 @@ def generate_flow_report_v2(
             try:
                 # Issue #682: Use centralized get_run_directory() for correct path
                 from app.utils.run_id import get_run_directory
+
                 run_path = get_run_directory(run_id)
                 from app.core.v2.analysis_config import get_segments_file
+
                 segments_csv_path_for_flow = get_segments_file(run_path=run_path)
             except Exception as e:
                 error_msg = (
@@ -604,16 +682,16 @@ def generate_flow_report_v2(
                 )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            
+
             export_temporal_flow_csv(
                 results=v1_flow_results,
                 output_path=str(reports_path),
                 start_times=start_times,
                 run_id=run_id,
                 day=day_prefix,
-                segments_csv_path=segments_csv_path_for_flow  # Issue #616: Pass from analysis.json
+                segments_csv_path=segments_csv_path_for_flow,  # Issue #616: Pass from analysis.json
             )
-            
+
             # Find the generated Flow.csv (might have timestamp in name)
             flow_csv_files = list(reports_path.glob("Flow*.csv"))
             if flow_csv_files:
@@ -627,27 +705,35 @@ def generate_flow_report_v2(
             else:
                 # Fallback: create empty CSV if export failed
                 import pandas as pd
+
                 pd.DataFrame().to_csv(flow_csv_path, index=False)
-                logger.warning(f"export_temporal_flow_csv did not create file, created empty Flow.csv")
-            
+                logger.warning(
+                    "export_temporal_flow_csv did not create file, created empty Flow.csv"
+                )
+
             flow_paths["flow_csv"] = str(flow_csv_path)
             logger.info(f"Generated Flow.csv for day {day.value}: {flow_csv_path}")
         except Exception as e:
-            logger.error(f"Failed to export Flow.csv for day {day.value}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to export Flow.csv for day {day.value}: {e}", exc_info=True
+            )
             # Create empty CSV as fallback
             import pandas as pd
+
             pd.DataFrame().to_csv(flow_csv_path, index=False)
             flow_paths["flow_csv"] = str(flow_csv_path)
-        
+
         logger.debug(f"Generated flow reports for day {day.value} at {reports_path}")
-        
+
     except Exception as e:
-        logger.error(f"Failed to generate flow report for day {day.value}: {e}", exc_info=True)
-    
+        logger.error(
+            f"Failed to generate flow report for day {day.value}: {e}", exc_info=True
+        )
+
     return flow_paths
 
 
-def generate_locations_report_v2(
+def generate_locations_report_v2(  # noqa: C901
     run_id: str,
     day: Day,
     day_events: List[Event],
@@ -655,15 +741,19 @@ def generate_locations_report_v2(
     all_runners_df: Any,  # pd.DataFrame
     reports_path: Path,
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    segments_file_path: Optional[str] = None,  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
-    gpx_paths: Optional[Dict[str, str]] = None  # Issue #655: GPX file paths from analysis.json data_files.gpx
+    segments_file_path: Optional[
+        str
+    ] = None,  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
+    gpx_paths: Optional[
+        Dict[str, str]
+    ] = None,  # Issue #655: GPX file paths from analysis.json data_files.gpx
 ) -> Optional[Path]:
     """
     Generate day-scoped locations report (Locations.csv).
-    
+
     Issue #600: Loads locations_results.json as SSOT (mandatory).
     Filters locations by day/events and uses location_report.py for proper generation.
-    
+
     Args:
         run_id: Unique run identifier
         day: Day enum
@@ -672,47 +762,59 @@ def generate_locations_report_v2(
         all_runners_df: Full runners DataFrame
         reports_path: Path to reports directory for this day
         segments_df: Optional day-filtered segments DataFrame
-        
+
     Returns:
         Path to generated Locations.csv file, or None if generation failed
-        
+
     Raises:
         FileNotFoundError: If locations_results.json file does not exist
         RuntimeError: If locations_results.json cannot be loaded or is invalid
     """
     import json
+
     import pandas as pd
-    
+
     # Issue #600: Load locations_results.json as SSOT (mandatory)
     if not locations_results_json_path.exists():
         raise FileNotFoundError(
             f"Issue #600: locations_results.json is required (SSOT) but not found at {locations_results_json_path}"
         )
-    
+
     try:
-        locations_data = json.loads(locations_results_json_path.read_text(encoding='utf-8'))
+        locations_data = json.loads(
+            locations_results_json_path.read_text(encoding="utf-8")
+        )
         # Convert JSON to DataFrame: locations_results.json has structure {"locations": [...]}
         locations_df = pd.DataFrame(locations_data.get("locations", []))
-        logger.debug(f"Issue #600: Loaded locations_results.json from {locations_results_json_path}: {len(locations_df)} locations")
+        logger.debug(
+            f"Issue #600: Loaded locations_results.json from {locations_results_json_path}: {len(locations_df)} locations"
+        )
     except Exception as e:
-        logger.error(f"Failed to load locations_results.json from {locations_results_json_path}: {e}", exc_info=True)
-        raise RuntimeError(f"Issue #600: Failed to load locations_results.json from {locations_results_json_path}: {e}") from e
-    
+        logger.error(
+            f"Failed to load locations_results.json from {locations_results_json_path}: {e}",
+            exc_info=True,
+        )
+        raise RuntimeError(
+            f"Issue #600: Failed to load locations_results.json from {locations_results_json_path}: {e}"
+        ) from e
+
     try:
         import pandas as pd
+
         from app.location_report import generate_location_report
-        from app.core.v2.bins import filter_segments_by_events
-        
+
         # Filter runners to this day (v2 uses lowercase event names)
         day_event_names = {event.name.lower() for event in day_events}
         day_runners_df = all_runners_df[
             all_runners_df["event"].astype(str).str.lower().isin(day_event_names)
         ].copy()
-        
+
         if day_runners_df.empty:
-            logger.warning(f"No runners found for day {day.value}, skipping locations report")
+            logger.warning(
+                f"No runners found for day {day.value}, skipping locations report"
+            )
             return None
-        
+
         # Issue #616: Get day-filtered segments if not provided
         # In v2 pipeline, segments_df should always be provided - this is a fallback only
         if segments_df is None:
@@ -720,113 +822,136 @@ def generate_locations_report_v2(
                 "segments_df is required in generate_locations_report_v2. "
                 "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-        
+
         # Get day segment IDs
-        day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
-        
+        day_segment_ids = set(segments_df["seg_id"].astype(str).unique())
+
         # Filter locations to those associated with day segments
         # locations.csv has 'seg_id' column (may be comma-separated list)
         # IMPORTANT: Include proxy locations (with proxy_loc_id) even if they don't match day segments
         # BUT only if they match the requested day (check 'day' column if present)
         # AND include their proxy source locations so proxy timing can be copied
-        if 'seg_id' in locations_df.columns:
+        if "seg_id" in locations_df.columns:
+
             def location_matches_day(row) -> bool:
                 """Check if location's seg_ids overlap with day segments, or if it's a proxy location for this day."""
                 # Issue #553 Phase 4.2: Check 'day' column first (if present) for all locations
                 # This ensures locations are filtered by day, not just by seg_id matching
-                if 'day' in row and pd.notna(row.get('day')):
-                    loc_day = str(row.get('day')).lower()
+                if "day" in row and pd.notna(row.get("day")):
+                    loc_day = str(row.get("day")).lower()
                     if loc_day != day.value.lower():
                         # Location is explicitly marked for a different day, exclude it
                         return False
-                
+
                 # Include proxy locations ONLY if they match the requested day
-                if 'proxy_loc_id' in row and pd.notna(row.get('proxy_loc_id')):
+                if "proxy_loc_id" in row and pd.notna(row.get("proxy_loc_id")):
                     # Day check already done above, so if we get here, day matches
                     return True
-                
+
                 # Check seg_id match for regular locations
-                loc_seg_ids = row.get('seg_id')
+                loc_seg_ids = row.get("seg_id")
                 if pd.isna(loc_seg_ids) or not loc_seg_ids:
                     return False
                 # Handle comma-separated seg_ids and strip quotes from ALL segments
                 # Issue #571: Fix bug where 2-segment values like "D1,D2" were excluded
                 # because quotes weren't stripped, causing ['"D1', 'D2"'] instead of ['D1', 'D2']
-                loc_segs = [s.strip().strip('"').strip("'") for s in str(loc_seg_ids).split(',')]
+                loc_segs = [
+                    s.strip().strip('"').strip("'") for s in str(loc_seg_ids).split(",")
+                ]
                 return any(seg in day_segment_ids for seg in loc_segs)
-            
+
             location_mask = locations_df.apply(location_matches_day, axis=1)
             day_locations_df = locations_df[location_mask].copy()
-            
+
             # Also include proxy source locations (locations that are referenced by proxy_loc_id)
             # This ensures proxy locations can find their source locations
-            if 'proxy_loc_id' in day_locations_df.columns:
-                proxy_source_ids = set(day_locations_df['proxy_loc_id'].dropna().astype(int).tolist())
+            if "proxy_loc_id" in day_locations_df.columns:
+                proxy_source_ids = set(
+                    day_locations_df["proxy_loc_id"].dropna().astype(int).tolist()
+                )
                 if proxy_source_ids:
                     # Find source locations that are referenced by proxy locations
-                    source_locations = locations_df[locations_df['loc_id'].isin(proxy_source_ids)]
+                    source_locations = locations_df[
+                        locations_df["loc_id"].isin(proxy_source_ids)
+                    ]
                     # Add source locations that aren't already included
-                    missing_sources = source_locations[~source_locations['loc_id'].isin(day_locations_df['loc_id'])]
+                    missing_sources = source_locations[
+                        ~source_locations["loc_id"].isin(day_locations_df["loc_id"])
+                    ]
                     if not missing_sources.empty:
-                        day_locations_df = pd.concat([day_locations_df, missing_sources], ignore_index=True)
+                        day_locations_df = pd.concat(
+                            [day_locations_df, missing_sources], ignore_index=True
+                        )
                         logger.debug(
                             f"Added {len(missing_sources)} proxy source locations to day {day.value} report: "
                             f"{missing_sources['loc_id'].tolist()}"
                         )
-            
-            proxy_count = len(day_locations_df[day_locations_df['proxy_loc_id'].notna()]) if 'proxy_loc_id' in day_locations_df.columns else 0
+
+            proxy_count = (
+                len(day_locations_df[day_locations_df["proxy_loc_id"].notna()])
+                if "proxy_loc_id" in day_locations_df.columns
+                else 0
+            )
             logger.debug(
                 f"Filtered locations for day {day.value}: {len(locations_df)} -> {len(day_locations_df)} "
                 f"(including {proxy_count} proxy locations) matching segments: {sorted(day_segment_ids)}"
             )
         else:
-            logger.warning(f"locations.csv missing 'seg_id' column, cannot filter by day")
+            logger.warning(
+                "locations.csv missing 'seg_id' column, cannot filter by day"
+            )
             day_locations_df = locations_df
-        
+
         if day_locations_df.empty:
-            logger.warning(f"No locations found for day {day.value} segments, skipping locations report")
+            logger.warning(
+                f"No locations found for day {day.value} segments, skipping locations report"
+            )
             return None
-        
+
         # Use location_report.py to generate proper Locations.csv
         # Create temporary files for location_report (it expects CSV file paths)
-        import tempfile
         import os
-        
+        import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_runners_path = os.path.join(tmpdir, "runners.csv")
             tmp_segments_path = os.path.join(tmpdir, "segments.csv")
             tmp_locations_path = os.path.join(tmpdir, "locations.csv")
-            
+
             # Save filtered data to temporary CSV files
             day_runners_df.to_csv(tmp_runners_path, index=False)
             segments_df.to_csv(tmp_segments_path, index=False)
             day_locations_df.to_csv(tmp_locations_path, index=False)
-            
+
             # Extract start_times from day_events for location_report
             # location_report.py now handles lowercase event names
             start_times: Dict[str, float] = {}
-            
+
             for event in day_events:
                 # Use lowercase event names (v2 standard)
                 start_times[event.name.lower()] = float(event.start_time)
-            
+
             # Generate location report using v1 function
             # location_report.py expects CSV file paths
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
             # because it will use get_runflow_category_path which creates runflow/analysis/{run_id}/reports
             # instead of runflow/analysis/{run_id}/{day}/reports. We pass output_dir directly instead.
-            
+
             # Issue #682: Updated to use runflow/analysis/{run_id} structure
-            
+
             # Issue #655: Validate gpx_paths is provided (required for location report)
             if not gpx_paths:
-                logger.error(f"gpx_paths is required for location report generation but was not provided for day {day.value}")
+                logger.error(
+                    f"gpx_paths is required for location report generation but was not provided for day {day.value}"
+                )
                 raise ValueError(
-                    f"gpx_paths is required for location report generation. "
+                    "gpx_paths is required for location report generation. "
                     "It should be provided from analysis.json data_files.gpx."
                 )
-            
-            logger.debug(f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners")
+
+            logger.debug(
+                f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners"
+            )
             try:
                 result = generate_location_report(
                     locations_csv=tmp_locations_path,
@@ -839,65 +964,76 @@ def generate_locations_report_v2(
                     gpx_paths=gpx_paths,  # Issue #655: GPX paths from analysis.json
                     locations_df=day_locations_df,
                     runners_df=day_runners_df,
-                    segments_df=segments_df
+                    segments_df=segments_df,
                 )
-                logger.debug(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
+                logger.debug(
+                    f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}"
+                )
             except Exception as e:
-                logger.error(f"Exception in generate_location_report for day {day.value}: {e}", exc_info=True)
+                logger.error(
+                    f"Exception in generate_location_report for day {day.value}: {e}",
+                    exc_info=True,
+                )
                 raise
-            
+
             # location_report.py saves to output_dir/Locations.csv via get_report_paths
             locations_path = reports_path / "Locations.csv"
             if locations_path.exists():
-                logger.info(f"Generated Locations.csv for day {day.value} at {locations_path}")
+                logger.info(
+                    f"Generated Locations.csv for day {day.value} at {locations_path}"
+                )
                 return locations_path
             else:
-                logger.warning(f"Location report generation did not create file at {locations_path}")
+                logger.warning(
+                    f"Location report generation did not create file at {locations_path}"
+                )
                 return None
-        
+
     except Exception as e:
-        logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to generate locations report for day {day.value}: {e}",
+            exc_info=True,
+        )
         return None
 
 
-def copy_bin_artifacts(
-    bins_dir: Path,
-    target_bins_dir: Path
-) -> None:
+def copy_bin_artifacts(bins_dir: Path, target_bins_dir: Path) -> None:
     """
     Copy bin artifacts from source to target directory.
-    
+
     This is a no-op if source and target are the same (already in place).
-    
+
     Args:
         bins_dir: Source bins directory
         target_bins_dir: Target bins directory
     """
     import shutil
-    
+
     if bins_dir == target_bins_dir:
         logger.debug(f"Bin artifacts already in target location: {target_bins_dir}")
         return
-    
+
     target_bins_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Copy bin artifacts
     artifacts = [
         "bins.parquet",
         "bins.geojson.gz",
         "bin_summary.json",
-        "segment_windows_from_bins.parquet"
+        "segment_windows_from_bins.parquet",
     ]
-    
+
     for artifact in artifacts:
         source_path = bins_dir / artifact
         target_path = target_bins_dir / artifact
-        
+
         if source_path.exists():
             if source_path != target_path:  # Avoid SameFileError
                 shutil.copy2(source_path, target_path)
                 logger.debug(f"Copied {artifact} to {target_path}")
         else:
-            logger.debug(f"Bin artifact {artifact} not found at {source_path}, skipping")
-    
+            logger.debug(
+                f"Bin artifact {artifact} not found at {source_path}, skipping"
+            )
+
     logger.debug(f"Copied bin artifacts from {bins_dir} to {target_bins_dir}")

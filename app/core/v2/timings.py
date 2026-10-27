@@ -15,12 +15,13 @@ Core Principles:
 - Use Event.start_time as primary source, analysis_config for fallback durations
 """
 
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 import csv
-import math
-import pandas as pd
 import logging
+import math
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 
 from app.core.v2.models import Event
 
@@ -73,7 +74,9 @@ def build_runner_finish_times_df(
     """
     required_columns = ["runner_id", "event", "pace", "distance"]
     optional_warn = ["start_offset"]
-    missing_required = [col for col in required_columns if col not in runners_df.columns]
+    missing_required = [
+        col for col in required_columns if col not in runners_df.columns
+    ]
     missing_optional = [col for col in optional_warn if col not in runners_df.columns]
     if missing_required:
         logger.warning(
@@ -81,7 +84,11 @@ def build_runner_finish_times_df(
             missing_required,
             list(runners_df.columns),
         )
-        if runners_df.empty or "pace" not in runners_df.columns or "distance" not in runners_df.columns:
+        if (
+            runners_df.empty
+            or "pace" not in runners_df.columns
+            or "distance" not in runners_df.columns
+        ):
             return None
     elif missing_optional:
         logger.debug(
@@ -100,19 +107,27 @@ def build_runner_finish_times_df(
         event_runners = work[work["event"] == event_name].copy()
         if event_runners.empty:
             continue
-        if "pace" not in event_runners.columns or "distance" not in event_runners.columns:
-            logger.warning("Issue #743: Missing pace or distance for event %s", event_name)
+        if (
+            "pace" not in event_runners.columns
+            or "distance" not in event_runners.columns
+        ):
+            logger.warning(
+                "Issue #743: Missing pace or distance for event %s", event_name
+            )
             continue
 
         event_runners["pace_sec_per_km"] = event_runners["pace"] * 60.0
         if "start_offset" in event_runners.columns:
-            event_runners["start_offset_sec"] = event_runners["start_offset"].fillna(0).astype(float)
+            event_runners["start_offset_sec"] = (
+                event_runners["start_offset"].fillna(0).astype(float)
+            )
         else:
             event_runners["start_offset_sec"] = 0.0
-        event_runners["runner_start_sec"] = (event_start_min * 60.0) + event_runners["start_offset_sec"]
-        event_runners["finish_time_sec"] = (
-            event_runners["runner_start_sec"]
-            + (event_runners["pace_sec_per_km"] * event_runners["distance"])
+        event_runners["runner_start_sec"] = (event_start_min * 60.0) + event_runners[
+            "start_offset_sec"
+        ]
+        event_runners["finish_time_sec"] = event_runners["runner_start_sec"] + (
+            event_runners["pace_sec_per_km"] * event_runners["distance"]
         )
         frames.append(event_runners[["runner_id", "event", "finish_time_sec"]])
 
@@ -121,7 +136,9 @@ def build_runner_finish_times_df(
     return pd.concat(frames, ignore_index=True)
 
 
-def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataFrame) -> bool:
+def write_finish_times_csv(
+    output_path: Path, day_code: str, finish_df: pd.DataFrame
+) -> bool:
     """
     Issue #743: Aggregate predicted finishes into 20-minute waves; non-zero rows only plus ``all``.
 
@@ -136,7 +153,11 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
     bucket_col = finish_df["finish_time_sec"].map(finish_bucket_start_sec)
     tmp = finish_df.assign(_bucket=bucket_col)
 
-    grouped = tmp.groupby(["_bucket", "event"], observed=False).size().reset_index(name="count")
+    grouped = (
+        tmp.groupby(["_bucket", "event"], observed=False)
+        .size()
+        .reset_index(name="count")
+    )
     grouped = grouped[grouped["count"] > 0].sort_values(["_bucket", "event"])
 
     if grouped.empty:
@@ -147,17 +168,29 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
     rows_written = 0
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["day", "time_window_start", "time_window_end", "event", "count"])
+        writer.writerow(
+            ["day", "time_window_start", "time_window_end", "event", "count"]
+        )
 
         for bucket_start in sorted(grouped["_bucket"].unique()):
             chunk = grouped[grouped["_bucket"] == bucket_start]
 
             window_start_str = _format_seconds_to_hhmmss(bucket_start)
-            window_end_str = _format_seconds_to_hhmmss(bucket_start + _FINISH_BUCKET_SECONDS - 1)
+            window_end_str = _format_seconds_to_hhmmss(
+                bucket_start + _FINISH_BUCKET_SECONDS - 1
+            )
 
             total = int(chunk["count"].sum())
             for _, row in chunk.sort_values("event").iterrows():
-                writer.writerow([day_code, window_start_str, window_end_str, row["event"], int(row["count"])])
+                writer.writerow(
+                    [
+                        day_code,
+                        window_start_str,
+                        window_end_str,
+                        row["event"],
+                        int(row["count"]),
+                    ]
+                )
                 rows_written += 1
             writer.writerow([day_code, window_start_str, window_end_str, "all", total])
             rows_written += 1
@@ -173,10 +206,10 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
 def _format_seconds_to_hhmm(seconds_from_midnight: float) -> str:
     """
     Format seconds from midnight to HH:MM string.
-    
+
     Args:
         seconds_from_midnight: Seconds elapsed since midnight (0-86400)
-        
+
     Returns:
         Time string in HH:MM format (e.g., "07:30")
     """
@@ -186,26 +219,25 @@ def _format_seconds_to_hhmm(seconds_from_midnight: float) -> str:
         minutes = (total_seconds % 3600) // 60
         return f"{hours:02d}:{minutes:02d}"
     except (ValueError, TypeError) as e:
-        logger.warning(f"Failed to format seconds {seconds_from_midnight} to HH:MM: {e}")
+        logger.warning(
+            f"Failed to format seconds {seconds_from_midnight} to HH:MM: {e}"
+        )
         return "00:00"
 
 
-def compute_predicted_timings(
-    *,
-    events: List[Event],
-    analysis_config: Dict[str, Any],
-    runners_df: pd.DataFrame
+def compute_predicted_timings(  # noqa: C901
+    *, events: List[Event], analysis_config: Dict[str, Any], runners_df: pd.DataFrame
 ) -> Optional[Dict[str, Any]]:
     """
     Compute predicted_timings dict from runner data using vectorized operations.
-    
+
     Issue #638: Correct implementation using runner finish times instead of bin windows.
-    
+
     Args:
         events: List of Event objects for the day
         analysis_config: Analysis configuration dict (for event_duration_minutes fallback)
         runners_df: DataFrame with columns: runner_id, event, pace, distance, start_offset
-        
+
     Returns:
         Dictionary with predicted_timings structure, or None if computation fails
         Structure:
@@ -231,7 +263,9 @@ def compute_predicted_timings(
                 if isinstance(event_data, dict):
                     event_name = event_data.get("name", "").lower()
                     if event_name and "event_duration_minutes" in event_data:
-                        event_durations[event_name] = event_data["event_duration_minutes"]
+                        event_durations[event_name] = event_data[
+                            "event_duration_minutes"
+                        ]
 
         finish_df = build_runner_finish_times_df(
             events=events,
@@ -249,14 +283,22 @@ def compute_predicted_timings(
             event_name = event.name.lower()
             event_start_min = event.start_time  # minutes after midnight
 
-            sub = finish_df[finish_df["event"] == event_name] if not finish_df.empty else pd.DataFrame()
+            sub = (
+                finish_df[finish_df["event"] == event_name]
+                if not finish_df.empty
+                else pd.DataFrame()
+            )
 
             if sub.empty:
                 if event_name in event_durations:
                     duration_minutes = event_durations[event_name]
                     event_last_min = event_start_min + duration_minutes
-                    event_last_finisher[event_name] = _format_seconds_to_hhmm(event_last_min * 60)
-                    actual_event_duration[event_name] = _format_seconds_to_hhmm(duration_minutes * 60)
+                    event_last_finisher[event_name] = _format_seconds_to_hhmm(
+                        event_last_min * 60
+                    )
+                    actual_event_duration[event_name] = _format_seconds_to_hhmm(
+                        duration_minutes * 60
+                    )
                     logger.debug(
                         "Issue #638: No runners for event %s, using fallback duration",
                         event_name,
@@ -291,30 +333,34 @@ def compute_predicted_timings(
                 event_last_finisher[event_name],
                 actual_event_duration[event_name],
             )
-        
+
         # Day-level aggregation
         # day_start = min(event start times)
         day_start_min = min(event_start_times.values()) if event_start_times else None
         if day_start_min is None:
-            logger.warning("Issue #638: No event start times available, cannot compute day_start")
+            logger.warning(
+                "Issue #638: No event start times available, cannot compute day_start"
+            )
             return None
-        
+
         day_start_str = _format_seconds_to_hhmm(day_start_min * 60)
-        
+
         # day_first_finisher = min(all event_first values that exist)
         # day_last_finisher = max(all event_last values that exist)
         if event_first_finisher:
             # Convert HH:MM strings back to seconds for comparison
             def hhmm_to_seconds(hhmm_str: str) -> float:
                 try:
-                    parts = hhmm_str.split(':')
+                    parts = hhmm_str.split(":")
                     return int(parts[0]) * 3600 + int(parts[1]) * 60
                 except (ValueError, IndexError):
                     return 0.0
-            
-            day_first_sec = min(hhmm_to_seconds(v) for v in event_first_finisher.values())
+
+            day_first_sec = min(
+                hhmm_to_seconds(v) for v in event_first_finisher.values()
+            )
             day_last_sec = max(hhmm_to_seconds(v) for v in event_last_finisher.values())
-            
+
             day_first_finisher_str = _format_seconds_to_hhmm(day_first_sec)
             day_last_finisher_str = _format_seconds_to_hhmm(day_last_sec)
         else:
@@ -322,7 +368,8 @@ def compute_predicted_timings(
             if event_durations and event_start_times:
                 # Compute day_last from start_time + duration for each event
                 day_last_min = max(
-                    event_start_times.get(event_name, 0) + event_durations.get(event_name, 0)
+                    event_start_times.get(event_name, 0)
+                    + event_durations.get(event_name, 0)
                     for event_name in event_start_times.keys()
                     if event_name in event_durations
                 )
@@ -330,22 +377,24 @@ def compute_predicted_timings(
                 # Set day_first to day_start as fallback
                 day_first_finisher_str = day_start_str
             else:
-                logger.warning("Issue #638: No event finishers and no duration fallback available")
+                logger.warning(
+                    "Issue #638: No event finishers and no duration fallback available"
+                )
                 return None
-        
+
         day_end_str = day_last_finisher_str  # day_end = day_last_finisher
-        
+
         # day_duration = day_end - day_start
         def hhmm_to_seconds(hhmm_str: str) -> float:
             try:
-                parts = hhmm_str.split(':')
+                parts = hhmm_str.split(":")
                 return int(parts[0]) * 3600 + int(parts[1]) * 60
             except (ValueError, IndexError):
                 return 0.0
-        
+
         day_duration_sec = hhmm_to_seconds(day_end_str) - hhmm_to_seconds(day_start_str)
         day_duration_str = _format_seconds_to_hhmm(day_duration_sec)
-        
+
         # Build predicted_timings structure
         predicted_timings = {
             "day_start": day_start_str,
@@ -355,17 +404,19 @@ def compute_predicted_timings(
             "day_last_finisher": day_last_finisher_str,
             "day_end": day_end_str,
             "actual_event_duration": actual_event_duration,
-            "day_duration": day_duration_str
+            "day_duration": day_duration_str,
         }
-        
+
         logger.debug(
             f"Issue #638: Computed predicted_timings: "
             f"day_start={day_start_str}, day_first={day_first_finisher_str}, "
             f"day_last={day_last_finisher_str}, day_duration={day_duration_str}"
         )
-        
+
         return predicted_timings
-        
+
     except Exception as e:
-        logger.error(f"Issue #638: Failed to compute predicted_timings: {e}", exc_info=True)
+        logger.error(
+            f"Issue #638: Failed to compute predicted_timings: {e}", exc_info=True
+        )
         return None

@@ -4,6 +4,7 @@ Session enforcement for Cloud Run (Issue #740).
 All HTML and API routes require a valid password session except:
   GET /, POST /login, GET /logout, GET /static/*
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,7 +20,9 @@ from app.utils.env import env_bool
 logger = logging.getLogger(__name__)
 
 _LOCSHEET_SHORT_RE = re.compile(r"^/locsheets/(fri|sat|sun|mon)/([A-Za-z0-9_-]+)$")
-_LOCSHEET_FULL_RE = re.compile(r"^/locsheets/([A-Za-z0-9_-]+)/(fri|sat|sun|mon)/([A-Za-z0-9_-]+)$")
+_LOCSHEET_FULL_RE = re.compile(
+    r"^/locsheets/([A-Za-z0-9_-]+)/(fri|sat|sun|mon)/([A-Za-z0-9_-]+)$"
+)
 
 
 def _is_public_locsheet_path(path: str, method: str) -> bool:

@@ -8,6 +8,7 @@ Issue #810: paired reverse-leg locations (shared ``location_key``) appear once i
 index, using the outbound (lowest) ``loc_id`` as the sheet link target. HTML is also
 written under each pair member's loc_id for direct URL compatibility.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,9 @@ def _is_onepage_y(loc: Dict[str, Any]) -> bool:
     return str(loc.get("onepage", "")).strip().lower() == "y"
 
 
-def build_loc_sheet_entries(run_dir: Path, selected_day: str) -> List[Dict[str, Any]]:
+def build_loc_sheet_entries(  # noqa: C901
+    run_dir: Path, selected_day: str
+) -> List[Dict[str, Any]]:
     """
     Return sorted list of {loc_id, label} for the Loc Sheets index page.
     """
