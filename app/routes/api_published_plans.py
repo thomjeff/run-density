@@ -41,6 +41,7 @@ from app.core.execute.published_plan import (
     archive_published_plan,
     deactivate_published_plan,
     import_published_plan,
+    list_plan_loc_sheets,
     listed_plans,
     map_snapshot,
     operations_board,
@@ -181,6 +182,16 @@ async def list_plans(request: Request):
 async def get_active_context(request: Request):
     _guard(request)
     return active_day_context()
+
+
+@router.get("/api/execute/plans/{plan_id}/locsheets")
+async def get_plan_locsheets(request: Request, plan_id: str):
+    _guard(request)
+    try:
+        listing = list_plan_loc_sheets(plan_id)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    return {"ok": True, **listing}
 
 
 @router.get("/api/execute/plans/{plan_id}/assignments")

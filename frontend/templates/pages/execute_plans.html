@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 {% include 'partials/race_config_page_styles.html' %}
-<link rel="stylesheet" href="/static/css/execute_plans.css?v=928a">
+<link rel="stylesheet" href="/static/css/execute_plans.css?v=936d">
 {% endblock %}
 
 {% block content %}
@@ -14,6 +14,8 @@
         <p class="race-config-page-lead">
             Import a published Day Plan. Import does not activate.
             At most one plan is active. Archive keeps records; restore does not activate.
+            Volunteer location sheets are public as soon as a plan is imported;
+            archive turns those URLs off.
         </p>
     </div>
 
@@ -47,9 +49,23 @@
         </p>
     </div>
 
+    <div id="rf-plans-sheets" class="content-card rf-plans-sheets" hidden>
+        <div class="card-header">
+            <h3 class="card-title" id="rf-plans-sheets-title">Location sheets</h3>
+            <div class="card-actions" id="rf-plans-sheets-actions"></div>
+        </div>
+        <p class="card-help">
+            Copy a URL to text a volunteer. No password. Browser print for paper.
+            These links stay up while this Day Plan is imported and not archived.
+        </p>
+        <p id="rf-plans-sheets-status" class="card-help" hidden></p>
+        <div id="rf-plans-sheets-list"></div>
+    </div>
+
     <div id="rf-plans-assign" class="content-card rf-plans-assign" hidden>
         <div class="card-header">
             <h3 class="card-title" id="rf-plans-assign-title">Assignments</h3>
+            <div class="card-actions" id="rf-plans-assign-header-actions"></div>
         </div>
         <p class="card-help">
             Device id is the phone. Resource name, person, phone, and agency
@@ -73,7 +89,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/table_actions.js?v=920b"></script>
+<script src="/static/js/table_actions.js?v=936b"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_plans.js?v=928a"></script>
+<script src="/static/js/execute_plans.js?v=936b"></script>
 {% endblock %}

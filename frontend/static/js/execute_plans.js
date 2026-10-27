@@ -14,6 +14,7 @@
     var plans = [];
     var activeId = null;
     var assignPlanId = null;
+    var sheetsPlanId = null;
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -147,6 +148,13 @@
                 appendAction(
                     actions,
                     "locations",
+                    "Location sheets for volunteers",
+                    "sheets",
+                    id
+                );
+                appendAction(
+                    actions,
+                    "person",
                     "Assignments for this Day Plan",
                     "assign",
                     id
@@ -157,6 +165,13 @@
                 appendAction(
                     actions,
                     "locations",
+                    "Location sheets for volunteers",
+                    "sheets",
+                    id
+                );
+                appendAction(
+                    actions,
+                    "person",
                     "Assignments for this Day Plan",
                     "assign",
                     id
@@ -220,6 +235,11 @@
                 plan_id: planId,
             }).then(function () {
                 setStatus("Archived. Records were kept.");
+                if (sheetsPlanId === planId) {
+                    sheetsPlanId = null;
+                    var panel = qs("#rf-plans-sheets");
+                    if (panel) panel.hidden = true;
+                }
                 return loadPlans();
             });
         }
@@ -233,6 +253,9 @@
         }
         if (action === "assign") {
             return openAssignments(planId);
+        }
+        if (action === "sheets") {
+            return openSheets(planId);
         }
         return Promise.resolve();
     }
@@ -292,8 +315,118 @@
             .join("");
     }
 
+    function sheetsStatus(message, isError) {
+        var el = qs("#rf-plans-sheets-status");
+        if (!el) return;
+        if (!message) {
+            el.hidden = true;
+            el.textContent = "";
+            return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+        el.style.color = isError ? "#b42318" : "";
+    }
+
+    function copySheetUrl(path) {
+        var url = window.location.origin + path;
+        var done = function () {
+            sheetsStatus("Copied " + url);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(url).then(done).catch(function () {
+                window.prompt("Copy volunteer URL", url);
+                done();
+            });
+        }
+        window.prompt("Copy volunteer URL", url);
+        done();
+        return Promise.resolve();
+    }
+
+    function renderSheetList(rows) {
+        var box = qs("#rf-plans-sheets-list");
+        if (!box) return;
+        if (!rows || !rows.length) {
+            box.innerHTML =
+                '<p class="card-help">No volunteer sheets in this Day Plan ZIP.</p>';
+            return;
+        }
+        box.innerHTML = rows
+            .map(function (row) {
+                return (
+                    '<div class="rf-plans-sheet-row">' +
+                    "<span>" +
+                    esc(row.loc_id) +
+                    "</span><span>" +
+                    esc(row.loc_label || "") +
+                    '</span><a href="' +
+                    esc(row.path) +
+                    '" target="_blank" rel="noopener">' +
+                    esc(row.path) +
+                    "</a></div>"
+                );
+            })
+            .join("");
+        box.querySelectorAll(".rf-plans-sheet-row").forEach(function (rowEl, idx) {
+            var path = rows[idx] && rows[idx].path;
+            if (!path || !window.TableActions) return;
+            rowEl.appendChild(
+                window.TableActions.createIconButton(
+                    "copy",
+                    "Copy volunteer URL",
+                    function (ev) {
+                        ev.preventDefault();
+                        copySheetUrl(path);
+                    }
+                )
+            );
+        });
+    }
+
+    function openSheets(planId) {
+        sheetsPlanId = planId;
+        var assign = qs("#rf-plans-assign");
+        if (assign) assign.hidden = true;
+        var panel = qs("#rf-plans-sheets");
+        var title = qs("#rf-plans-sheets-title");
+        var row = plans.filter(function (item) {
+            return item.plan_id === planId;
+        })[0];
+        if (title) {
+            title.textContent =
+                "Location sheets · " +
+                ((row && (row.name || row.calendar_date)) || "Day Plan");
+        }
+        if (panel) panel.hidden = false;
+        sheetsStatus("");
+        return jsonFetch(
+            "/api/execute/plans/" + encodeURIComponent(planId) + "/locsheets"
+        )
+            .then(function (data) {
+                renderSheetList(data.sheets || []);
+            })
+            .catch(function (err) {
+                sheetsStatus(err.message || "Could not load location sheets.", true);
+            });
+    }
+
+    function closeSheets() {
+        sheetsPlanId = null;
+        var panel = qs("#rf-plans-sheets");
+        if (panel) panel.hidden = true;
+    }
+
+    function closeAssignments() {
+        assignPlanId = null;
+        var panel = qs("#rf-plans-assign");
+        if (panel) panel.hidden = true;
+    }
+
     function openAssignments(planId) {
         assignPlanId = planId;
+        var sheets = qs("#rf-plans-sheets");
+        if (sheets) sheets.hidden = true;
         var panel = qs("#rf-plans-assign");
         var title = qs("#rf-plans-assign-title");
         var row = plans.filter(function (item) {
@@ -424,6 +557,31 @@
         if (form) form.addEventListener("submit", savePlanAssignment);
         var del = qs("#rf-plans-assign-delete");
         if (del) del.addEventListener("click", deletePlanAssignment);
+        function bindClose(containerId, title, closeFn) {
+            var box = qs(containerId);
+            if (!box || !window.TableActions) return;
+            if (box.querySelector(".course-map-action-btn")) return;
+            box.appendChild(
+                window.TableActions.createIconButton(
+                    "close",
+                    title,
+                    function (ev) {
+                        ev.preventDefault();
+                        closeFn();
+                    }
+                )
+            );
+        }
+        bindClose(
+            "#rf-plans-sheets-actions",
+            "Close location sheets",
+            closeSheets
+        );
+        bindClose(
+            "#rf-plans-assign-header-actions",
+            "Close assignments",
+            closeAssignments
+        );
         var list = qs("#rf-plans-assign-list");
         if (list) {
             list.addEventListener("click", function (ev) {

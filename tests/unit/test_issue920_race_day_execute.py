@@ -252,11 +252,20 @@ def test_execute_nav_and_plans_copy():
     assert 'data-rf-execute-view="plans">Plans</a>' in base
     assert 'data-rf-execute-view="operations">Operations</a>' in base
     assert "Import does not activate" in plans_html
+    assert "Volunteer location sheets are public" in plans_html
+    assert "rf-plans-sheets" in plans_html
+    assert "rf-plans-sheets-actions" in plans_html
+    assert "rf-plans-assign-header-actions" in plans_html
     assert "table_actions.js" in plans_html
     assert "Activate this Day Plan" in plans_js
     assert 'createIconButton(kind, title, function (ev)' in plans_js
     assert '"activate"' in plans_js
     assert '"archive"' in plans_js
+    assert '"sheets"' in plans_js
+    assert '"locations"' in plans_js
+    assert '"person"' in plans_js
+    assert "Close location sheets" in plans_js
+    assert "/locsheets" in plans_js
     assert "Records are kept" in plans_js
     assert "/api/execute/ops/board" in ops_js
     assert "/api/execute/ops/reopen" in ops_js

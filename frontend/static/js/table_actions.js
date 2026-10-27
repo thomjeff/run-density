@@ -37,6 +37,16 @@
         '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>' +
         '<circle cx="12" cy="10" r="3"/>' +
         '</svg>';
+    var PERSON_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' +
+        '<circle cx="12" cy="7" r="4"/>' +
+        '</svg>';
+    var CLOSE_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<line x1="18" y1="6" x2="6" y2="18"/>' +
+        '<line x1="6" y1="6" x2="18" y2="18"/>' +
+        '</svg>';
     var SPLIT_ICON_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
         '<circle cx="6" cy="6" r="3"/>' +
@@ -90,6 +100,8 @@
         else if (kind === 'split') btn.innerHTML = SPLIT_ICON_SVG;
         else if (kind === 'reverse') btn.innerHTML = REVERSE_ICON_SVG;
         else if (kind === 'locations') btn.innerHTML = LOCATIONS_ICON_SVG;
+        else if (kind === 'person') btn.innerHTML = PERSON_ICON_SVG;
+        else if (kind === 'close') btn.innerHTML = CLOSE_ICON_SVG;
         else if (kind === 'view') btn.innerHTML = VIEW_ICON_SVG;
         else if (kind === 'activate') btn.innerHTML = ACTIVATE_ICON_SVG;
         else if (kind === 'deactivate') btn.innerHTML = DEACTIVATE_ICON_SVG;

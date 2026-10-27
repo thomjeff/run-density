@@ -7,7 +7,7 @@ import json
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from app.core.execute.published_plan import (
@@ -17,6 +17,8 @@ from app.core.execute.published_plan import (
     SCHEMA_VERSION,
     PublishedPlanError,
     assert_date_matches_weekday,
+    loc_sheet_relpath,
+    loc_sheet_token,
     parse_calendar_date,
     race_display_name,
     sha256_bytes,
@@ -125,6 +127,34 @@ def _course_from_segments(
     return _wgs84_feature_collection(filtered)
 
 
+def _pack_loc_sheets(
+    run_id: str,
+    weekday: str,
+    locations: Sequence[Mapping[str, Any]],
+) -> Dict[str, bytes]:
+    """Copy existing onepage HTML into the Day Plan ZIP. Does not generate."""
+    html_dir = get_run_directory(run_id) / weekday / "reports" / "loc_sheets" / "html"
+    packed: Dict[str, bytes] = {}
+    if not html_dir.is_dir():
+        return packed
+    for row in locations:
+        raw = row.get("loc_id")
+        if raw in (None, ""):
+            continue
+        flag = str(row.get("onepage", "")).strip().lower()
+        if flag in ("n", "no"):
+            continue
+        try:
+            rel = loc_sheet_relpath(raw)
+            token = loc_sheet_token(raw)
+        except PublishedPlanError:
+            continue
+        path = html_dir / f"{token}.html"
+        if path.is_file():
+            packed[rel] = path.read_bytes()
+    return packed
+
+
 def _location_export_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "loc_id": row.get("loc_id"),
@@ -187,6 +217,7 @@ def build_published_plan_files(
             }
         )
     files[LOCATIONS_NAME] = json.dumps(locations_doc).encode("utf-8")
+    files.update(_pack_loc_sheets(run_id, weekday, report.get("locations") or []))
     plan_name = name or f"{event_edition or 'Day plan'} {calendar_date}"
     source_config = analysis.get("config_id") or analysis.get("package_id")
     manifest = {
