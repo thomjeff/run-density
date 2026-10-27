@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 from app.core.execute.operator import (
     clean_operator,
     clear_operator_cookie,
     set_operator_cookie,
+)
+from app.core.execute.published_plan import (
+    PublishedPlanError,
+    resolve_public_loc_sheet,
 )
 from app.utils.auth import (
     clear_session_response,
@@ -104,6 +113,16 @@ async def ready():
 @router.get("/api/auth/check")
 async def check_session(request: Request):
     return JSONResponse(content={"authenticated": is_session_valid(request)})
+
+
+@router.get("/locsheets/{plan_id}/{loc_id}")
+async def public_loc_sheet(plan_id: str, loc_id: str):
+    """Volunteer one-pager. No login. Independent of the active plan (#936)."""
+    try:
+        path = resolve_public_loc_sheet(plan_id, loc_id)
+    except PublishedPlanError:
+        raise HTTPException(status_code=404, detail="Location sheet not found")
+    return FileResponse(path, media_type="text/html")
 
 
 @router.get("/execute", response_class=HTMLResponse)

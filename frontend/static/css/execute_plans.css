@@ -12,6 +12,37 @@
     color: #6b7280;
 }
 
+.rf-plans-sheets,
+.rf-plans-assign {
+    margin-top: 1rem;
+}
+
+html.rf-tabler .race-config-page .rf-plans-sheets .card-actions .course-map-action-btn,
+html.rf-tabler .race-config-page .rf-plans-assign .card-actions .course-map-action-btn {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px;
+    padding: 0 !important;
+    font-size: 0 !important;
+    color: #182433 !important;
+}
+
+.rf-plans-sheet-row {
+    display: grid;
+    grid-template-columns: 5rem 1fr minmax(12rem, 2fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    font-size: 0.9rem;
+}
+
+.rf-plans-sheet-row a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .rf-plans-assign-form {
     display: grid;
     grid-template-columns: 1fr 1fr;

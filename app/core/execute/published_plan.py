@@ -38,6 +38,7 @@ REGISTRY_NAME = "registry.json"
 MANIFEST_NAME = "manifest.json"
 LOCATIONS_NAME = "locations.json"
 COURSES_DIR = "courses"
+LOC_SHEETS_DIR = "loc_sheets"
 RACE_DISPLAY_NAMES = {
     "elite": "5K Elite",
     "open": "5K Open",
@@ -741,6 +742,98 @@ def load_imported_plan(
         "courses": courses,
         "directory": str(dest),
         "active": registry.get("active_plan_id") == plan_id,
+    }
+
+
+def loc_sheet_token(loc_id: Any) -> str:
+    text = str(loc_id or "").strip()
+    if not text or not text.replace("-", "").replace("_", "").isalnum():
+        raise PublishedPlanError("Location sheet not found.")
+    return text
+
+
+def loc_sheet_relpath(loc_id: Any) -> str:
+    return f"{LOC_SHEETS_DIR}/{loc_sheet_token(loc_id)}.html"
+
+
+def _location_id_tokens(locations_doc: Mapping[str, Any]) -> set[str]:
+    tokens: set[str] = set()
+    for row in locations_doc.get("locations") or []:
+        if not isinstance(row, Mapping):
+            continue
+        raw = row.get("loc_id")
+        if raw in (None, ""):
+            continue
+        tokens.add(str(raw).strip())
+    return tokens
+
+
+def resolve_public_loc_sheet(
+    plan_id: str,
+    loc_id: str,
+    root: Optional[Path] = None,
+) -> Path:
+    """Path to a packaged volunteer HTML sheet, or raise if it must 404.
+
+    Independent of ``active_plan_id``. Archived plans never expose sheets.
+    """
+    plan_id = assert_uuid(plan_id)
+    token = loc_sheet_token(loc_id)
+    registry = load_registry(root)
+    meta = (registry.get("plans") or {}).get(plan_id)
+    if not meta or meta.get("archived"):
+        raise PublishedPlanError("Location sheet not found.")
+    loaded = load_imported_plan(plan_id, root)
+    if token not in _location_id_tokens(loaded.get("locations") or {}):
+        raise PublishedPlanError("Location sheet not found.")
+    dest = Path(loaded["directory"]).resolve()
+    path = (dest / loc_sheet_relpath(token)).resolve()
+    if dest not in path.parents:
+        raise PublishedPlanError("Location sheet not found.")
+    if not path.is_file():
+        raise PublishedPlanError("Location sheet not found.")
+    return path
+
+
+def list_plan_loc_sheets(
+    plan_id: str,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Operator index of copyable volunteer URLs for one imported plan."""
+    plan_id = assert_uuid(plan_id)
+    registry = load_registry(root)
+    meta = (registry.get("plans") or {}).get(plan_id)
+    if not meta:
+        raise PublishedPlanError(f"Published plan {plan_id} is not imported.")
+    archived = bool(meta.get("archived"))
+    loaded = load_imported_plan(plan_id, root)
+    dest = Path(loaded["directory"])
+    sheets: List[Dict[str, Any]] = []
+    if not archived:
+        for row in loaded.get("locations", {}).get("locations") or []:
+            if not isinstance(row, Mapping):
+                continue
+            raw = row.get("loc_id")
+            if raw in (None, ""):
+                continue
+            try:
+                token = loc_sheet_token(raw)
+                html_path = dest / loc_sheet_relpath(token)
+            except PublishedPlanError:
+                continue
+            if not html_path.is_file():
+                continue
+            sheets.append(
+                {
+                    "loc_id": token,
+                    "loc_label": row.get("loc_label") or "",
+                    "path": f"/locsheets/{plan_id}/{token}",
+                }
+            )
+    return {
+        "plan_id": plan_id,
+        "archived": archived,
+        "sheets": sheets,
     }
 
 

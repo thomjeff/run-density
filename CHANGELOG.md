@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Volunteer location sheets on Execute (#936)
+- Plan publish copies existing onepage HTML into the Day Plan ZIP as `loc_sheets/{loc_id}.html`
+- Execute serves `/locsheets/{plan_id}/{loc_id}` with no login. Import makes sheets public; archive 404s; restore turns them back on
+- Plans lists copyable volunteer URLs. Serving a sheet does not read or change the active Day Plan
+- Location sheets and Assignments panels have a close icon. Table actions use the pin for sheets and a person for assignments
+
 ### Code Quality gate (#940)
 - flake8, black, and isort share line length 88. Config is `.flake8` and `pyproject.toml`
 - `app/` is formatted so a product edit no longer fails CI on leftover whitespace
