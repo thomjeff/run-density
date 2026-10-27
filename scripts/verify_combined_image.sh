@@ -73,9 +73,6 @@ assert_http /motion "200 303"
 assert_http /progression "200 303"
 assert_http /locations "200 303"
 assert_http /course-mapping "200 303"
-assert_http /execute "200 303"
-assert_http /execute/participants "200 303"
-assert_http /execute/incidents "200 303"
 
 echo
 echo "Combined image verified."

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Create is Build + Plan only (#938)
+- Create (`app.main`, `:8080`) no longer mounts Execute pages or `/api/execute/*`. Workspace picker is Build | Plan
+- Plan still publishes a Day Plan ZIP (`POST /api/plan/plans`). Race day is `make execute` only
+- Combined-image verify no longer requires `/execute*`. Execute tests use `app.execute_app`
+
 ### Create / Execute local environments (#935)
 - Local Make targets are `create` and `execute` (plus `stop-create` / `stop-execute`). Create is Build + Plan on `:8080`; Execute is race day on `:8081` with Postgres
 - Compose service `app` is now `create` (`runflow-create`). Create no longer launches under coverage

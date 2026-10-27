@@ -345,53 +345,6 @@ async def progression(request: Request):
     )
 
 
-@router.get("/execute", response_class=HTMLResponse)
-async def execute(request: Request):
-    """
-    Execute race-day reopening board (Issue #893).
-
-    Requires a Plan run_id. Planning data is read-only; operator actions
-    persist in {day}/execution/state.json.
-    """
-    auth_redirect = require_auth(request)
-    if auth_redirect:
-        return auth_redirect
-    meta = get_stub_meta()
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/execute.html",
-        context={"request": request, "meta": meta},
-    )
-
-
-@router.get("/execute/participants", response_class=HTMLResponse)
-async def execute_participants(request: Request):
-    """Execute participant lookup (Issue #911)."""
-    auth_redirect = require_auth(request)
-    if auth_redirect:
-        return auth_redirect
-    meta = get_stub_meta()
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/execute_participants.html",
-        context={"request": request, "meta": meta},
-    )
-
-
-@router.get("/execute/incidents", response_class=HTMLResponse)
-async def execute_incidents(request: Request):
-    """Execute incident queue and form (Issue #911)."""
-    auth_redirect = require_auth(request)
-    if auth_redirect:
-        return auth_redirect
-    meta = get_stub_meta()
-    return templates.TemplateResponse(
-        request=request,
-        name="pages/execute_incidents.html",
-        context={"request": request, "meta": meta},
-    )
-
-
 @router.get("/locations", response_class=HTMLResponse)
 async def locations(request: Request):
     """

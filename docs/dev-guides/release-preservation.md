@@ -4,7 +4,7 @@
 **Issue:** #916  
 **Audience:** Developers and later Cursor sessions working on the Build/Plan → Execute split
 
-Until an approved image split, Runflow remains one combined Docker image. That image must keep building and running the v3.1.0 Build, Plan, and Execute application. New architecture is additive. Do not start published-plan or Operations Map work until this contract is still in force.
+`v3.1.0` is the last combined Build + Plan + Execute image (immutable tag). Current `main` splits them: Create is Build + Plan (`app.main`); Execute is `app.execute_app`. #916's keep-Execute-on-Create rule was retired in **#938**. Rebuild `v3.1.0` from the tag if you need the old all-in-one app.
 
 ---
 
@@ -115,16 +115,12 @@ CI on every PR builds the combined image from the PR commit (`git archive`), sta
 
 ---
 
-## D. Future Build/Plan and Execute images (transition)
+## D. Create and Execute images (current `main`)
 
-When separate images are approved:
-
-- Keep `Dockerfile` + `app.main:app` as the **combined** target for a defined transition period.
-- Add new files (`Dockerfile.plan`, `Dockerfile.execute`, or names decided then). Do **not** silently repurpose `Dockerfile` to build only one component.
-- Keep `Dockerfile.cloud` as the read-only skinny Locations image unless explicitly authorized.
-- Feature-branch tags stay `runflow:dev-…`. Release tags stay immutable.
-
-#917 (published plan + Operations Map) stays on the existing combined image. No PostgreSQL, GPS ingest, GCP Execute deploy, or image split in that issue.
+- Create: `Dockerfile` + `app.main:app` — Build + Plan, including Day Plan publish. No Execute operator routes (#938).
+- Execute: `Dockerfile.execute` + `app.execute_app:app` — race day.
+- Keep `Dockerfile.cloud` as the read-only skinny Locations image until #936 replaces that path.
+- Feature-branch tags stay `runflow:dev-…`. Release tags stay immutable. Do not move `v3.1.0`.
 
 ---
 
@@ -150,11 +146,11 @@ Do not move tag `v3.1.0`. If a later release is needed, cut `v3.1.1` or `v3.2.0`
 
 | Area | What must keep working | Automated coverage today |
 | --- | --- | --- |
-| Combined image | `Dockerfile` + Compose service `create` + `app.main:app` start | `tests/unit/test_combined_image_preservation.py`; `scripts/verify_combined_image.sh` |
+| Combined image | `Dockerfile` + Compose service `create` + `app.main:app` start; **no Execute routes** (#938) | `tests/unit/test_combined_image_preservation.py`; `scripts/verify_combined_image.sh` |
 | Build | Legs, courses, runners, packages; Build owns location edits | `test_issue904_build_plan_ownership.py`, config-package / legs / runners unit tests |
-| Plan | Analysis launch, Overview / Density / Flow / Junctions / Motion / Progression / Locations | `test_issue798_phase1_routers.py`, analysis / density / flow / progression unit tests; Create UI or Postman |
-| Execute | Reopen, Participants, Incidents | `test_issue893_execute_board.py`, `test_issue911_participants.py`, `test_issue912_incidents.py`, `test_issue914_incidents.py` |
-| Workspace chrome | Build / Plan / Execute nav | `test_issue878_workspace_nav.py` |
+| Plan | Analysis launch, Overview / Density / Flow / Junctions / Motion / Progression / Locations; publish Day Plan ZIP | `test_issue798_phase1_routers.py`, analysis / density / flow / progression unit tests; Create UI or Postman |
+| Execute | Purpose-built image (`app.execute_app`) | `test_issue893_execute_board.py`, `test_issue911_participants.py`, `test_issue912_incidents.py`, `test_issue914_incidents.py` (against `execute_app`) |
+| Workspace chrome | Create: Build \| Plan. Execute image: Plans \| Operations \| Participants \| Incidents | `test_issue878_workspace_nav.py` |
 | Skinny cloud | Read-only Locations (`Dockerfile.cloud`) | Docs only; Make wrappers removed in #935; **no automated startup test** |
 | Local Docker | `make create` on port 8080; `make execute` on port 8081 | CI combined-image workflow |
 

@@ -124,7 +124,7 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ## Code Quality
 
-Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the Create `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan / leftover Execute routes. See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
+Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`). Every PR also runs **combined-image verify** (`.github/workflows/combined-image-verify.yaml`): the Create `Dockerfile` / `app.main` image must still build, start, and serve Build / Plan (not Execute). See [`docs/dev-guides/release-preservation.md`](docs/dev-guides/release-preservation.md).
 
 ### Quality Checks (On Pull Requests)
 The CI pipeline runs automated checks on all Python code changes:
