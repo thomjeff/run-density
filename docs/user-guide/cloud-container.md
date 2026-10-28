@@ -35,8 +35,9 @@ Optional public loc-sheet access (direct one-pager URLs only):
 PUBLIC_LOCSHEETS=true
 ```
 When enabled, direct loc-sheet HTML routes are accessible without password auth:
-- `/locsheets/{day}/{loc_id}`
-- `/locsheets/{run_id}/{day}/{loc_id}`
+- `/locsheets/{day}/{loc_id}` (short weekday form)
+- `/locsheets/{run_id}/{loc_id}` (day from the run)
+- `/locsheets/{run_id}/{day}/{loc_id}` (legacy; redirects to the two-segment URL)
 
 The `/locsheets` index page remains behind password auth.
 

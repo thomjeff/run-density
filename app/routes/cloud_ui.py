@@ -8,7 +8,6 @@ Issue #740: Dashboard landing, session on all routes (middleware).
 
 import json
 import logging
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
@@ -24,7 +23,7 @@ from app.utils.auth import (
 )
 from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.env import env_str
-from app.utils.run_id import get_available_days, get_run_directory
+from app.utils.run_id import get_available_days, get_run_directory, resolve_selected_day
 
 logger = logging.getLogger(__name__)
 
@@ -121,19 +120,32 @@ async def check_session(request: Request):
 
 
 # Issue #735: Loc Sheets index (behind auth) and public sheet URLs
-# Issue #737: Short URL (no run_id) for stable Volunteer Local links; register before 3-param route
-@router.get("/locsheets/{day}/{loc_id}", response_class=HTMLResponse)
-async def cloud_locsheet_html_short(request: Request, day: str, loc_id: str):
-    """Serve location one-pager HTML via short URL (session: CloudSessionMiddleware; Issue #740)."""
-    run_id = _get_cloud_run_id()
-    if day not in ("fri", "sat", "sun", "mon"):
-        raise HTTPException(status_code=400, detail="Invalid day")
+# Issue #737: Short URL (weekday/loc_id) for Volunteer Local links
+# Issue #942: /locsheets/{run_id}/{loc_id} derives day from the run
+_WEEKDAYS = frozenset(("fri", "sat", "sun", "mon"))
+
+
+@router.get("/locsheets/{run_or_day}/{loc_id}", response_class=HTMLResponse)
+async def cloud_locsheet_html_two_segment(run_or_day: str, loc_id: str):
+    """Short weekday URL or run_id URL with day from the run (#737 / #942)."""
+    from app.utils.loc_sheets_list import loc_sheet_html_path
+
+    cloud_run_id = _get_cloud_run_id()
+    token = (run_or_day or "").strip()
+    if token in _WEEKDAYS:
+        selected_day = token
+        run_id = cloud_run_id
+    else:
+        if token != cloud_run_id:
+            raise HTTPException(status_code=404, detail="Not found")
+        run_id = token
+        try:
+            selected_day, _ = resolve_selected_day(run_id, None)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Location sheet not found")
     if not loc_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid loc_id")
-    run_dir = get_run_directory(run_id)
-    html_path = (
-        Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
-    )
+    html_path = loc_sheet_html_path(get_run_directory(run_id), selected_day, loc_id)
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
     return FileResponse(
@@ -165,21 +177,8 @@ async def cloud_locsheets(request: Request, day: Optional[str] = Query(None)):
 
 
 @router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
-async def cloud_locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
-    """Serve a single location one-pager HTML (session: CloudSessionMiddleware)."""
-    cloud_run_id = _get_cloud_run_id()
-    if run_id != cloud_run_id:
-        raise HTTPException(status_code=404, detail="Not found")
-    if day not in ("fri", "sat", "sun", "mon"):
+async def cloud_locsheet_html_legacy(run_id: str, day: str, loc_id: str):
+    """Leftover {day} in full cloud loc-sheet URLs (#942)."""
+    if day not in _WEEKDAYS:
         raise HTTPException(status_code=400, detail="Invalid day")
-    if not loc_id.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=400, detail="Invalid loc_id")
-    run_dir = get_run_directory(run_id)
-    html_path = (
-        Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
-    )
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Location sheet not found")
-    return FileResponse(
-        html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS
-    )
+    return RedirectResponse(url=f"/locsheets/{run_id}/{loc_id}", status_code=301)

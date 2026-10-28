@@ -377,14 +377,13 @@ async def locsheets(
     day: Optional[str] = Query(None),
 ):
     """
-    Day-based index of location one-pager sheets (Issue #735).
-    Lists loc_id and label for onepage='y' locations; controlled by day selector.
+    Index of location one-pager sheets (Issue #735).
+    Day is derived from the run, same as Overview (#841 / #942).
     """
     auth_redirect = require_auth(request)
     if auth_redirect:
         return auth_redirect
     from app.utils.run_id import (
-        get_available_days,
         get_latest_run_id,
         get_run_directory,
         resolve_selected_day,
@@ -392,20 +391,17 @@ async def locsheets(
 
     if not run_id:
         run_id = get_latest_run_id()
+    if not run_id:
+        return RedirectResponse(url="/dashboard", status_code=303)
     try:
-        selected_day, available_days = resolve_selected_day(run_id, day)
+        selected_day, _ = resolve_selected_day(run_id, None)
     except ValueError:
-        avail = get_available_days(run_id) if run_id else []
-        first_day = avail[0] if avail else ""
-        url = f"/locsheets?run_id={run_id}&day={first_day}" if run_id else "/dashboard"
-        return RedirectResponse(url=url, status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=303)
 
-    # Canonical URL: ensure run_id and day are in query so day selector works
-    q_run = request.query_params.get("run_id")
-    q_day = request.query_params.get("day")
-    if q_run != run_id or q_day != selected_day:
+    # Canonical URL: run_id only. Leftover ?day= is dropped (#942).
+    if request.query_params.get("run_id") != run_id or day is not None:
         return RedirectResponse(
-            url=f"/locsheets?run_id={run_id}&day={selected_day}",
+            url=f"/locsheets?run_id={run_id}",
             status_code=303,
         )
 
@@ -428,26 +424,35 @@ async def locsheets(
     )
 
 
-@router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
-async def locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
-    """Serve a single location one-pager HTML file; public (no auth) for Volunteer Local (Issue #735)."""
-
+@router.get("/locsheets/{run_id}/{loc_id}", response_class=HTMLResponse)
+async def locsheet_html(request: Request, run_id: str, loc_id: str):
+    """Public Create one-pager. Day comes from the run (#942)."""
     from fastapi.responses import FileResponse
 
-    from app.utils.run_id import get_run_directory
+    from app.utils.loc_sheets_list import loc_sheet_html_path
+    from app.utils.run_id import get_run_directory, resolve_selected_day
 
     run_dir = get_run_directory(run_id)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    # Path traversal: allow only alphanumeric loc_id and day
     if not loc_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid loc_id")
-    if day not in ("fri", "sat", "sun", "mon"):
-        raise HTTPException(status_code=400, detail="Invalid day")
-    html_path = run_dir / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    try:
+        selected_day, _ = resolve_selected_day(run_id, None)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Location sheet not found")
+    html_path = loc_sheet_html_path(run_dir, selected_day, loc_id)
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
     return FileResponse(html_path, media_type="text/html")
+
+
+@router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
+async def locsheet_html_legacy(run_id: str, day: str, loc_id: str):
+    """Leftover {day} in Create loc-sheet URLs (#942)."""
+    if day not in ("fri", "sat", "sun", "mon"):
+        raise HTTPException(status_code=400, detail="Invalid day")
+    return RedirectResponse(url=f"/locsheets/{run_id}/{loc_id}", status_code=301)
 
 
 @router.get("/course-mapping", response_class=HTMLResponse)

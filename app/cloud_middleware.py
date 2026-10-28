@@ -19,8 +19,9 @@ from app.utils.env import env_bool
 
 logger = logging.getLogger(__name__)
 
-_LOCSHEET_SHORT_RE = re.compile(r"^/locsheets/(fri|sat|sun|mon)/([A-Za-z0-9_-]+)$")
-_LOCSHEET_FULL_RE = re.compile(
+# Short weekday URL (#737) and /locsheets/{run_id}/{loc_id} (#942)
+_LOCSHEET_TWO_RE = re.compile(r"^/locsheets/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)$")
+_LOCSHEET_LEGACY_RE = re.compile(
     r"^/locsheets/([A-Za-z0-9_-]+)/(fri|sat|sun|mon)/([A-Za-z0-9_-]+)$"
 )
 
@@ -31,7 +32,7 @@ def _is_public_locsheet_path(path: str, method: str) -> bool:
         return False
     if not env_bool("PUBLIC_LOCSHEETS", default=False):
         return False
-    return bool(_LOCSHEET_SHORT_RE.match(path) or _LOCSHEET_FULL_RE.match(path))
+    return bool(_LOCSHEET_TWO_RE.match(path) or _LOCSHEET_LEGACY_RE.match(path))
 
 
 class CloudSessionMiddleware(BaseHTTPMiddleware):

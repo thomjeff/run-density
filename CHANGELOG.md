@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Create loc-sheet URLs drop leftover {day} (#942)
+- Public Create sheet URL is `/locsheets/{run_id}/{loc_id}`. Day is derived from the run, same as Overview
+- Leftover `/locsheets/{run_id}/{day}/{loc_id}` redirects to the two-segment URL. HTML still lives under `{run_id}/{day}/reports/loc_sheets/html/`
+- Execute volunteer URLs stay `/locsheets/{plan_id}/{loc_id}`. Skinny cloud keeps `/locsheets/{day}/{loc_id}`
+
 ### Volunteer location sheets on Execute (#936)
 - Plan publish copies existing onepage HTML into the Day Plan ZIP as `loc_sheets/{loc_id}.html`
 - Execute serves `/locsheets/{plan_id}/{loc_id}` with no login. Import makes sheets public; archive 404s; restore turns them back on

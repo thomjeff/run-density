@@ -156,10 +156,8 @@
         if (path === '/' || path === '/login') {
             return;
         }
-        if (!CLOUD_UI && path.startsWith('/locsheets/') && path.match(/^\/locsheets\/[^/]+\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
-            return;
-        }
-        if (!CLOUD_UI && path.startsWith('/locsheets/') && path.match(/^\/locsheets\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
+        // Public Create loc sheets: /locsheets/{run_id}/{loc_id} (#942) and leftover 3-segment URLs
+        if (!CLOUD_UI && /^\/locsheets\/[^/]+\/[^/]+(?:\/[^/]+)?$/.test(path)) {
             return;
         }
         

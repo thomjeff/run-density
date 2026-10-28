@@ -1217,7 +1217,7 @@
             if (!run_id) {
                 return escaped;
             }
-            path = `/locsheets/${encodeURIComponent(run_id)}/${encodeURIComponent(day)}/${encodeURIComponent(lid)}`;
+            path = `/locsheets/${encodeURIComponent(run_id)}/${encodeURIComponent(lid)}`;
         }
         return `<a href="${path}" target="_blank" rel="noopener" class="loc-sheet-link" onclick="event.stopPropagation()">${escaped}</a>`;
     }
