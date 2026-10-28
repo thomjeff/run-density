@@ -23,9 +23,22 @@ def is_turnaround(row: Mapping[str, Any]) -> bool:
     return loc_type in {"official", "course", ""}
 
 
+WATER_OR_SERVICE_TYPES = frozenset(
+    {
+        "water",
+        "aid",
+        "official",
+        "extract",
+        "first_aid",
+        "first-aid",
+        "extraction",
+    }
+)
+
+
 def is_water_or_service(row: Mapping[str, Any]) -> bool:
     loc_type = str(row.get("loc_type") or "").strip().lower()
-    return loc_type in {"water", "aid", "official"}
+    return loc_type in WATER_OR_SERVICE_TYPES
 
 
 def _coord(row: Mapping[str, Any]) -> Optional[Dict[str, float]]:

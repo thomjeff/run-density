@@ -49,6 +49,7 @@ EXECUTE_GONE_PATHS = (
     "/execute/plans",
     "/execute/participants",
     "/execute/incidents",
+    "/execute/help",
 )
 
 

@@ -3,13 +3,18 @@
 {% block title %}Participants{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="/static/css/execute_hs.css?v=914d">
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=944b">
 {% endblock %}
 
 {% block content %}
 <div class="rf-hs-page">
     <div class="page-header">
         <h2>Participants</h2>
+        <p class="rf-hs-lead">
+            List of all registered participants for the events associated with this
+            event plan. If no participants are showing, download the following
+            <a href="https://github.com/user-attachments/files/34037192/sample-participant-list.csv">sample</a>.
+        </p>
     </div>
 
     <div id="rf-hs-empty" class="rf-hs-empty" hidden>
@@ -49,5 +54,5 @@
 
 {% block extra_scripts %}
 <script src="/static/js/execute_context.js?v=920"></script>
-<script src="/static/js/execute_participants.js?v=920"></script>
+<script src="/static/js/execute_participants.js?v=944"></script>
 {% endblock %}

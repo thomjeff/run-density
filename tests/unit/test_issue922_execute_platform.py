@@ -188,6 +188,7 @@ def test_execute_app_is_not_main_and_omits_analysis_routes():
     paths = _route_paths(execute_app.routes)
     assert "/execute" in paths
     assert "/execute/plans" in paths
+    assert "/execute/help" in paths
     assert "/locsheets/{plan_id}/{loc_id}" in paths
     assert "/api/execute/plans/{plan_id}/locsheets" in paths
     assert "/ready" in paths

@@ -211,7 +211,13 @@ def test_api_import_lookup_incident_and_reimport(tmp_path, monkeypatch):
     )
     assert saved.json()["incident"]["outcome"] == "dnf"
     saved_notes = [item["text"] for item in saved.json()["incident"]["notes"]]
-    assert saved_notes == ["Opened.", "Arrived walking.", "Elects not to continue."]
+    assert saved_notes == [
+        "Opened.",
+        "Arrived walking.",
+        "Elects not to continue.",
+        "Location: Med tent, km 16.",
+        "Outcome: Did not finish (DNF).",
+    ]
     assert not any(text.startswith("Updated ") for text in saved_notes)
     closed = client.post(
         f"/api/execute/incidents/{iid}/close"
@@ -277,7 +283,7 @@ def test_pages_have_search_and_lists():
     assert "View active case" in people_js
     assert "Open incident" not in people_js
     assert "Show participants without a bib" in people
-    assert "Incidents" in incidents
+    assert "Cases" in incidents
     assert 'id="rf-hs-workspace"' in incidents
     assert 'id="rf-hs-queue"' in incidents
     assert 'id="rf-hs-case"' in incidents

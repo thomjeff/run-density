@@ -11,6 +11,15 @@
         '<line x1="12" y1="18" x2="12" y2="12"/>' +
         '<line x1="9" y1="15" x2="15" y2="15"/>' +
         "</svg>";
+    var VIEW_ICON =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="8"/>' +
+        '<path d="m21 21-4.35-4.35"/>' +
+        "</svg>";
+    var PHONE_ICON =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' +
+        "</svg>";
     var allRows = [];
     var conditionLabels = [];
     var selectedConditions = {};
@@ -23,6 +32,7 @@
     var sortDir = "asc";
     var searchTimer = null;
     var activeByReg = {};
+    var caseCountsByReg = {};
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -147,6 +157,78 @@
         });
         rows.sort(compareRows);
         return rows;
+    }
+
+    function phoneDigits(phone) {
+        var digits = String(phone || "").replace(/\D/g, "");
+        if (digits.length === 11 && digits.charAt(0) === "1") {
+            return digits.slice(1);
+        }
+        return digits;
+    }
+
+    function formatPhone(phone) {
+        var digits = phoneDigits(phone);
+        if (digits.length === 10) {
+            return (
+                "+1 (" +
+                digits.slice(0, 3) +
+                ") " +
+                digits.slice(3, 6) +
+                "-" +
+                digits.slice(6)
+            );
+        }
+        return String(phone || "").trim();
+    }
+
+    function phoneHrefNumber(phone) {
+        var nanp = phoneDigits(phone);
+        if (nanp.length === 10) return "+1" + nanp;
+        var raw = String(phone || "")
+            .replace(/[^\d+]/g, "")
+            .replace(/(?!^)\+/g, "");
+        return /\d/.test(raw) ? raw : "";
+    }
+
+    function phoneHtml(phone) {
+        var shown = formatPhone(phone);
+        var hrefNum = phoneHrefNumber(phone);
+        if (!shown) return '<span class="rf-hs-meta">—</span>';
+        if (!hrefNum) return esc(shown);
+        return (
+            '<span class="rf-ex-phone">' +
+            '<span class="rf-ex-phone-num">' +
+            esc(shown) +
+            "</span>" +
+            '<a class="rf-ex-phone-icon" href="tel:' +
+            esc(hrefNum) +
+            '" aria-label="Call">' +
+            PHONE_ICON +
+            "</a></span>"
+        );
+    }
+
+    function emailHtml(email) {
+        var value = String(email || "").trim();
+        if (!value) return '<span class="rf-hs-meta">—</span>';
+        return (
+            '<a class="rf-hs-email" href="mailto:' +
+            esc(value) +
+            '">' +
+            esc(value) +
+            "</a>"
+        );
+    }
+
+    function pairCell(text, empty) {
+        return (
+            '<span class="rf-hs-pair' +
+            (empty ? " is-empty" : "") +
+            '">' +
+            esc(text) +
+            "</span>"
+        );
     }
 
     function chipsHtml(list) {
@@ -292,43 +374,37 @@
         var warn = String(row.bib || "").trim()
             ? ""
             : '<p class="rf-hs-warn">Race Roster has no bib for this start. Type the number on the shirt when you start a case.</p>';
-        var active = activeByReg[String(row.reg_id)];
-        var caseActions =
-            '<div class="rf-hs-detail-actions">' +
-            '<button type="button" class="btn btn-sm" data-create="' +
-            esc(row.reg_id) +
-            '">' +
-            (active ? "Start another case" : "Start case") +
-            "</button>" +
-            (active
-                ? ' <a class="btn btn-sm" href="' +
-                  esc(incidentsHref(active.incident_id)) +
-                  '">View active case</a>'
-                : "") +
-            "</div>";
         return (
-            '<tr class="rf-hs-detail"><td colspan="7">' +
+            '<tr class="rf-hs-detail"><td colspan="8">' +
             warn +
             '<div class="rf-hs-detail-grid">' +
-            "<div><div class=\"rf-hs-label\">Emergency contact</div><div>" +
+            '<div class="rf-hs-detail-col">' +
+            '<div class="rf-hs-label">Phone / email</div>' +
+            '<div class="rf-hs-contact-line">' +
+            phoneHtml(row.phone) +
+            "</div>" +
+            '<div class="rf-hs-contact-line">' +
+            emailHtml(row.email) +
+            "</div>" +
+            '<div class="rf-hs-label" style="margin-top:0.7rem;">Emergency contact</div>' +
+            "<div>" +
             esc(row.emerg_name || "—") +
-            (row.emerg_phone ? " · " + esc(row.emerg_phone) : "") +
+            "</div>" +
+            '<div class="rf-hs-contact-line">' +
+            phoneHtml(row.emerg_phone) +
             "</div></div>" +
-            "<div><div class=\"rf-hs-label\">Phone / email</div><div>" +
-            esc(row.phone || "—") +
-            " · " +
-            esc(row.email || "—") +
-            "</div></div>" +
-            "<div><div class=\"rf-hs-label\">Disclosed conditions</div><div class=\"rf-hs-chip-row\">" +
+            '<div class="rf-hs-detail-col">' +
+            '<div class="rf-hs-label">Disclosed conditions</div>' +
+            '<div class="rf-hs-chip-row">' +
             chipsHtml(row.medical_conditions) +
-            "</div></div>" +
-            "<div><div class=\"rf-hs-label\">Details</div><div>" +
+            "</div>" +
+            '<div class="rf-hs-label" style="margin-top:0.7rem;">Details</div>' +
+            "<div>" +
             esc(row.medical_note || "—") +
             "</div>" +
             '<div class="rf-hs-meta" style="margin-top:0.25rem;">Avoid giving or doing: ' +
             esc(row.medical_avoid || "—") +
             "</div></div></div>" +
-            caseActions +
             "</td></tr>"
         );
     }
@@ -343,8 +419,41 @@
 
     function condCell(row) {
         var n = (row.medical_conditions || []).length;
-        if (!n) return '<span class="rf-hs-meta">—</span>';
-        return '<span class="rf-hs-cond-n">' + n + "</span>";
+        if (!n) return pairCell("--", true);
+        return pairCell(String(n), false);
+    }
+
+    function casesCell(row) {
+        var counts = caseCountsByReg[String(row.reg_id)] || {
+            active: 0,
+            closed: 0,
+        };
+        if (!counts.active && !counts.closed) return pairCell("--", true);
+        return pairCell(counts.active + " / " + counts.closed, false);
+    }
+
+    function actionsHtml(row) {
+        var active = activeByReg[String(row.reg_id)];
+        var html = '<td class="course-map-action-cell">';
+        if (active) {
+            html +=
+                '<a class="course-map-action-btn" href="' +
+                esc(incidentsHref(active.incident_id)) +
+                '" title="View active case" aria-label="View active case">' +
+                VIEW_ICON +
+                "</a>";
+        }
+        html +=
+            '<button type="button" class="course-map-action-btn" data-create="' +
+            esc(row.reg_id) +
+            '" title="' +
+            (active ? "Start another case" : "Start case") +
+            '" aria-label="' +
+            (active ? "Start another case" : "Start case") +
+            '">' +
+            INCIDENT_ICON +
+            "</button></td>";
+        return html;
     }
 
     function renderTable() {
@@ -412,27 +521,11 @@
                     "<td>" +
                     condCell(row) +
                     "</td>" +
-                    '<td class="course-map-action-cell">' +
-                    (function () {
-                        var active = activeByReg[String(row.reg_id)];
-                        if (active) {
-                            return (
-                                '<a class="course-map-action-btn" href="' +
-                                esc(incidentsHref(active.incident_id)) +
-                                '" title="View active case" aria-label="View active case">' +
-                                INCIDENT_ICON +
-                                "</a>"
-                            );
-                        }
-                        return (
-                            '<button type="button" class="course-map-action-btn" data-create="' +
-                            esc(row.reg_id) +
-                            '" title="Start case" aria-label="Start case">' +
-                            INCIDENT_ICON +
-                            "</button>"
-                        );
-                    })() +
-                    "</td></tr>";
+                    "<td>" +
+                    casesCell(row) +
+                    "</td>" +
+                    actionsHtml(row) +
+                    "</tr>";
                 return open ? main + detailHtml(row) : main;
             })
             .join("");
@@ -454,7 +547,7 @@
             '<th data-sort="age">Age' +
             sortMark("age") +
             "</th>" +
-            "<th>Conditions</th><th class=\"course-map-action-cell\">Actions</th></tr></thead>" +
+            "<th>Conditions</th><th>Cases</th><th class=\"course-map-action-cell\">Actions</th></tr></thead>" +
             "<tbody>" +
             body +
             "</tbody></table></div>" +
@@ -491,13 +584,26 @@
             })
             .then(function (body) {
                 activeByReg = {};
+                caseCountsByReg = {};
+                function bump(reg, key) {
+                    if (!reg) return;
+                    if (!caseCountsByReg[reg]) {
+                        caseCountsByReg[reg] = { active: 0, closed: 0 };
+                    }
+                    caseCountsByReg[reg][key] += 1;
+                }
                 ((body && body.active) || []).forEach(function (row) {
                     var reg = String(row.reg_id || "");
                     if (reg && !activeByReg[reg]) activeByReg[reg] = row;
+                    bump(reg, "active");
+                });
+                ((body && body.closed) || []).forEach(function (row) {
+                    bump(String(row.reg_id || ""), "closed");
                 });
             })
             .catch(function () {
                 activeByReg = {};
+                caseCountsByReg = {};
             });
     }
 

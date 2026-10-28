@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import zipfile
-from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -114,9 +113,7 @@ def test_normalize_copies_type_notes_into_description():
     assert incident["description"] == "Heat after km 8."
     assert incident["assigned_to"] == ""
     assert incident["location_loc_id"] == ""
-    assert incident["updated_at_label"] == datetime.fromisoformat(
-        "2026-10-20T17:21:00"
-    ).strftime("%a %H:%M")
+    assert incident["updated_at_label"] == "2026-10-20 17:21"
     assert incident["notes"][0]["kind"] == "system"
 
 
@@ -145,6 +142,7 @@ def test_reporter_agencies_are_alphabetical():
         "Ski",
         "Spectator",
         "Volunteer",
+        "YSSR",
     ]
 
 
@@ -248,11 +246,12 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert "Runner down after the water stop." in texts
     assert "911 called." in texts
     assert "Reported by Jeff · Race Crew." in texts
+    assert "Location: 10K Water Stop." in texts
     assert "Updated location" not in " ".join(texts)
     assert "Assigned SKI." in texts
     assert not any(text.startswith("Transferred ") for text in texts)
     assert kinds.count("user") == 1
-    assert kinds.count("system") == 3
+    assert kinds.count("system") == 4
     assert kinds.count("transfer") == 1
 
     again_report = client.put(
@@ -441,9 +440,8 @@ def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
     assert incident["reported_by_name"] == ""
     assert incident["assigned_to"] == ""
     assert incident["location_loc_id"] == ""
-    assert incident["updated_at_label"] == datetime.fromisoformat(
-        "2026-10-20T17:00:00"
-    ).strftime("%a %H:%M")
+    assert incident["updated_at_label"] == "2026-10-20 17:00"
+    assert incident["notes"][0]["saved_at_label"] == "2026-10-20 17:00"
     assert incident["care_transferred"] == "yes"
     assert incident["transferred_to"] == ["ski"]
 
@@ -467,7 +465,7 @@ def test_pages_have_two_pane_case_shell():
     assert 'id="hs-report-agency"' in js
     assert "Incident report" in js
     assert "Reported problem" in js
-    assert "Care provided — reported by the care team" in js
+    assert "Care provided" in js
     assert "911 called" in js
     assert 'id="hs-type-other"' in js
     assert 'id="hs-xfer-to"' in js
@@ -481,13 +479,13 @@ def test_pages_have_two_pane_case_shell():
     assert "Save case changes &amp; switch" in html
     assert 'id="hs-activity-modal"' in html
     assert "Discard changes" in html
-    assert js.index("Incident report") < js.index(">Case log<")
-    assert js.index("Reported problem") < js.index("Close case")
-    assert "Find bib or name" in js
+    assert js.index("Incident report") < js.index(">Case Updates<")
+    assert js.index("Reported problem") < js.index("Close Case")
+    assert "Search by bib number" in js
     assert "Location not recorded" in js
     assert "Care agency not recorded" in js
     assert "Save case" in js
-    assert "Review &amp; close case" in js
+    assert "Close Case" in js
     assert "Save changes & add note" not in js
     assert "function missingSaveFields" in js
     assert "function missingCloseFields" in js
@@ -496,20 +494,25 @@ def test_pages_have_two_pane_case_shell():
         js.index("function missingSaveFields") : js.index("function missingCloseFields")
     ]
     assert "Closed by" not in save_fields
-    assert "Start a case" in js
+    assert "start a new case" in html
     assert "not_yet_known" in js
     assert "More care options" in js
     assert "hs-id-badges" in js
     assert "rf-hs-911-badge" in js
-    assert "911 called?" in js
-    assert "Add to case log" in js
+    assert "Call 911" in js
+    assert "Mark Urgent" in js
+    assert "911 called?" not in js
+    assert "Record care agency" not in js
+    assert "Add update" in js
     assert "Closed by (required)" in js
     assert "Roles/Organization" in js
     assert "Closing member's team or organization" not in js
     assert "function healthHtml" in js
     assert "rf-hs-idbar-health" in js
-    assert js.index('id="hs-care-options"') < js.index('id="hs-by-name"')
-    assert js.index('id="hs-by-agency"') < js.index('id="hs-close"')
+    assert 'id="hs-care-options"' in js
+    assert 'id="hs-by-name"' in js
+    assert 'id="hs-close"' in html
+    assert 'id="hs-close-modal"' in html
     assert "organisation" not in js
     assert "first-aid" not in js.lower().replace("first_aid", "")
     assert "function dirtyFieldLabels" in js

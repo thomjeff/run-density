@@ -17,6 +17,7 @@
         queueQ: "",
         locOpen: false,
         xferOpen: false,
+        closeOpen: false,
         moreCare: false,
         savePhase: "saved",
         saving: null,
@@ -62,7 +63,8 @@
     }
 
     function jsonFetch(url, options) {
-        return fetch(url, options).then(function (resp) {
+        var opts = Object.assign({ cache: "no-store" }, options || {});
+        return fetch(url, opts).then(function (resp) {
             return resp.json().then(function (body) {
                 if (!resp.ok) {
                     var detail = body.detail;
@@ -146,33 +148,87 @@
         return life.display || life.label || "Open";
     }
 
-    function badgesHtml(row) {
+    function flagOn(row, field) {
+        return !!(row && row[field] === "yes");
+    }
+
+    function flagButton(id, label, on, locked) {
+        return (
+            '<button type="button" class="rf-hs-flag-btn' +
+            (on ? " is-on" : "") +
+            '" id="' +
+            esc(id) +
+            '"' +
+            (locked ? " disabled" : "") +
+            ">" +
+            esc(label) +
+            "</button>"
+        );
+    }
+
+    function queueMarksHtml(row) {
         var life = lifecycleOf(row);
-        var html =
-            '<span class="rf-hs-status is-' +
-            esc(life.id || "open") +
-            '">' +
-            esc(lifecycleDisplay(row)) +
-            "</span>";
-        if (row && row.called_911 === "yes") {
-            html += '<span class="rf-hs-911-badge">911 called</span>';
+        var html = "";
+        if (flagOn(row, "urgent")) {
+            html +=
+                '<span class="rf-hs-urgent-mark" title="Urgent" aria-label="Urgent">!</span>';
+        }
+        if (flagOn(row, "called_911")) {
+            html +=
+                '<span class="rf-hs-911-mark rf-hs-911-badge" title="911 called">911</span>';
+        }
+        if (life.id === "assigned") {
+            html +=
+                '<span class="rf-hs-status is-assigned">' +
+                esc(life.agency_label || catalogLabel("agencies", row.assigned_to)) +
+                "</span>";
+        } else if (life.id === "closed") {
+            html += '<span class="rf-hs-status is-closed">Closed</span>';
         }
         return html;
     }
 
-    function called911Control(incident) {
+    function statusBadge(row) {
+        var life = lifecycleOf(row);
         return (
-            '<div class="rf-hs-911-live">' +
-            fieldLabel("hs-911", "911 called?") +
-            '<select id="hs-911" class="form-select form-select-sm" style="max-width:10rem;"' +
-            dis(incident) +
-            ">" +
-            '<option value="">Not yet recorded</option><option value="no"' +
-            (incident.called_911 === "no" ? " selected" : "") +
-            '>No</option><option value="yes"' +
-            (incident.called_911 === "yes" ? " selected" : "") +
-            ">Yes</option></select></div>"
+            '<span class="rf-hs-status is-' +
+            esc(life.id || "open") +
+            '">' +
+            esc(lifecycleDisplay(row)) +
+            "</span>"
         );
+    }
+
+    function headerBadgesHtml(row) {
+        var html = "";
+        if (flagOn(row, "urgent")) {
+            html +=
+                '<button type="button" class="rf-hs-flag-btn is-on rf-hs-urgent-badge" id="hs-urgent-toggle"' +
+                (isClosed(row) ? " disabled" : "") +
+                ' title="Clear urgent">Urgent</button>';
+        }
+        html += statusBadge(row);
+        return html;
+    }
+
+    function identityFlags(incident) {
+        var locked = isClosed(incident);
+        var html =
+            '<span id="hs-id-flags" class="rf-hs-idbar-flags">' +
+            flagButton(
+                "hs-911-toggle",
+                flagOn(incident, "called_911") ? "911 called" : "Call 911",
+                flagOn(incident, "called_911"),
+                locked
+            );
+        if (!flagOn(incident, "urgent")) {
+            html += flagButton("hs-urgent-toggle", "Mark Urgent", false, locked);
+        }
+        html +=
+            '<span id="hs-id-badges" class="rf-hs-idbar-badges">' +
+            headerBadgesHtml(incident) +
+            "</span></span>";
+        return html;
     }
 
     function liveBadgeRow(incident) {
@@ -182,8 +238,9 @@
                 ? val("hs-assigned")
                 : incident.assigned_to,
             called_911: qs("#hs-911") ? val("hs-911") : incident.called_911,
+            urgent: qs("#hs-urgent") ? val("hs-urgent") : incident.urgent,
         };
-        return badgesHtml(snapshot);
+        return headerBadgesHtml(snapshot);
     }
 
     function fieldLabel(forId, text) {
@@ -420,6 +477,7 @@
             care_types: sortedCopy(data.care_types),
             care_note: String(data.care_note || ""),
             called_911: String(data.called_911 || ""),
+            urgent: String(data.urgent || ""),
             outcome: String(data.outcome || ""),
             completed_by_name: String(data.completed_by_name || ""),
             completed_by_agency: String(data.completed_by_agency || ""),
@@ -470,6 +528,7 @@
             ["care_types", "Care provided"],
             ["care_note", "Other care reported"],
             ["called_911", "911 called"],
+            ["urgent", "Urgent"],
             ["outcome", "Outcome"],
             ["completed_by_name", "Closed by"],
             ["completed_by_agency", "Roles/Organization"],
@@ -578,7 +637,7 @@
             noteStatus.classList.toggle("is-pending", !!draft);
         }
         if (addBtn) {
-            addBtn.textContent = "Add to case log";
+            addBtn.textContent = "Add update";
             addBtn.disabled = !draft || phase === "saving";
         }
         var saveBtn = qs("#hs-save");
@@ -670,13 +729,12 @@
             bibLabel(row) +
             "</span> " +
             esc(nameOf(row)) +
-            "</div>" +
+            '<span class="rf-hs-strip-inline-badges">' +
+            queueMarksHtml(row) +
+            "</span></div>" +
             '<div class="rf-hs-meta">' +
             esc(queueCareLine(row)) +
             (extra ? " · " + extra : "") +
-            "</div>" +
-            '<div class="rf-hs-strip-badges">' +
-            badgesHtml(row) +
             "</div>" +
             '<div class="rf-hs-meta">' +
             esc(when) +
@@ -744,17 +802,6 @@
             return catalogLabel("outcomes", row.outcome);
         };
         qs("#rf-hs-queue").innerHTML =
-            '<div class="rf-hs-queue-tools">' +
-            '<input id="hs-queue-q" class="form-control form-control-sm rf-hs-queue-filter" placeholder="Find bib or name…" value="' +
-            esc(ui.queueQ) +
-            '" aria-label="Find bib or name">' +
-            (ui.queueQ
-                ? '<button type="button" class="btn btn-sm" id="hs-queue-clear">Clear search</button>'
-                : "") +
-            "</div>" +
-            '<a class="rf-hs-queue-start" href="' +
-            esc(participantsHref()) +
-            '">Start a case</a>' +
             queueSection("active", "Active cases", ui.activeOpen, lists.active) +
             queueSection(
                 "closed",
@@ -762,7 +809,15 @@
                 ui.closedOpen,
                 lists.closed,
                 closedExtra
-            );
+            ) +
+            '<div class="rf-hs-queue-tools">' +
+            '<input id="hs-queue-q" class="form-control form-control-sm rf-hs-queue-filter" placeholder="Search by bib number" value="' +
+            esc(ui.queueQ) +
+            '" aria-label="Search Active and Closed cases by bib number">' +
+            (ui.queueQ
+                ? '<button type="button" class="btn btn-sm" id="hs-queue-clear">Clear search</button>'
+                : "") +
+            "</div>";
         var filter = qs("#hs-queue-q");
         if (filter && ui.queueQ) {
             filter.focus();
@@ -800,21 +855,61 @@
         );
     }
 
+    function chipTokens(raw) {
+        if (Array.isArray(raw)) {
+            return raw
+                .map(function (token) {
+                    return String(token || "").trim();
+                })
+                .filter(Boolean);
+        }
+        return String(raw || "")
+            .split(/\|\||\||;|,/)
+            .map(function (token) {
+                return token.trim();
+            })
+            .filter(Boolean);
+    }
+
     function healthHtml(incident) {
-        var conditions = incident.medical_conditions || [];
-        var note = String(incident.medical_note || "").trim();
-        if (!conditions.length && !note) return "";
-        var chips = conditions
+        var tokens = []
+            .concat(chipTokens(incident.medical_conditions))
+            .concat(chipTokens(incident.medical_note))
+            .concat(chipTokens(incident.medical_avoid));
+        if (!tokens.length) return "";
+        var chips = tokens
             .map(function (token) {
                 return '<span class="rf-hs-chip">' + esc(token) + "</span>";
             })
             .join("");
         return (
             '<div class="rf-hs-idbar-health">' +
-            (chips ? '<div class="rf-hs-chip-row">' + chips + "</div>" : "") +
-            (note ? '<div class="rf-hs-idbar-note">' + esc(note) + "</div>" : "") +
-            "</div>"
+            '<div class="rf-hs-chip-row">' +
+            chips +
+            "</div></div>"
         );
+    }
+
+    function identityMeta(incident) {
+        var demo = [incident.age, incident.sex, incident.sub_event]
+            .filter(function (part) {
+                return String(part || "").trim();
+            })
+            .join(" · ");
+        var contact = (
+            String(incident.emerg_name || "").trim() +
+            " " +
+            String(incident.emerg_phone || "").trim()
+        ).trim();
+        var html = '<div class="rf-hs-meta">';
+        html += esc(demo || "—");
+        if (contact) {
+            html +=
+                ' <span class="rf-hs-meta-sep">|</span> Emergency Contact: ' +
+                esc(contact);
+        }
+        html += "</div>";
+        return html;
     }
 
     function identityHtml(incident) {
@@ -822,40 +917,37 @@
         var bibHtml = bib
             ? '<div class="rf-hs-idbar-bib">' + esc(bib) + "</div>"
             : '<div class="rf-hs-idbar-bib"><span class="rf-hs-missing">No bib</span></div>';
-        var meta = [incident.age, incident.sex, incident.sub_event]
-            .filter(function (part) {
-                return String(part || "").trim();
-            })
-            .join(" · ");
         var warn = bib
             ? ""
             : '<p class="rf-hs-warn" style="margin:0.4rem 0 0;">Race Roster has no bib for this start.</p>';
         return (
             '<div class="rf-hs-card rf-hs-idbar">' +
             bibHtml +
-            "<div style=\"flex:1;min-width:12rem;\"><div class=\"rf-hs-idbar-name\">" +
+            '<div class="rf-hs-idbar-main"><div class="rf-hs-idbar-head"><div class="rf-hs-idbar-name">' +
             esc(nameOf(incident)) +
-            "</div><div class=\"rf-hs-meta\">" +
-            esc(meta || "—") +
-            "</div>" +
-            healthHtml(incident) +
-            warn +
             "</div>" +
             '<span id="hs-id-unsaved" class="rf-hs-save-flag" hidden>Unsaved changes</span>' +
-            '<span id="hs-id-badges" class="rf-hs-idbar-badges">' +
-            badgesHtml(incident) +
-            "</span></div>"
+            identityFlags(incident) +
+            "</div>" +
+            identityMeta(incident) +
+            healthHtml(incident) +
+            warn +
+            '<input type="hidden" id="hs-911" value="' +
+            esc(incident.called_911 || "") +
+            '">' +
+            '<input type="hidden" id="hs-urgent" value="' +
+            esc(incident.urgent || "") +
+            '"></div></div>'
         );
     }
 
     function agencyHtml(incident) {
         var locked = isClosed(incident);
         var assigned = String(incident.assigned_to || "").trim();
-        var html = assigned
-            ? '<div class="rf-hs-label" style="margin-top:0.7rem;">Care agency currently attending</div>'
-            : '<div style="margin-top:0.7rem;">' +
-              fieldLabel("hs-assigned", "Care agency currently attending") +
-              "</div>";
+        var html = '<div class="rf-hs-agency-row"><div>';
+        html += assigned
+            ? '<div class="rf-hs-label">Care agency currently attending</div>'
+            : fieldLabel("hs-assigned", "Care agency currently attending");
         if (!assigned) {
             html +=
                 '<select id="hs-assigned" class="form-select form-select-sm" aria-label="Care agency currently attending"' +
@@ -866,22 +958,25 @@
                     "",
                     "Care agency not yet recorded"
                 ) +
-                "</select>";
+                "</select></div></div>";
             if (!locked) {
                 html +=
                     fieldLabel("hs-assign-note", "Assignment details (optional)") +
-                    '<input id="hs-assign-note" class="form-control form-control-sm" placeholder="Optional details">' +
-                    '<button type="button" class="btn btn-sm rf-hs-xfer-btn" id="hs-assign">Record care agency</button>';
+                    '<input id="hs-assign-note" class="form-control form-control-sm" placeholder="Optional details">';
             }
             return html;
         }
         html +=
             '<div class="rf-hs-agency-now" id="hs-assigned-now">' +
             esc(catalogLabel("agencies", assigned)) +
-            "</div>";
+            "</div></div>";
+        if (!locked) {
+            html +=
+                '<button type="button" class="btn btn-sm rf-hs-xfer-btn" id="hs-xfer-open">Record care handoff</button>';
+        }
+        html += "</div>";
         if (locked) return html;
         html +=
-            '<button type="button" class="btn btn-sm rf-hs-xfer-btn" id="hs-xfer-open">Record care handoff</button>' +
             '<div id="hs-xfer-panel" class="rf-hs-xfer-panel"' +
             (ui.xferOpen ? "" : " hidden") +
             ">" +
@@ -933,13 +1028,14 @@
         }
         return hits
             .map(function (row) {
+                var shown = locDisplayLabel(row);
                 return (
                     '<button type="button" class="rf-hs-typeahead-item" data-loc-id="' +
                     esc(row.loc_id == null ? "" : row.loc_id) +
                     '" data-loc-label="' +
-                    esc(row.loc_label || "") +
+                    esc(shown) +
                     '">' +
-                    esc(locDisplayLabel(row)) +
+                    esc(shown) +
                     "</button>"
                 );
             })
@@ -1016,53 +1112,80 @@
         if (closeBtn) closeBtn.focus();
     }
 
+    function closeFieldsHtml(incident) {
+        var locked = isClosed(incident);
+        return (
+            '<div class="rf-hs-close-fields">' +
+            fieldLabel("hs-outcome", "Outcome (required)") +
+            '<select id="hs-outcome" class="form-select form-select-sm"' +
+            dis(incident) +
+            ">" +
+            optionsHtml(
+                catalog.outcomes,
+                incident.outcome,
+                "Choose an outcome…"
+            ) +
+            "</select>" +
+            '<div class="rf-hs-reporter-row" style="margin-top:0.85rem;">' +
+            "<div>" +
+            fieldLabel("hs-by-name", "Closed by (required)") +
+            '<input id="hs-by-name" class="form-control form-control-sm" placeholder="Name" value="' +
+            esc(incident.completed_by_name || "") +
+            '"' +
+            ro(incident) +
+            "></div>" +
+            "<div>" +
+            fieldLabel("hs-by-agency", "Roles/Organization") +
+            '<select id="hs-by-agency" class="form-select form-select-sm"' +
+            dis(incident) +
+            ">" +
+            optionsHtml(
+                catalog.reporter_agencies,
+                reporterAgencyId(incident.completed_by_agency),
+                "Not yet recorded"
+            ) +
+            "</select></div></div>" +
+            (locked
+                ? ""
+                : '<p id="hs-close-hint" class="rf-hs-meta rf-hs-close-hint" hidden></p>') +
+            "</div>"
+        );
+    }
+
+    function locationFieldHtml(incident, locLinked) {
+        return (
+            "<div>" +
+            fieldLabel("hs-loc", "Location") +
+            '<div class="rf-hs-typeahead">' +
+            '<input id="hs-loc" class="form-control form-control-sm" autocomplete="off" value="' +
+            esc(incident.location_text || "") +
+            '" placeholder="Search course locations or describe where the participant is"' +
+            ro(incident) +
+            ">" +
+            '<input type="hidden" id="hs-loc-id" value="' +
+            esc(locLinked) +
+            '">' +
+            '<div id="hs-loc-menu" class="rf-hs-typeahead-menu" hidden></div></div></div>'
+        );
+    }
+
     function notesHtml(incident) {
         var notes = (incident.notes || []).slice().reverse();
         if (!notes.length) return '<p class="rf-hs-meta">No notes yet.</p>';
         return notes
-            .map(function (note, index) {
+            .map(function (note) {
                 var parsed = parseActivityNote(note);
-                var kind =
-                    note.kind === "system"
-                        ? " is-system"
-                        : note.kind === "transfer"
-                          ? " is-transfer"
-                          : "";
-                var openable = activityNeedsPopup(note);
-                var tag = openable ? "button" : "div";
-                var extra =
-                    tag === "button"
-                        ? ' type="button" data-activity="' +
-                          index +
-                          '"'
-                        : "";
+                var body = parsed.headline;
+                if (parsed.detail) body += " " + parsed.detail;
                 return (
-                    "<" +
-                    tag +
-                    ' class="rf-hs-note' +
-                    kind +
-                    (openable ? " is-openable" : "") +
-                    '"' +
-                    extra +
-                    '><div class="rf-hs-note-head"><time>' +
+                    '<div class="rf-hs-note is-system"><div class="rf-hs-note-head"><time>' +
                     esc(note.saved_at_label || note.saved_at) +
                     "</time> · " +
                     esc(noteKindLabel(note, incident)) +
                     "</div>" +
                     '<div class="rf-hs-note-line">' +
-                    esc(parsed.headline) +
-                    (openable
-                        ? ' <span class="rf-hs-note-more">Details</span>'
-                        : "") +
-                    "</div>" +
-                    (parsed.detail
-                        ? '<div class="rf-hs-note-print">' +
-                          esc(parsed.detail) +
-                          "</div>"
-                        : "") +
-                    "</" +
-                    tag +
-                    ">"
+                    esc(body) +
+                    "</div></div>"
                 );
             })
             .join("");
@@ -1076,6 +1199,7 @@
             ui.tiles.details = false;
             ui.tiles.outcome = false;
             ui.xferOpen = false;
+            ui.closeOpen = false;
             ui.moreCare = false;
             ui.savePhase = "saved";
         }
@@ -1084,13 +1208,8 @@
         if (!incident) {
             qs("#rf-hs-sub").textContent = "";
             savedForm = null;
-            pane.innerHTML =
-                '<div class="rf-hs-case-empty">' +
-                "<p>Select an active case to add an update, or start a new case from Participants.</p>" +
-                '<p class="rf-hs-meta">Find the participant by bib or name, then select Start case.</p>' +
-                '<a class="btn btn-sm btn-primary" href="' +
-                esc(participantsHref()) +
-                '">Start a case</a></div>';
+            pane.innerHTML = "";
+            syncCloseFields(null);
             return;
         }
         qs("#rf-hs-sub").textContent = "";
@@ -1124,21 +1243,13 @@
                 "Not yet recorded"
             ) +
             "</select></div></div>" +
-            agencyHtml(incident) +
-            '<div style="margin-top:0.85rem;">' +
-            fieldLabel("hs-loc", "Location") +
+            '<div class="rf-hs-field">' +
+            locationFieldHtml(incident, locLinked) +
             "</div>" +
-            '<div class="rf-hs-typeahead">' +
-            '<input id="hs-loc" class="form-control form-control-sm" autocomplete="off" value="' +
-            esc(incident.location_text || "") +
-            '" placeholder="Search course locations or describe where the participant is"' +
-            ro(incident) +
-            ">" +
-            '<input type="hidden" id="hs-loc-id" value="' +
-            esc(locLinked) +
-            '">' +
-            '<div id="hs-loc-menu" class="rf-hs-typeahead-menu" hidden></div></div>' +
-            '<div style="margin-top:0.7rem;">' +
+            agencyHtml(incident) +
+            '<div class="rf-hs-problem-block">' +
+            '<h4 class="rf-hs-block-title">Reported problem</h4>' +
+            '<div class="rf-hs-field" style="margin-top:0;">' +
             fieldLabel("hs-desc", "Initial report") +
             "</div>" +
             '<textarea id="hs-desc" class="form-control form-control-sm" rows="3" placeholder="What happened and what assistance was requested?"' +
@@ -1146,75 +1257,31 @@
             ">" +
             esc(incident.description || "") +
             "</textarea>" +
-            called911Control(incident) +
-            tile(
-                "details",
-                "Reported problem",
-                '<div class="rf-hs-label">Reported problem — select all that apply</div>' +
-                    checks(
-                        "incident_types",
-                        catalog.incident_types,
-                        incident.incident_types,
-                        incident
-                    ) +
-                    '<div id="hs-type-other-wrap" class="rf-hs-other-wrap"' +
-                    ((incident.incident_types || []).indexOf("other") === -1
-                        ? " hidden"
-                        : "") +
-                    ">" +
-                    fieldLabel("hs-type-other", "Other reported problem") +
-                    '<input id="hs-type-other" class="form-control form-control-sm" maxlength="120" placeholder="Short description" value="' +
-                    esc(incident.incident_type_other || "") +
-                    '"' +
-                    ro(incident) +
-                    "></div>",
-                summaryFromIncident(incident)
+            '<div class="rf-hs-label" style="margin-top:0.7rem;">Category</div>' +
+            checks(
+                "incident_types",
+                catalog.incident_types,
+                incident.incident_types,
+                incident
             ) +
-            tile(
-                "outcome",
-                "Close case",
-                fieldLabel("hs-outcome", "Outcome (required)") +
-                    '<select id="hs-outcome" class="form-select form-select-sm"' +
-                    dis(incident) +
-                    ">" +
-                    optionsHtml(
-                        catalog.outcomes,
-                        incident.outcome,
-                        "Choose an outcome…"
-                    ) +
-                    "</select>" +
-                    '<div class="rf-hs-label" style="margin-top:0.85rem;">Care provided — reported by the care team</div>' +
-                    '<p class="rf-hs-meta">Select the care reported to the EOC. Leave details unrecorded if they are not known.</p>' +
-                    '<div id="hs-care-options">' +
-                    careOptionsInner(incident.care_types, incident) +
-                    "</div>" +
-                    '<div class="rf-hs-reporter-row" style="margin-top:0.85rem;">' +
-                    "<div>" +
-                    fieldLabel("hs-by-name", "Closed by (required)") +
-                    '<input id="hs-by-name" class="form-control form-control-sm" placeholder="Name" value="' +
-                    esc(incident.completed_by_name || "") +
-                    '"' +
-                    ro(incident) +
-                    "></div>" +
-                    "<div>" +
-                    fieldLabel("hs-by-agency", "Roles/Organization") +
-                    '<select id="hs-by-agency" class="form-select form-select-sm"' +
-                    dis(incident) +
-                    ">" +
-                    optionsHtml(
-                        catalog.reporter_agencies,
-                        reporterAgencyId(incident.completed_by_agency),
-                        "Not yet recorded"
-                    ) +
-                    "</select></div></div>" +
-                    (locked
-                        ? ""
-                        : '<button type="button" class="btn btn-sm btn-primary" style="margin-top:0.75rem;" id="hs-close">Close case</button>' +
-                          '<p id="hs-close-hint" class="rf-hs-meta rf-hs-close-hint" hidden></p>')
-            ) +
+            '<div id="hs-type-other-wrap" class="rf-hs-other-wrap"' +
+            ((incident.incident_types || []).indexOf("other") === -1
+                ? " hidden"
+                : "") +
+            ">" +
+            fieldLabel("hs-type-other", "Other reported problem") +
+            '<input id="hs-type-other" class="form-control form-control-sm" maxlength="120" placeholder="Short description" value="' +
+            esc(incident.incident_type_other || "") +
+            '"' +
+            ro(incident) +
+            "></div>" +
+            '<h4 class="rf-hs-block-title">Care provided</h4>' +
+            '<div id="hs-care-options">' +
+            careOptionsInner(incident.care_types, incident) +
+            "</div></div>" +
             "</div>" +
             '<div class="rf-hs-activity-col">' +
-            '<h3 class="rf-hs-work-title">Case log</h3>' +
+            '<h3 class="rf-hs-work-title">Case Updates</h3>' +
             (locked
                 ? ""
                 : '<div class="rf-hs-note-add">' +
@@ -1224,9 +1291,12 @@
                   "</textarea>" +
                   '<div class="rf-hs-note-add-row">' +
                   '<span id="hs-note-status" class="rf-hs-meta"></span>' +
-                  '<button type="button" class="btn btn-sm btn-primary" id="hs-save-note">Add to case log</button></div></div>') +
+                  '<button type="button" class="btn btn-sm btn-primary" id="hs-save-note">Add update</button></div></div>') +
+            '<div class="rf-hs-case-history">' +
+            '<h3 class="rf-hs-work-title">Case History</h3>' +
+            '<div class="rf-hs-history-scroll">' +
             notesHtml(incident) +
-            "</div></div>" +
+            "</div></div></div></div>" +
             '<div class="rf-hs-case-foot">' +
             '<div class="rf-hs-save-status" role="status" aria-live="polite">' +
             '<span id="hs-save-status"></span> ' +
@@ -1236,8 +1306,9 @@
             (locked
                 ? ""
                 : '<button type="button" class="btn btn-sm" id="hs-save">Save case</button>' +
-                  '<button type="button" class="btn btn-sm" id="hs-review-close">Review &amp; close case</button>') +
+                  '<button type="button" class="btn btn-sm" id="hs-review-close">Close Case</button>') +
             "</div></div></div>";
+        syncCloseFields(incident);
         savedForm = formPayload();
         ui.savePhase = "saved";
         updateSaveStatus();
@@ -1255,6 +1326,7 @@
             care_types: selected("care_types"),
             care_note: val("hs-care-note"),
             called_911: val("hs-911"),
+            urgent: val("hs-urgent"),
             outcome: val("hs-outcome"),
             completed_by_name: val("hs-by-name"),
             completed_by_agency: val("hs-by-agency"),
@@ -1275,7 +1347,7 @@
     }
 
     function showWorkspace() {
-        qs("#rf-hs-title").textContent = "Incidents";
+        qs("#rf-hs-title").textContent = "Cases";
         qs("#rf-hs-workspace").hidden = false;
         qs("#rf-hs-empty").hidden = true;
     }
@@ -1427,6 +1499,30 @@
         return ui.saving;
     }
 
+    function toggleIncidentFlag(field) {
+        showError("");
+        if (!current || isClosed(current)) return Promise.resolve();
+        var payload = formPayload();
+        payload[field] = current[field] === "yes" ? "no" : "yes";
+        if (ui.saving) return ui.saving;
+        ui.savePhase = "saving";
+        updateSaveStatus();
+        captureDraft();
+        ui.saving = persistForm(payload)
+            .then(function (incident) {
+                ui.saving = null;
+                ui.savePhase = "saved";
+                return refreshAfterMutation(incident);
+            })
+            .catch(function (err) {
+                ui.saving = null;
+                ui.savePhase = "error";
+                updateSaveStatus();
+                throw err;
+            });
+        return ui.saving;
+    }
+
     function assignCare() {
         showError("");
         if (!current || isClosed(current)) return Promise.resolve();
@@ -1502,14 +1598,41 @@
             });
     }
 
-    function reviewClose() {
+    function syncCloseFields(incident) {
+        var fields = qs("#hs-close-fields");
+        var closeBtn = qs("#hs-close");
+        if (fields) {
+            fields.innerHTML = incident ? closeFieldsHtml(incident) : "";
+        }
+        if (closeBtn) closeBtn.hidden = !incident || isClosed(incident);
+        var modal = qs("#hs-close-modal");
+        if (!incident) {
+            ui.closeOpen = false;
+        }
+        if (modal) modal.hidden = !ui.closeOpen;
+    }
+
+    function hideCloseModal() {
+        ui.closeOpen = false;
+        var modal = qs("#hs-close-modal");
+        if (modal) modal.hidden = true;
+    }
+
+    function showCloseModal() {
         if (!current || isClosed(current)) return;
-        expandTile("outcome");
+        ui.closeOpen = true;
+        var modal = qs("#hs-close-modal");
+        if (modal) modal.hidden = false;
         var outcome = qs("#hs-outcome");
         if (outcome) {
             outcome.focus();
             if (outcome.scrollIntoView) outcome.scrollIntoView({ block: "nearest" });
         }
+        updateSaveStatus();
+    }
+
+    function reviewClose() {
+        showCloseModal();
     }
 
     function hideNavModal() {
@@ -1530,9 +1653,9 @@
         var fields = dirtyFieldLabels();
         var draft = String(currentDraft() || "").trim();
         if (fields.length) bits.push("Unsaved: " + fields.join(", "));
-        if (draft) bits.push("Update not added to the case log");
+        if (draft) bits.push("Update not added to Case Updates");
         if (kind === "switch" && draft) {
-            bits.push("The update stays a draft until you add it to the case log");
+            bits.push("The update stays a draft until you add it to Case Updates");
         }
         if (!bits.length) bits.push("Unsaved work");
         if (title) {
@@ -1584,6 +1707,7 @@
         ).then(function (body) {
             ui.noteDrafts[current.incident_id] = "";
             hideNavModal();
+            hideCloseModal();
             return refreshAfterMutation(body.incident);
         });
     }
@@ -1591,7 +1715,7 @@
     function closeIncident() {
         if (!current || isClosed(current)) return Promise.resolve();
         if (!canCloseCase()) {
-            expandTile("outcome");
+            showCloseModal();
             showError(
                 "To close, choose an outcome, Closed by, and Roles/Organization."
             );
@@ -1716,7 +1840,7 @@
                 return;
             }
             if (targetId === "hs-review-close") {
-                reviewClose();
+                showCloseModal();
                 return;
             }
             if (targetId === "hs-care-more") {
@@ -1739,7 +1863,8 @@
             if (targetId === "hs-save") work = saveForm();
             else if (targetId === "hs-save-retry") work = saveForm();
             else if (targetId === "hs-save-note") work = saveNote();
-            else if (targetId === "hs-assign") work = assignCare();
+            else if (targetId === "hs-911-toggle") work = toggleIncidentFlag("called_911");
+            else if (targetId === "hs-urgent-toggle") work = toggleIncidentFlag("urgent");
             else if (targetId === "hs-xfer-confirm") work = recordTransfer();
             else if (targetId === "hs-close") work = closeIncident();
             else return;
@@ -1764,6 +1889,12 @@
                     careOther.hidden =
                         selected("care_types").indexOf("other_care") === -1;
                 }
+            }
+            if (ev.target && ev.target.id === "hs-assigned") {
+                assignCare().catch(function (err) {
+                    showError(err.message || String(err));
+                });
+                return;
             }
             if (ev.target && ev.target.id !== "hs-queue-q" && ev.target.id !== "hs-xfer-to") {
                 if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
@@ -1834,8 +1965,37 @@
             if (openActivity && !openActivity.hidden) {
                 hideActivityModal();
                 ev.preventDefault();
+                return;
+            }
+            var openClose = qs("#hs-close-modal");
+            if (openClose && !openClose.hidden) {
+                hideCloseModal();
+                ev.preventDefault();
             }
         });
+        var closeModal = qs("#hs-close-modal");
+        if (closeModal) {
+            closeModal.addEventListener("click", function (ev) {
+                var closeId = ev.target && ev.target.id;
+                if (closeId === "hs-close-cancel" || closeId === "hs-close-modal") {
+                    hideCloseModal();
+                    return;
+                }
+                if (closeId === "hs-close") {
+                    closeIncident().catch(function (err) {
+                        showError(err.message || String(err));
+                    });
+                }
+            });
+            closeModal.addEventListener("change", function () {
+                if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
+                updateSaveStatus();
+            });
+            closeModal.addEventListener("input", function () {
+                if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
+                updateSaveStatus();
+            });
+        }
         var navModal = qs("#hs-nav-modal");
         if (navModal) {
             navModal.addEventListener("click", function (ev) {
@@ -1860,6 +2020,10 @@
         Promise.all([loadLocations(), loadLists()])
             .then(function () {
                 if (startId) return loadCase(startId);
+                var first = (lists.active || [])[0];
+                if (first && first.incident_id) {
+                    return loadCase(first.incident_id);
+                }
                 renderCase(null);
                 return null;
             })
