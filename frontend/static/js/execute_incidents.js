@@ -63,7 +63,8 @@
     }
 
     function jsonFetch(url, options) {
-        return fetch(url, options).then(function (resp) {
+        var opts = Object.assign({ cache: "no-store" }, options || {});
+        return fetch(url, opts).then(function (resp) {
             return resp.json().then(function (body) {
                 if (!resp.ok) {
                     var detail = body.detail;
@@ -202,7 +203,7 @@
         var html = "";
         if (flagOn(row, "urgent")) {
             html +=
-                '<button type="button" class="rf-hs-urgent-badge" id="hs-urgent-toggle"' +
+                '<button type="button" class="rf-hs-flag-btn is-on rf-hs-urgent-badge" id="hs-urgent-toggle"' +
                 (isClosed(row) ? " disabled" : "") +
                 ' title="Clear urgent">Urgent</button>';
         }
@@ -1027,13 +1028,14 @@
         }
         return hits
             .map(function (row) {
+                var shown = locDisplayLabel(row);
                 return (
                     '<button type="button" class="rf-hs-typeahead-item" data-loc-id="' +
                     esc(row.loc_id == null ? "" : row.loc_id) +
                     '" data-loc-label="' +
-                    esc(row.loc_label || "") +
+                    esc(shown) +
                     '">' +
-                    esc(locDisplayLabel(row)) +
+                    esc(shown) +
                     "</button>"
                 );
             })
@@ -1171,49 +1173,19 @@
         var notes = (incident.notes || []).slice().reverse();
         if (!notes.length) return '<p class="rf-hs-meta">No notes yet.</p>';
         return notes
-            .map(function (note, index) {
+            .map(function (note) {
                 var parsed = parseActivityNote(note);
-                var kind =
-                    note.kind === "system"
-                        ? " is-system"
-                        : note.kind === "transfer"
-                          ? " is-transfer"
-                          : "";
-                var openable = activityNeedsPopup(note);
-                var tag = openable ? "button" : "div";
-                var extra =
-                    tag === "button"
-                        ? ' type="button" data-activity="' +
-                          index +
-                          '"'
-                        : "";
+                var body = parsed.headline;
+                if (parsed.detail) body += " " + parsed.detail;
                 return (
-                    "<" +
-                    tag +
-                    ' class="rf-hs-note' +
-                    kind +
-                    (openable ? " is-openable" : "") +
-                    '"' +
-                    extra +
-                    '><div class="rf-hs-note-head"><time>' +
+                    '<div class="rf-hs-note is-system"><div class="rf-hs-note-head"><time>' +
                     esc(note.saved_at_label || note.saved_at) +
                     "</time> · " +
                     esc(noteKindLabel(note, incident)) +
                     "</div>" +
                     '<div class="rf-hs-note-line">' +
-                    esc(parsed.headline) +
-                    (openable
-                        ? ' <span class="rf-hs-note-more">Details</span>'
-                        : "") +
-                    "</div>" +
-                    (parsed.detail
-                        ? '<div class="rf-hs-note-print">' +
-                          esc(parsed.detail) +
-                          "</div>"
-                        : "") +
-                    "</" +
-                    tag +
-                    ">"
+                    esc(body) +
+                    "</div></div>"
                 );
             })
             .join("");
@@ -1260,8 +1232,6 @@
             '"' +
             ro(incident) +
             "></div>" +
-            locationFieldHtml(incident, locLinked) +
-            "</div>" +
             "<div>" +
             fieldLabel("hs-report-agency", "Reporter role / organization") +
             '<select id="hs-report-agency" class="form-select form-select-sm"' +
@@ -1272,7 +1242,10 @@
                 incident.reported_by_agency,
                 "Not yet recorded"
             ) +
-            "</select></div>" +
+            "</select></div></div>" +
+            '<div class="rf-hs-field">' +
+            locationFieldHtml(incident, locLinked) +
+            "</div>" +
             agencyHtml(incident) +
             '<div class="rf-hs-problem-block">' +
             '<h4 class="rf-hs-block-title">Reported problem</h4>' +
@@ -2013,6 +1986,14 @@
                         showError(err.message || String(err));
                     });
                 }
+            });
+            closeModal.addEventListener("change", function () {
+                if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
+                updateSaveStatus();
+            });
+            closeModal.addEventListener("input", function () {
+                if (ui.savePhase !== "saving") ui.savePhase = "unsaved";
+                updateSaveStatus();
             });
         }
         var navModal = qs("#hs-nav-modal");

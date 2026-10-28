@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+from app.core.execute.incidents import stamp_label, wall_stamp
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -73,7 +76,8 @@ def test_cases_queue_and_form_layout():
     assert "lists.active || [])[0]" in js
     assert "Select all that apply" not in js
     render = js[js.index("function renderCase") : js.index("function formPayload")]
-    assert render.index("Reporter's name") < render.index("locationFieldHtml")
+    assert render.index("Reporter's name") < render.index("hs-report-agency")
+    assert render.index("hs-report-agency") < render.index("locationFieldHtml")
     assert render.index("locationFieldHtml") < render.index("Reported problem")
     assert render.index('id="hs-desc"') < render.index("Category")
     assert render.index("Category") < render.index("Care provided")
@@ -86,3 +90,25 @@ def test_cases_queue_and_form_layout():
     assert "rf-hs-agency-row" in js
     assert "function showCloseModal" in js
     assert "function hideCloseModal" in js
+    close_bind = js[js.index("var closeModal = qs(\"#hs-close-modal\")") :]
+    close_bind = close_bind[: close_bind.index("var navModal")]
+    assert 'closeModal.addEventListener("change"' in close_bind
+    assert 'closeModal.addEventListener("input"' in close_bind
+    assert close_bind.count("updateSaveStatus();") >= 2
+    loc_menu = js[js.index("function locMenuHtml") : js.index("function showLocMenu")]
+    assert "var shown = locDisplayLabel(row)" in loc_menu
+    assert 'esc(shown)' in loc_menu
+    notes = js[js.index("function notesHtml") : js.index("function renderCase")]
+    assert "is-openable" not in notes
+    assert "rf-hs-note-more" not in notes
+    assert "Details" not in notes
+    assert 'class="rf-hs-note is-system"' in notes
+    assert "data-activity" not in notes
+
+
+def test_case_history_stamp_uses_iso_date():
+    assert stamp_label("2026-10-28T11:37:00") == "2026-10-28 11:37"
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}",
+        wall_stamp()["saved_at_label"],
+    )

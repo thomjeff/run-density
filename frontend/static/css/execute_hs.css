@@ -748,9 +748,11 @@ label.rf-hs-label {
     padding: 0.55rem 0;
     font-size: 0.82rem;
     line-height: 1.4;
+    color: #667382;
 }
 
-.rf-hs-note.is-system {
+.rf-hs-note.is-system,
+.rf-hs-note.is-transfer {
     color: #667382;
 }
 
@@ -765,41 +767,12 @@ label.rf-hs-label {
     margin-bottom: 0.15rem;
 }
 
-.rf-hs-note.is-openable {
-    display: block;
-    width: 100%;
-    margin: 0;
-    padding: 0.55rem 0;
-    font: inherit;
-    color: inherit;
-    text-align: left;
-    background: none;
-    border: 0;
-    border-bottom: 1px solid #eef1f4;
-    border-radius: 0;
-    cursor: pointer;
-}
-
-.rf-hs-note.is-openable:hover {
-    background: #f8fafc;
-}
-
 .rf-hs-note-line {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
     overflow-wrap: anywhere;
     word-break: break-word;
+    white-space: pre-wrap;
 }
 
-.rf-hs-note-more {
-    color: #1d4ed8;
-    font-size: 0.72rem;
-    font-weight: 700;
-}
-
-.rf-hs-note-print,
 #hs-activity-detail[hidden] {
     display: none;
 }
@@ -1177,10 +1150,6 @@ label.rf-hs-label {
     border-bottom: 0;
 }
 
-.rf-hs-note.is-transfer {
-    color: #1d4ed8;
-}
-
 .rf-hs-note-add {
     display: flex;
     flex-direction: column;
@@ -1223,20 +1192,12 @@ label.rf-hs-label {
     .rf-hs-xfer-panel,
     .rf-hs-typeahead-menu,
     .rf-hs-case-foot,
-    .rf-hs-modal,
-    .rf-hs-note-more {
+    .rf-hs-modal {
         display: none !important;
-    }
-
-    .rf-hs-note-print {
-        display: block !important;
-        margin-top: 0.25rem;
-        white-space: pre-wrap;
     }
 
     .rf-hs-note-line {
         display: block;
-        -webkit-line-clamp: unset;
         overflow: visible;
     }
 
@@ -1320,9 +1281,26 @@ label.rf-hs-label {
 
 .rf-hs-flag-btn.is-on,
 .rf-hs-urgent-badge {
-    border-color: #b91c1c;
+    display: inline-flex;
+    align-items: center;
+    height: 1.55rem;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    border: 1px solid #b91c1c;
     background: #fee2e2;
     color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.rf-hs-urgent-badge {
+    cursor: pointer;
+}
+
+.rf-hs-urgent-badge:disabled {
+    cursor: default;
 }
 
 .rf-hs-flag-btn:disabled {

@@ -187,3 +187,20 @@ def test_apply_fields_clears_urgent():
     assert incident["urgent"] == "no"
     notes = " ".join(note["text"] for note in incident["notes"])
     assert "Urgent cleared." in notes
+
+
+def test_apply_fields_clears_911_and_logs_location():
+    incident = empty_incident(reg_id="1")
+    apply_fields(incident, {"called_911": "yes"})
+    assert incident["called_911"] == "yes"
+    apply_fields(incident, {"called_911": "no"})
+    assert incident["called_911"] == "no"
+    apply_fields(incident, {"location_text": "Trail at Neill · Zone 4"})
+    apply_fields(incident, {"description": "Fell near the water stop."})
+    apply_fields(incident, {"description": "Fell near the water stop; ice applied."})
+    texts = [note["text"] for note in incident["notes"]]
+    assert "911 called." in texts
+    assert "911 cleared." in texts
+    assert "Location: Trail at Neill · Zone 4." in texts
+    assert "Fell near the water stop." in texts
+    assert "Fell near the water stop; ice applied." in texts

@@ -19,6 +19,7 @@ from app.core.locations.report_json import (
 
 SCHEMA_VERSION = 3
 INCIDENTS_FILENAME = "incidents.json"
+STAMP_LABEL_FMT = "%Y-%m-%d %H:%M"
 NOTE_KINDS = frozenset({"system", "user", "transfer"})
 NOT_YET_KNOWN = "not_yet_known"
 EXCLUSIVE_CARE = frozenset({"no_care_as_reported", "care_details_not_known"})
@@ -158,6 +159,7 @@ REPORTER_AGENCIES = tuple(
             ("ski", "Ski"),
             ("spectator", "Spectator"),
             ("volunteer", "Volunteer"),
+            ("yssr", "YSSR"),
         ),
         key=lambda item: item[1].casefold(),
     )
@@ -228,7 +230,7 @@ def wall_stamp() -> Dict[str, str]:
     now = wall_now()
     return {
         "saved_at": now.isoformat(timespec="seconds"),
-        "saved_at_label": now.strftime("%a %H:%M"),
+        "saved_at_label": now.strftime(STAMP_LABEL_FMT),
     }
 
 
@@ -237,7 +239,7 @@ def stamp_label(iso: Any) -> str:
     if not text:
         return ""
     try:
-        return datetime.fromisoformat(text).strftime("%a %H:%M")
+        return datetime.fromisoformat(text).strftime(STAMP_LABEL_FMT)
     except ValueError:
         return ""
 
@@ -495,11 +497,17 @@ def normalize_incident(incident: Dict[str, Any]) -> Dict[str, Any]:
         incident["description"] = old_note
     incident["assigned_to"] = _clean_agency(incident.get("assigned_to"))
     incident["location_loc_id"] = _clean_loc_id(incident.get("location_loc_id"))
-    if not str(incident.get("updated_at_label") or "").strip():
-        incident["updated_at_label"] = (
-            stamp_label(incident.get("updated_at"))
-            or str(incident.get("opened_at_label") or "").strip()
-        )
+    incident["updated_at_label"] = (
+        stamp_label(incident.get("updated_at"))
+        or stamp_label(incident.get("opened_at"))
+        or str(incident.get("updated_at_label") or "").strip()
+    )
+    opened_label = stamp_label(incident.get("opened_at"))
+    if opened_label:
+        incident["opened_at_label"] = opened_label
+    closed_label = stamp_label(incident.get("closed_at"))
+    if closed_label:
+        incident["closed_at_label"] = closed_label
     notes = incident.get("notes")
     if isinstance(notes, list):
         for note in notes:
@@ -507,6 +515,9 @@ def normalize_incident(incident: Dict[str, Any]) -> Dict[str, Any]:
                 continue
             kind = str(note.get("kind") or "user").strip().lower()
             note["kind"] = kind if kind in NOTE_KINDS else "user"
+            note_label = stamp_label(note.get("saved_at"))
+            if note_label:
+                note["saved_at_label"] = note_label
     return incident
 
 
@@ -521,6 +532,8 @@ def apply_fields(  # noqa: C901
     old_assigned = _clean_agency(incident.get("assigned_to"))
     old_reporter_name = str(incident.get("reported_by_name") or "").strip()
     old_reporter_agency = _clean_reporter(incident.get("reported_by_agency"))
+    old_loc_text = str(incident.get("location_text") or "").strip()
+    old_outcome = str(incident.get("outcome") or "").strip()
     old_types = list(incident.get("incident_types") or [])
     old_care = list(incident.get("care_types") or [])
     old_other = str(incident.get("incident_type_other") or "").strip()
@@ -635,10 +648,12 @@ def apply_fields(  # noqa: C901
         return incident
     _touch(incident)
     new_desc = str(incident.get("description") or "").strip()
-    if new_desc and not old_desc:
+    if new_desc and new_desc != old_desc:
         append_note(incident, new_desc, kind="user")
     if incident.get("called_911") == "yes" and old_911 != "yes":
         append_note(incident, "911 called.", kind="system")
+    if incident.get("called_911") != "yes" and old_911 == "yes":
+        append_note(incident, "911 cleared.", kind="system")
     if incident.get("urgent") == "yes" and old_urgent != "yes":
         append_note(incident, "Marked urgent.", kind="system")
     if incident.get("urgent") != "yes" and old_urgent == "yes":
@@ -663,6 +678,22 @@ def apply_fields(  # noqa: C901
     )
     if care_note:
         append_note(incident, care_note, kind="system")
+    new_loc_text = str(incident.get("location_text") or "").strip()
+    if new_loc_text != old_loc_text:
+        append_note(
+            incident,
+            ("Location: " + new_loc_text + ".")
+            if new_loc_text
+            else "Location cleared.",
+            kind="system",
+        )
+    new_outcome = str(incident.get("outcome") or "").strip()
+    if new_outcome != old_outcome:
+        if new_outcome:
+            label = _outcome_label(new_outcome) or new_outcome
+            append_note(incident, "Outcome: " + label + ".", kind="system")
+        else:
+            append_note(incident, "Outcome cleared.", kind="system")
     return incident
 
 

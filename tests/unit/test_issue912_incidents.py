@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import zipfile
-from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -114,9 +113,7 @@ def test_normalize_copies_type_notes_into_description():
     assert incident["description"] == "Heat after km 8."
     assert incident["assigned_to"] == ""
     assert incident["location_loc_id"] == ""
-    assert incident["updated_at_label"] == datetime.fromisoformat(
-        "2026-10-20T17:21:00"
-    ).strftime("%a %H:%M")
+    assert incident["updated_at_label"] == "2026-10-20 17:21"
     assert incident["notes"][0]["kind"] == "system"
 
 
@@ -145,6 +142,7 @@ def test_reporter_agencies_are_alphabetical():
         "Ski",
         "Spectator",
         "Volunteer",
+        "YSSR",
     ]
 
 
@@ -248,11 +246,12 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert "Runner down after the water stop." in texts
     assert "911 called." in texts
     assert "Reported by Jeff · Race Crew." in texts
+    assert "Location: 10K Water Stop." in texts
     assert "Updated location" not in " ".join(texts)
     assert "Assigned SKI." in texts
     assert not any(text.startswith("Transferred ") for text in texts)
     assert kinds.count("user") == 1
-    assert kinds.count("system") == 3
+    assert kinds.count("system") == 4
     assert kinds.count("transfer") == 1
 
     again_report = client.put(
@@ -441,9 +440,8 @@ def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
     assert incident["reported_by_name"] == ""
     assert incident["assigned_to"] == ""
     assert incident["location_loc_id"] == ""
-    assert incident["updated_at_label"] == datetime.fromisoformat(
-        "2026-10-20T17:00:00"
-    ).strftime("%a %H:%M")
+    assert incident["updated_at_label"] == "2026-10-20 17:00"
+    assert incident["notes"][0]["saved_at_label"] == "2026-10-20 17:00"
     assert incident["care_transferred"] == "yes"
     assert incident["transferred_to"] == ["ski"]
 
