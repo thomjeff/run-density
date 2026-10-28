@@ -66,7 +66,7 @@ def test_execute_board_has_three_columns(base_source: str):
     assert 'data-rf-execute-view="reopen">' not in base_source
     assert 'data-rf-execute-view="map">Map</a>' not in base_source
     assert 'data-rf-execute-view="participants">Participants</a>' in base_source
-    assert 'data-rf-execute-view="incidents">Incidents</a>' in base_source
+    assert 'data-rf-execute-view="incidents">Cases</a>' in base_source
     assert "if (view === \"plans\") href = \"/execute/plans\"" in base_source
     assert "if (view === \"operations\") href = \"/execute\"" in base_source
     assert "if (view === \"participants\") href = \"/execute/participants\"" in base_source

@@ -1,21 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Incidents{% endblock %}
+{% block title %}Cases{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="/static/css/execute_hs.css?v=914d">
+<link rel="stylesheet" href="/static/css/execute_hs.css?v=944">
 {% endblock %}
 
 {% block content %}
 <div class="rf-hs-page">
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:baseline;gap:0.75rem;">
-        <h2 id="rf-hs-title">Incidents</h2>
+    <div class="page-header">
+        <h2 id="rf-hs-title">Cases</h2>
+        <p class="rf-hs-lead">
+            Select an active case to add an update, or
+            <a href="/execute/participants">start a new case</a>
+            from Participants. Search Active and Closed cases by Bib Number.
+        </p>
         <span id="rf-hs-sub" class="rf-hs-meta"></span>
     </div>
 
     <div id="rf-hs-empty" class="rf-hs-empty" hidden>
         <h3>No Day Plan is active</h3>
-        <p>Import and activate a Day Plan on <strong>Execute → Plans</strong> to open Incidents.</p>
+        <p>Import and activate a Day Plan on <strong>Execute → Plans</strong> to open Cases.</p>
     </div>
 
     <div id="rf-hs-error" class="rf-hs-error" hidden></div>
@@ -36,6 +41,16 @@
             </div>
         </div>
     </div>
+    <div id="hs-close-modal" class="rf-hs-modal" hidden>
+        <div class="rf-hs-modal-card" role="dialog" aria-modal="true" aria-labelledby="hs-close-title">
+            <h3 id="hs-close-title">Close Case</h3>
+            <div id="hs-close-fields"></div>
+            <div class="rf-hs-xfer-actions">
+                <button type="button" class="btn btn-sm" id="hs-close-cancel">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="hs-close">Close case</button>
+            </div>
+        </div>
+    </div>
     <div id="hs-nav-modal" class="rf-hs-modal" hidden>
         <div class="rf-hs-modal-card" role="dialog" aria-modal="true" aria-labelledby="hs-nav-title">
             <h3 id="hs-nav-title">Unsaved work on this case</h3>
@@ -52,5 +67,5 @@
 
 {% block extra_scripts %}
 <script src="/static/js/execute_context.js?v=920"></script>
-<script src="/static/js/execute_incidents.js?v=920"></script>
+<script src="/static/js/execute_incidents.js?v=944"></script>
 {% endblock %}

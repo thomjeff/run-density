@@ -138,3 +138,8 @@ async def execute_participants(request: Request):
 @router.get("/execute/incidents", response_class=HTMLResponse)
 async def execute_incidents(request: Request):
     return _page(request, "pages/execute_incidents.html")
+
+
+@router.get("/execute/help", response_class=HTMLResponse)
+async def execute_help(request: Request):
+    return _page(request, "pages/execute_help.html")

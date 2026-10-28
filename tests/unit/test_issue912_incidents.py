@@ -467,7 +467,7 @@ def test_pages_have_two_pane_case_shell():
     assert 'id="hs-report-agency"' in js
     assert "Incident report" in js
     assert "Reported problem" in js
-    assert "Care provided — reported by the care team" in js
+    assert "Care provided" in js
     assert "911 called" in js
     assert 'id="hs-type-other"' in js
     assert 'id="hs-xfer-to"' in js
@@ -481,13 +481,13 @@ def test_pages_have_two_pane_case_shell():
     assert "Save case changes &amp; switch" in html
     assert 'id="hs-activity-modal"' in html
     assert "Discard changes" in html
-    assert js.index("Incident report") < js.index(">Case log<")
-    assert js.index("Reported problem") < js.index("Close case")
-    assert "Find bib or name" in js
+    assert js.index("Incident report") < js.index(">Case Updates<")
+    assert js.index("Reported problem") < js.index("Close Case")
+    assert "Search by bib number" in js
     assert "Location not recorded" in js
     assert "Care agency not recorded" in js
     assert "Save case" in js
-    assert "Review &amp; close case" in js
+    assert "Close Case" in js
     assert "Save changes & add note" not in js
     assert "function missingSaveFields" in js
     assert "function missingCloseFields" in js
@@ -496,20 +496,25 @@ def test_pages_have_two_pane_case_shell():
         js.index("function missingSaveFields") : js.index("function missingCloseFields")
     ]
     assert "Closed by" not in save_fields
-    assert "Start a case" in js
+    assert "start a new case" in html
     assert "not_yet_known" in js
     assert "More care options" in js
     assert "hs-id-badges" in js
     assert "rf-hs-911-badge" in js
-    assert "911 called?" in js
-    assert "Add to case log" in js
+    assert "Call 911" in js
+    assert "Mark Urgent" in js
+    assert "911 called?" not in js
+    assert "Record care agency" not in js
+    assert "Add update" in js
     assert "Closed by (required)" in js
     assert "Roles/Organization" in js
     assert "Closing member's team or organization" not in js
     assert "function healthHtml" in js
     assert "rf-hs-idbar-health" in js
-    assert js.index('id="hs-care-options"') < js.index('id="hs-by-name"')
-    assert js.index('id="hs-by-agency"') < js.index('id="hs-close"')
+    assert 'id="hs-care-options"' in js
+    assert 'id="hs-by-name"' in js
+    assert 'id="hs-close"' in html
+    assert 'id="hs-close-modal"' in html
     assert "organisation" not in js
     assert "first-aid" not in js.lower().replace("first_aid", "")
     assert "function dirtyFieldLabels" in js

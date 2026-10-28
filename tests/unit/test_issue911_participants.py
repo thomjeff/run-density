@@ -277,7 +277,7 @@ def test_pages_have_search_and_lists():
     assert "View active case" in people_js
     assert "Open incident" not in people_js
     assert "Show participants without a bib" in people
-    assert "Incidents" in incidents
+    assert "Cases" in incidents
     assert 'id="rf-hs-workspace"' in incidents
     assert 'id="rf-hs-queue"' in incidents
     assert 'id="rf-hs-case"' in incidents

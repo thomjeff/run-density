@@ -31,6 +31,7 @@ COPY frontend/templates/pages/execute.html /app/frontend/templates/pages/execute
 COPY frontend/templates/pages/execute_plans.html /app/frontend/templates/pages/execute_plans.html
 COPY frontend/templates/pages/execute_participants.html /app/frontend/templates/pages/execute_participants.html
 COPY frontend/templates/pages/execute_incidents.html /app/frontend/templates/pages/execute_incidents.html
+COPY frontend/templates/pages/execute_help.html /app/frontend/templates/pages/execute_help.html
 COPY frontend/templates/partials/race_config_page_styles.html /app/frontend/templates/partials/race_config_page_styles.html
 COPY frontend/static/css/common.css /app/frontend/static/css/common.css
 COPY frontend/static/css/tabler_spike.css /app/frontend/static/css/tabler_spike.css

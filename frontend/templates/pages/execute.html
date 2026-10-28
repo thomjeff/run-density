@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=928w">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=933">
 {% endblock %}
 
 {% block content %}
@@ -102,7 +102,7 @@
                         <label><input type="checkbox" data-layer="resources" checked> Resources</label>
                         <label><input type="checkbox" data-layer="sos" checked> SOS</label>
                         <label><input type="checkbox" data-layer="reopen" checked> Reopen set</label>
-                        <label><input type="checkbox" data-layer="water"> Water / services</label>
+                        <label><input type="checkbox" data-layer="water" checked> Water / aid / extract</label>
                         <label><input type="checkbox" data-layer="all"> All locations</label>
                     </div>
                     <p class="rf-ex-layers-group">How to read marks</p>
@@ -198,5 +198,5 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
 <script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_board.js?v=928w"></script>
+<script src="/static/js/execute_board.js?v=933"></script>
 {% endblock %}

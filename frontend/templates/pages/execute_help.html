@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Help{% endblock %}
+
+{% block extra_head %}
+{% include 'partials/race_config_page_styles.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="race-config-page rf-execute-help">
+    <div class="page-header">
+        <h2>Help</h2>
+        <p class="race-config-page-lead">
+            Execute is the race-day EOC workspace. Import a Day Plan, then work
+            from Operations, Participants, and Cases.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="card-header">
+            <h3 class="card-title">Plans</h3>
+        </div>
+        <p class="card-help">
+            Import a published Day Plan ZIP. Import does not activate. Activate
+            one plan to open it on Operations, Participants, and Cases.
+            Archive keeps records and turns volunteer sheet URLs off. Restore
+            does not activate.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="card-header">
+            <h3 class="card-title">Operations</h3>
+        </div>
+        <p class="card-help">
+            The map is the command surface. Use layers for courses, turn-arounds,
+            resources, SOS, the reopen set, and Water / aid / extract.
+            Closed, Reopen next, and Reopened list locations in the current map
+            view. Set Operator so reopen and assignment actions are attributed.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="card-header">
+            <h3 class="card-title">Participants</h3>
+        </div>
+        <p class="card-help">
+            Import a Race Roster CSV for the races on this Day Plan. The required
+            column is Participant ID. Search by bib or name, then start a case
+            from a start row. If the table is empty, download the sample on that
+            page and import it.
+        </p>
+    </div>
+
+    <div class="content-card">
+        <div class="card-header">
+            <h3 class="card-title">Cases</h3>
+        </div>
+        <p class="card-help">
+            Cases are the EOC record of what was reported. Assigned to is the
+            on-course care agency, not ticket ownership. Transfer of care is a
+            handoff between agencies. Call 911 and Mark Urgent are flags on the
+            case header. Outcome, including DNF, is recorded when the case is
+            closed.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/execute_context.js?v=922"></script>
+{% endblock %}
+

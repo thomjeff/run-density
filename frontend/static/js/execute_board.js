@@ -36,7 +36,7 @@
         resources: true,
         sos: true,
         reopen: true,
-        water: false,
+        water: true,
         all: false,
     };
     var LAYER_CHIP_LABELS = {
@@ -45,7 +45,7 @@
         resources: "Resources",
         sos: "SOS",
         reopen: "Reopen set",
-        water: "Water",
+        water: "Aid / extract",
     };
 
     function qs(sel, root) {
@@ -80,10 +80,11 @@
         if (!mapInstance || !mapFitted) return true;
         if (typeof mapInstance.getBounds !== "function") return true;
         var latlng = stripLatLon(strip);
-        if (!latlng) return false;
+        if (!latlng) return isWater(strip) && layers.water;
         var bounds = mapInstance.getBounds();
         if (!bounds || (bounds.isValid && !bounds.isValid())) return true;
-        return bounds.contains(latlng);
+        if (bounds.contains(latlng)) return true;
+        return isWater(strip) && layers.water;
     }
 
     function stripMatches(strip) {
@@ -141,7 +142,15 @@
 
     function isWater(strip) {
         var type = String((strip && strip.loc_type) || "").toLowerCase();
-        return type === "water" || type === "aid" || type === "official";
+        return (
+            type === "water" ||
+            type === "aid" ||
+            type === "official" ||
+            type === "extract" ||
+            type === "first_aid" ||
+            type === "first-aid" ||
+            type === "extraction"
+        );
     }
 
     function locationVisible(strip) {
@@ -426,8 +435,7 @@
         var box = qs("#rf-execute-board");
         if (!box) return;
         if (!focusedCol) {
-            box.innerHTML =
-                '<p class="rf-execute-empty">Select Closed, Reopen next, or Reopened.</p>';
+            box.innerHTML = "";
             return;
         }
         var rows = ((board && board.columns && board.columns[focusedCol]) || [])
@@ -449,14 +457,18 @@
                           next +
                           '" data-loc-id="' +
                           esc(strip.loc_id) +
-                          '"><span class="rf-ex-id">' +
+                          '"><span class="rf-ex-strip-line"><span class="rf-ex-id">' +
                           esc(strip.loc_id) +
                           '</span><span class="rf-ex-name">' +
                           esc(strip.loc_label) +
-                          '</span><span class="rf-ex-time">est. ' +
+                          '</span></span><span class="rf-ex-strip-line rf-ex-strip-sub"><span class="rf-ex-time">est. ' +
                           esc(strip.loc_end || "—") +
-                          '</span><span class="rf-ex-meta">' +
-                          esc(zoneLabel(strip) || "") +
+                          "</span>" +
+                          (zoneLabel(strip)
+                              ? '<span class="rf-ex-meta">' +
+                                esc(zoneLabel(strip)) +
+                                "</span>"
+                              : "") +
                           "</span></button>"
                       );
                   })

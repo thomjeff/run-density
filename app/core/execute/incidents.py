@@ -452,6 +452,9 @@ def empty_incident(*, reg_id: str) -> Dict[str, Any]:
         "assigned_to": "",
         "called_911": "",
         "called_911_at": "",
+        "urgent": "",
+        "emerg_name": "",
+        "emerg_phone": "",
         "outcome": "",
         "completed_by_name": "",
         "completed_by_agency": "",
@@ -477,6 +480,11 @@ def normalize_incident(incident: Dict[str, Any]) -> Dict[str, Any]:
         "location_loc_id": "",
         "incident_type_other": "",
         "updated_at_label": "",
+        "urgent": "",
+        "emerg_name": "",
+        "emerg_phone": "",
+        "medical_note": "",
+        "medical_avoid": "",
     }
     for key, value in defaults.items():
         if incident.get(key) is None:
@@ -509,6 +517,7 @@ def apply_fields(  # noqa: C901
     require_open(incident)
     old_desc = str(incident.get("description") or "").strip()
     old_911 = _clean_yes_no(incident.get("called_911"))
+    old_urgent = _clean_yes_no(incident.get("urgent"))
     old_assigned = _clean_agency(incident.get("assigned_to"))
     old_reporter_name = str(incident.get("reported_by_name") or "").strip()
     old_reporter_agency = _clean_reporter(incident.get("reported_by_agency"))
@@ -533,6 +542,8 @@ def apply_fields(  # noqa: C901
         "called_911_at",
         "completed_by_name",
         "reported_by_name",
+        "emerg_name",
+        "emerg_phone",
     )
     for field in text_fields:
         if field in payload and payload.get(field) is not None:
@@ -609,6 +620,11 @@ def apply_fields(  # noqa: C901
         if incident.get("called_911") != new_911:
             incident["called_911"] = new_911
             changed = True
+    if "urgent" in payload:
+        new_urgent = _clean_yes_no(payload.get("urgent"))
+        if incident.get("urgent") != new_urgent:
+            incident["urgent"] = new_urgent
+            changed = True
     if "outcome" in payload and payload.get("outcome") is not None:
         outcome = str(payload.get("outcome") or "").strip()
         outcome = outcome if outcome in ALLOWED_OUTCOMES else ""
@@ -623,6 +639,10 @@ def apply_fields(  # noqa: C901
         append_note(incident, new_desc, kind="user")
     if incident.get("called_911") == "yes" and old_911 != "yes":
         append_note(incident, "911 called.", kind="system")
+    if incident.get("urgent") == "yes" and old_urgent != "yes":
+        append_note(incident, "Marked urgent.", kind="system")
+    if incident.get("urgent") != "yes" and old_urgent == "yes":
+        append_note(incident, "Urgent cleared.", kind="system")
     new_reporter_name = str(incident.get("reported_by_name") or "").strip()
     new_reporter_agency = _clean_reporter(incident.get("reported_by_agency"))
     reported = reporter_note_text(new_reporter_name, new_reporter_agency)

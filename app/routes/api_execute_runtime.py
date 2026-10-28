@@ -61,6 +61,7 @@ class IncidentUpdateBody(BaseModel):
     assigned_note: Optional[str] = None
     called_911: Optional[str] = None
     called_911_at: Optional[str] = None
+    urgent: Optional[str] = None
     outcome: Optional[str] = None
     completed_by_name: Optional[str] = None
     completed_by_agency: Optional[str] = None
@@ -161,10 +162,17 @@ def _incident_view(
         payload["medical_conditions"] = list(conditions)
         payload["medical_note"] = row.get("medical_note") or ""
         payload["medical_avoid"] = row.get("medical_avoid") or ""
+        payload["emerg_name"] = payload.get("emerg_name") or row.get("emerg_name") or ""
+        payload["emerg_phone"] = (
+            payload.get("emerg_phone") or row.get("emerg_phone") or ""
+        )
     else:
         payload["display_bib"] = str(incident.get("bib") or "").strip()
         payload.setdefault("medical_conditions", [])
         payload.setdefault("medical_note", "")
+        payload.setdefault("medical_avoid", "")
+        payload.setdefault("emerg_name", "")
+        payload.setdefault("emerg_phone", "")
     life = hs_incidents.lifecycle(incident)
     payload["lifecycle"] = life
     payload["lifecycle_display"] = life.get("display") or life.get("label")
@@ -335,6 +343,8 @@ async def post_execute_incident(
             "age": body.age if body.age is not None else row.get("age"),
             "sex": body.sex if body.sex is not None else row.get("sex"),
             "sub_event": sub_event,
+            "emerg_name": row.get("emerg_name"),
+            "emerg_phone": row.get("emerg_phone"),
         },
     )
     store = _incidents_store(storage, rid, selected_day)

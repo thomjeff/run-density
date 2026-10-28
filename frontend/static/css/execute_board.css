@@ -726,11 +726,25 @@ html.rf-tabler:has(.rf-ex-theme-light) .container-xl.rf-tabler-content {
     font-size: 0.82rem;
 }
 
+.rf-ex-strip-line {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.rf-ex-strip-sub {
+    margin-top: 0.12rem;
+}
+
 .rf-ex-meta,
 .rf-ex-time {
-    display: block;
+    display: inline;
     color: var(--rf-ex-muted);
     font-size: 0.7rem;
+}
+
+.rf-ex-meta {
+    margin-left: 0.15rem;
 }
 
 .rf-ex-strip-error {
