@@ -6,7 +6,7 @@
 <div class="page-header">
     <h2>Location Sheets</h2>
     <p style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">
-        One-pager sheets for traffic control locations (onepage='y'). Use the day selector to switch days. Open a sheet to copy its URL for Volunteer Local job/shift configuration.
+        One-pager sheets for traffic control locations (onepage='y'). Open a sheet to copy its URL.
     </p>
 </div>
 
@@ -35,7 +35,7 @@
                 <td style="padding: 0.5rem 0.75rem;">{{ s.loc_id }}</td>
                 <td style="padding: 0.5rem 0.75rem;">{{ s.label }}</td>
                 <td style="padding: 0.5rem 0.75rem;">
-                    {% if cloud_mode %}<a href="/locsheets/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% else %}<a href="/locsheets/{{ run_id }}/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% endif %}
+                    {% if cloud_mode %}<a href="/locsheets/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% else %}<a href="/locsheets/{{ run_id }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% endif %}
                 </td>
             </tr>
             {% endfor %}

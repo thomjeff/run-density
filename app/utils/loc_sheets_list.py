@@ -127,6 +127,11 @@ def loc_sheets_html_dir(run_dir: Path, selected_day: str) -> Path:
     return Path(run_dir) / selected_day / "reports" / "loc_sheets" / "html"
 
 
+def loc_sheet_html_path(run_dir: Path, selected_day: str, loc_id: str) -> Path:
+    """On-disk one-pager: ``{run_id}/{day}/reports/loc_sheets/html/{loc_id}.html`` (#942)."""
+    return loc_sheets_html_dir(run_dir, selected_day) / f"{loc_id}.html"
+
+
 def zip_loc_sheet_html(run_dir: Path, selected_day: str) -> bytes:
     """Pack already-written loc sheet HTML. Does not regenerate sheets (#871)."""
     import io
