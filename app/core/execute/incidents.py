@@ -682,9 +682,11 @@ def apply_fields(  # noqa: C901
     if new_loc_text != old_loc_text:
         append_note(
             incident,
-            ("Location: " + new_loc_text + ".")
-            if new_loc_text
-            else "Location cleared.",
+            (
+                ("Location: " + new_loc_text + ".")
+                if new_loc_text
+                else "Location cleared."
+            ),
             kind="system",
         )
     new_outcome = str(incident.get("outcome") or "").strip()
