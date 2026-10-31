@@ -287,15 +287,125 @@ def extract_package(archive: bytes) -> Dict[str, bytes]:
         raise PublishedPlanError("Package is not a valid ZIP.") from exc
 
 
-def import_published_plan(
-    archive: bytes,
-    root: Optional[Path] = None,
+def apply_plan_overrides(
+    manifest: Mapping[str, Any],
+    *,
+    name: Optional[str] = None,
+    calendar_date: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Operator edits from the import modal (#947). Date keeps the plan weekday."""
+    out = dict(manifest)
+    name_text = str(name or "").strip()
+    if name_text:
+        out["name"] = name_text
+    date_text = str(calendar_date or "").strip()
+    if date_text:
+        parse_calendar_date(date_text)
+        original = str(out.get("calendar_date") or "").strip()
+        weekday = str(out.get("weekday_code") or "").strip().lower()
+        if not weekday and original:
+            weekday = weekday_code_for_date(original)
+        if weekday and weekday_code_for_date(date_text) != weekday:
+            day_name = parse_calendar_date(original).strftime("%A")
+            raise PublishedPlanError(
+                f"This Day Plan is for a {day_name}. Pick a {day_name} date."
+            )
+        out["calendar_date"] = date_text
+        if weekday:
+            out["weekday_code"] = weekday
+    return out
+
+
+def _read_package(archive: bytes) -> Tuple[Dict[str, bytes], Dict[str, Any]]:
     files = extract_package(archive)
     raw = files.get(MANIFEST_NAME)
     if raw is None:
         raise PublishedPlanError("Package is missing manifest.json.")
-    manifest = validate_manifest(json.loads(raw.decode("utf-8")))
+    return files, json.loads(raw.decode("utf-8"))
+
+
+def preview_published_plan(
+    archive: bytes,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Name, date, and import status for the import modal (#947)."""
+    files, raw_manifest = _read_package(archive)
+    manifest = validate_manifest(raw_manifest)
+    _verify_checksums(manifest, files)
+    plan_id = manifest["plan_id"]
+    existing = (load_registry(root).get("plans") or {}).get(plan_id) or {}
+    return {
+        "plan_id": plan_id,
+        "revision": int(manifest["revision"]),
+        "name": manifest.get("name") or "",
+        "calendar_date": manifest["calendar_date"],
+        "weekday_code": manifest["weekday_code"],
+        "already_imported": bool(existing),
+        "archived": bool(existing.get("archived")),
+    }
+
+
+def _save_package_db(
+    plan_id: str,
+    manifest: Mapping[str, Any],
+    dest: Path,
+) -> None:
+    from app.core.execute.db import save_plan_package
+
+    locations_doc = json.loads((dest / LOCATIONS_NAME).read_text())
+    courses: Dict[str, Any] = {}
+    for race in manifest["races"]:
+        rel = race.get("course") or f"{COURSES_DIR}/{race['id']}.geojson"
+        course_path = dest / rel
+        if course_path.is_file():
+            courses[race["id"]] = json.loads(course_path.read_text(encoding="utf-8"))
+    save_plan_package(
+        plan_id,
+        manifest=manifest,
+        locations=locations_doc,
+        courses=courses,
+    )
+
+
+def _store_plan_metadata(
+    registry: Dict[str, Any],
+    manifest: Mapping[str, Any],
+    raw_manifest: Mapping[str, Any],
+    dest: Path,
+    root: Optional[Path],
+) -> None:
+    """Persist edited name/date on an already-imported revision."""
+    from app.core.execute.db import using_postgres
+
+    plan_id = manifest["plan_id"]
+    plans = dict(registry.get("plans") or {})
+    row = dict(plans.get(plan_id) or {})
+    row["name"] = manifest.get("name") or ""
+    row["calendar_date"] = manifest["calendar_date"]
+    plans[plan_id] = row
+    registry["plans"] = plans
+    save_registry(registry, root)
+    if dest.is_dir():
+        (dest / MANIFEST_NAME).write_text(
+            json.dumps(dict(raw_manifest), indent=2) + "\n", encoding="utf-8"
+        )
+        if using_postgres() and root is None:
+            _save_package_db(plan_id, manifest, dest)
+
+
+def import_published_plan(
+    archive: bytes,
+    root: Optional[Path] = None,
+    *,
+    name: Optional[str] = None,
+    calendar_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    files, published = _read_package(archive)
+    raw_manifest = apply_plan_overrides(
+        published, name=name, calendar_date=calendar_date
+    )
+    edited = raw_manifest != published
+    manifest = validate_manifest(raw_manifest)
     _verify_checksums(manifest, files)
     plan_id = manifest["plan_id"]
     revision = int(manifest["revision"])
@@ -309,12 +419,18 @@ def import_published_plan(
     if using_postgres() and root is None and existing:
         already = True
     if existing and same_revision and already:
+        changed = (existing.get("name") or "") != (manifest.get("name") or "") or (
+            existing.get("calendar_date") != manifest["calendar_date"]
+        )
+        if edited and changed:
+            _store_plan_metadata(registry, manifest, raw_manifest, dest, root)
         active_id = registry.get("active_plan_id")
         return {
             "imported": False,
             "idempotent": True,
             "plan_id": plan_id,
             "revision": revision,
+            "name": manifest.get("name") or "",
             "calendar_date": manifest["calendar_date"],
             "activated": active_id == plan_id,
         }
@@ -325,6 +441,10 @@ def import_published_plan(
         target = dest / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
+    if edited:
+        (dest / MANIFEST_NAME).write_text(
+            json.dumps(raw_manifest, indent=2) + "\n", encoding="utf-8"
+        )
     plans = dict(registry.get("plans") or {})
     plans[plan_id] = {
         "plan_id": plan_id,
@@ -339,28 +459,13 @@ def import_published_plan(
     registry["plans"] = plans
     save_registry(registry, root)
     if using_postgres() and root is None:
-        from app.core.execute.db import save_plan_package
-
-        locations_doc = json.loads((dest / LOCATIONS_NAME).read_text())
-        courses: Dict[str, Any] = {}
-        for race in manifest["races"]:
-            rel = race.get("course") or f"{COURSES_DIR}/{race['id']}.geojson"
-            course_path = dest / rel
-            if course_path.is_file():
-                courses[race["id"]] = json.loads(
-                    course_path.read_text(encoding="utf-8")
-                )
-        save_plan_package(
-            plan_id,
-            manifest=manifest,
-            locations=locations_doc,
-            courses=courses,
-        )
+        _save_package_db(plan_id, manifest, dest)
     return {
         "imported": True,
         "idempotent": False,
         "plan_id": plan_id,
         "revision": revision,
+        "name": manifest.get("name") or "",
         "calendar_date": manifest["calendar_date"],
         "activated": False,
     }

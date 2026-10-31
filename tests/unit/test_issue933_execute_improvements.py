@@ -26,9 +26,7 @@ FIXTURE = REPO / "tests" / "fixtures" / "issue911_participant_list.csv"
 def _package() -> bytes:
     plan_id = str(uuid4())
     locations = {
-        "locations": [
-            {"loc_id": 16, "loc_label": "10K Water Stop", "zone": "Z3"}
-        ],
+        "locations": [{"loc_id": 16, "loc_label": "10K Water Stop", "zone": "Z3"}],
         "resources_available": [],
     }
     course = {"type": "FeatureCollection", "features": []}
@@ -83,25 +81,22 @@ def test_operations_helper_text_removed_and_rows_are_two_line():
     assert "rf-ex-strip-sub" in js
     assert "water: true" in js
     assert 'type === "extract"' in js
-    assert "Water / aid / extract" in html
-    assert 'data-layer="water" checked' in html
+    assert 'data-layer="water" checked> Water</label>' in html
     dockerfile = (REPO / "Dockerfile.execute").read_text(encoding="utf-8")
     assert "execute_help.html" in dockerfile
 
 
 def test_help_is_execute_only_before_logout():
-    base = (REPO / "frontend" / "templates" / "base.html").read_text(
-        encoding="utf-8"
-    )
+    base = (REPO / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     help_at = base.index('href="/execute/help">Help</a>')
     logout_at = base.index('href="/logout">Logout</a>')
     assert help_at < logout_at
     assert "execute_runtime|default(false)" in base[help_at - 120 : help_at]
-    page = (
-        REPO / "frontend" / "templates" / "pages" / "execute_help.html"
-    ).read_text(encoding="utf-8")
+    page = (REPO / "frontend" / "templates" / "pages" / "execute_help.html").read_text(
+        encoding="utf-8"
+    )
     assert "Cases" in page
-    assert "Water / aid / extract" in page
+    assert "Aid, Course, Extract, Official, Traffic, Water" in page
 
 
 def test_participants_sample_sentence_uses_issue_attachment():
@@ -117,9 +112,9 @@ def test_participants_sample_sentence_uses_issue_attachment():
 
 
 def test_incidents_identity_and_form_copy():
-    js = (
-        REPO / "frontend" / "static" / "js" / "execute_incidents.js"
-    ).read_text(encoding="utf-8")
+    js = (REPO / "frontend" / "static" / "js" / "execute_incidents.js").read_text(
+        encoding="utf-8"
+    )
     assert "Emergency Contact" in js
     assert "medical_avoid" in js
     assert "Call 911" in js
@@ -138,7 +133,7 @@ def test_incidents_identity_and_form_copy():
     assert render.index("Category") < render.index("Care provided")
     assert 'id="hs-care-options"' in js
     assert 'id="hs-outcome"' in js
-    assert "id === \"hs-assigned\"" in js
+    assert 'id === "hs-assigned"' in js
     assert "Add update" in js
     assert "first_aid" not in js
 

@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=933">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=947">
 {% endblock %}
 
 {% block content %}
@@ -97,13 +97,15 @@
                 <div class="rf-ex-layers-panel" id="rf-execute-layers-panel" hidden>
                     <p class="rf-ex-layers-group">On the map</p>
                     <div class="rf-execute-layers" aria-label="Map layers">
-                        <label><input type="checkbox" data-layer="courses" checked> Courses</label>
-                        <label><input type="checkbox" data-layer="turnarounds" checked> Turn-arounds</label>
+                        <label><input type="checkbox" data-layer="aid" checked> Aid</label>
+                        <label><input type="checkbox" data-layer="course" checked> Course</label>
+                        <label><input type="checkbox" data-layer="extract" checked> Extract</label>
+                        <label><input type="checkbox" data-layer="official" checked> Official</label>
                         <label><input type="checkbox" data-layer="resources" checked> Resources</label>
                         <label><input type="checkbox" data-layer="sos" checked> SOS</label>
-                        <label><input type="checkbox" data-layer="reopen" checked> Reopen set</label>
-                        <label><input type="checkbox" data-layer="water" checked> Water / aid / extract</label>
-                        <label><input type="checkbox" data-layer="all"> All locations</label>
+                        <label><input type="checkbox" data-layer="traffic" checked> Traffic</label>
+                        <label><input type="checkbox" data-layer="water" checked> Water</label>
+                        <label class="rf-ex-layers-all"><input type="checkbox" data-layer="all" checked> All Layers</label>
                     </div>
                     <p class="rf-ex-layers-group">How to read marks</p>
                     <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
@@ -197,6 +199,6 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
-<script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_board.js?v=933"></script>
+<script src="/static/js/execute_context.js?v=947"></script>
+<script src="/static/js/execute_board.js?v=947b"></script>
 {% endblock %}

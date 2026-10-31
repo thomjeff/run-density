@@ -4495,9 +4495,10 @@
                     locationsForMove[locIndex] = movedLoc;
                     map.closePopup();
                     setLegStatus('Moving location…');
-                    saveLegLocations(selectedLegId, locationsForMove)
+                    var moveSourceLegId = selectedLegId;
+                    saveLegLocations(moveSourceLegId, locationsForMove, { skipPairPrompt: true })
                         .then(function () {
-                            return moveOrgLegLocation(selectedLegId, locIndex, targetLegId);
+                            return moveOrgLegLocation(moveSourceLegId, locIndex, targetLegId);
                         })
                         .then(function (data) {
                             var newIdx =
@@ -4507,6 +4508,8 @@
                             setLegStatus(
                                 'Location moved to leg ' + targetLegId + '.'
                             );
+                            queuePairedLocationsPrompt(moveSourceLegId);
+                            queuePairedLocationsPrompt(targetLegId);
                             if (newIdx != null) {
                                 navigateToLegLocation(targetLegId, newIdx, {
                                     scroll: false,
@@ -5090,22 +5093,13 @@
             return;
         }
         setLegStatus('Copying ' + sourceCount + ' location(s) from leg ' + sourceLegId + ' to leg ' + targetLegId + '…');
-        fetch('/api/org/legs/' + encodeURIComponent(targetLegId) + '/copy-locations', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_leg_id: sourceLegId, replace: true })
-        })
-            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
-            .then(function (payload) {
-                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                return afterLegLibraryMutation(payload.data).then(function () {
-                    selectLegById(targetLegId);
-                    setLegStatus(
-                        'Copied ' + (payload.data.location_count || sourceCount)
-                        + ' location(s) from leg ' + sourceLegId + ' to leg ' + targetLegId + '.'
-                    );
-                });
+        postCopyLegLocations(targetLegId, sourceLegId)
+            .then(function (data) {
+                selectLegById(targetLegId);
+                setLegStatus(
+                    'Copied ' + ((data && data.location_count) || sourceCount)
+                    + ' location(s) from leg ' + sourceLegId + ' to leg ' + targetLegId + '.'
+                );
             })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
@@ -5145,7 +5139,7 @@
             });
     }
 
-    function saveLegLocations(legId, locations) {
+    function saveLegLocations(legId, locations, opts) {
         return fetch(legDetailUrl(legId), {
             method: 'PUT',
             credentials: 'same-origin',
@@ -5156,6 +5150,148 @@
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 return afterLegLibraryMutation(payload.data);
+            })
+            .then(function () {
+                if (!(opts && opts.skipPairPrompt)) queuePairedLocationsPrompt(legId);
+            });
+    }
+
+    function libraryLeg(legId) {
+        var id = String(legId || '').trim();
+        if (!id) return null;
+        return ((libraryState && libraryState.legs) || []).find(function (leg) {
+            return String(leg.id || '').trim() === id;
+        }) || null;
+    }
+
+    function pairedLegOf(legId) {
+        var leg = libraryLeg(legId);
+        return leg ? libraryLeg(leg.paired_with) : null;
+    }
+
+    function postCopyLegLocations(targetLegId, sourceLegId) {
+        return fetch('/api/org/legs/' + encodeURIComponent(targetLegId) + '/copy-locations', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_leg_id: sourceLegId, replace: true })
+        })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    return payload.data;
+                });
+            });
+    }
+
+    // Issue #947: after a location save on a paired leg, offer to mirror it.
+    var pairedPromptQueue = [];
+
+    function queuePairedLocationsPrompt(legId) {
+        if (!usesOrgLegLibrary() || !pairedLegOf(legId)) return;
+        var id = String(legId).trim();
+        if (pairedPromptQueue.indexOf(id) === -1) pairedPromptQueue.push(id);
+        if (pairedPromptQueue.length === 1) setTimeout(flushPairedLocationsPrompts, 0);
+    }
+
+    function flushPairedLocationsPrompts() {
+        var edited = pairedPromptQueue.slice();
+        pairedPromptQueue = [];
+        edited.reduce(function (chain, legId) {
+            var paired = pairedLegOf(legId);
+            // Both legs of the pair were edited in one save; do not overwrite either.
+            if (!paired || edited.indexOf(String(paired.id)) !== -1) return chain;
+            return chain.then(function () { return offerPairedLocationsCopy(legId, paired); });
+        }, Promise.resolve());
+    }
+
+    function offerPairedLocationsCopy(legId, paired) {
+        var source = libraryLeg(legId);
+        var sourceCount = ((source && source.locations) || []).length;
+        var pairedCount = (paired.locations || []).length;
+        var label = paired.leg_label || paired.id;
+        if (
+            !window.confirm(
+                'Leg ' + legId + ' is paired with leg ' + paired.id + ' (“' + label + '”).\n\n'
+                + 'Apply this location change to the paired leg too? Its ' + pairedCount
+                + ' location(s) will be replaced with copies of this leg’s ' + sourceCount + '.'
+            )
+        ) {
+            return Promise.resolve();
+        }
+        setLegStatus('Applying locations to paired leg ' + paired.id + '…');
+        var work = sourceCount
+            ? postCopyLegLocations(paired.id, legId)
+            : saveLegLocations(paired.id, [], { skipPairPrompt: true });
+        return work
+            .then(function () {
+                if (selectedLegId) selectLegById(selectedLegId, { preserveZoom: true, keepPinMode: true });
+                setLegStatus(
+                    'Applied ' + sourceCount + ' location(s) to paired leg ' + paired.id + '.'
+                );
+            })
+            .catch(function (err) { setLegStatus(err.message || String(err), true); });
+    }
+
+    var PAIRED_LEG_FIELDS = [
+        { key: 'width_m', label: 'width' },
+        { key: 'schema', label: 'schema' },
+        { key: 'flow_type', label: 'flow type' },
+        { key: 'description', label: 'description' },
+        { key: 'start_label', label: 'start place', pairedKey: 'end_label' },
+        { key: 'end_label', label: 'end place', pairedKey: 'start_label' }
+    ];
+
+    /** Issue #947: offer to mirror leg editor changes onto the paired leg. */
+    function offerPairedLegFieldsCopy(legId, before, fields) {
+        var paired = pairedLegOf(legId);
+        if (!paired || !before) return Promise.resolve();
+        var shown = {
+            width_m: before.width_m,
+            schema: before.schema || 'on_course_open',
+            flow_type: before.flow_type || 'none',
+            description: String(before.description || '').trim()
+                ? before.description
+                : before.flow_notes,
+            start_label: before.start_label,
+            end_label: before.end_label
+        };
+        var changed = PAIRED_LEG_FIELDS.filter(function (f) {
+            return String(shown[f.key] == null ? '' : shown[f.key]).trim()
+                !== String(fields[f.key] == null ? '' : fields[f.key]).trim();
+        });
+        if (!changed.length) return Promise.resolve();
+        var label = paired.leg_label || paired.id;
+        var swapped = changed.some(function (f) { return f.pairedKey; });
+        if (
+            !window.confirm(
+                'Leg ' + legId + ' is paired with leg ' + paired.id + ' (“' + label + '”).\n\n'
+                + 'Apply these changes to the paired leg too? '
+                + changed.map(function (f) { return f.label; }).join(', ') + '.'
+                + (swapped ? '\n\nStart and end places are swapped for the opposite direction.' : '')
+            )
+        ) {
+            return Promise.resolve();
+        }
+        var body = {};
+        changed.forEach(function (f) {
+            body[f.pairedKey || f.key] = fields[f.key];
+        });
+        setLegStatus('Applying changes to paired leg ' + paired.id + '…');
+        return fetch(legDetailUrl(paired.id), {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                return afterLegLibraryMutation(payload.data);
+            })
+            .then(function () {
+                setLegStatus('Leg saved. Changes applied to paired leg ' + paired.id + '.');
             });
     }
 
@@ -6304,7 +6440,10 @@
             return;
         }
         setLegStatus('Saving leg…');
-        fetch(legDetailUrl(legEditorLegId), {
+        var editedLegId = legEditorLegId;
+        var before = libraryLeg(editedLegId);
+        before = before ? JSON.parse(JSON.stringify(before)) : null;
+        fetch(legDetailUrl(editedLegId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -6318,6 +6457,7 @@
             .then(function () {
                 closeLegEditor();
                 setLegStatus('Leg saved.');
+                return offerPairedLegFieldsCopy(editedLegId, before, fields);
             })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }

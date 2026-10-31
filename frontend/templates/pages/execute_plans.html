@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 {% include 'partials/race_config_page_styles.html' %}
-<link rel="stylesheet" href="/static/css/execute_plans.css?v=936d">
+<link rel="stylesheet" href="/static/css/execute_plans.css?v=947b">
 {% endblock %}
 
 {% block content %}
@@ -12,8 +12,9 @@
     <div class="page-header">
         <h2>Plans</h2>
         <p class="race-config-page-lead">
-            Import a published Day Plan. Import does not activate.
-            At most one plan is active. Archive keeps records; restore does not activate.
+            Import a published Day Plan with its participant list. Import activates the plan.
+            At most one plan is active, and a plan needs participants to be active.
+            Archive keeps records; restore does not activate.
             Volunteer location sheets are public as soon as a plan is imported;
             archive turns those URLs off.
         </p>
@@ -23,7 +24,7 @@
         <div class="card-header">
             <h3 class="card-title visually-hidden">Day Plans</h3>
             <div class="card-actions">
-                <input type="file" id="rf-plans-file" accept=".zip,application/zip" hidden>
+                <input type="file" id="rf-plans-roster-file" accept=".csv,text/csv" hidden>
                 <button type="button" id="rf-plans-import" class="course-btn primary">Import</button>
             </div>
         </div>
@@ -33,14 +34,16 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>ID</th>
                         <th>Date</th>
                         <th>Weekday</th>
+                        <th>Participants</th>
                         <th>Status</th>
                         <th class="course-map-action-cell">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="rf-plans-tbody">
-                    <tr><td colspan="5" class="placeholder">Loading Day Plans…</td></tr>
+                    <tr><td colspan="7" class="placeholder">Loading Day Plans…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -85,11 +88,43 @@
             </div>
         </form>
     </div>
+
+    <div id="rf-plans-import-modal" class="rf-plans-modal" hidden>
+        <form id="rf-plans-import-form" class="rf-plans-modal-card" role="dialog" aria-modal="true" aria-labelledby="rf-plans-import-title" novalidate>
+            <h3 id="rf-plans-import-title">Import Day Plan</h3>
+            <label class="rf-plans-field">Day plan (ZIP from Plan)
+                <input type="file" id="rf-plans-import-package" name="package" accept=".zip,application/zip" required>
+            </label>
+            <p id="rf-plans-import-id" class="rf-plans-modal-help rf-plans-id" hidden></p>
+            <p id="rf-plans-import-note" class="rf-plans-modal-note" hidden></p>
+            <div class="rf-plans-modal-row">
+                <label class="rf-plans-field">Name
+                    <input type="text" id="rf-plans-import-name" name="name" autocomplete="off" disabled required>
+                </label>
+                <label class="rf-plans-field">Date
+                    <input type="date" id="rf-plans-import-date" name="calendar_date" disabled required>
+                </label>
+            </div>
+            <p id="rf-plans-import-weekday" class="rf-plans-modal-help" hidden></p>
+            <label class="rf-plans-field">Participant list (CSV)
+                <input type="file" id="rf-plans-import-roster" name="participants" accept=".csv,text/csv" required>
+            </label>
+            <p class="rf-plans-modal-help">
+                Race Roster export. No list yet? Download the
+                <a href="https://github.com/user-attachments/files/34037192/sample-participant-list.csv">sample</a>.
+            </p>
+            <p id="rf-plans-import-error" class="rf-plans-modal-error" role="alert" hidden></p>
+            <div class="rf-plans-modal-actions">
+                <button type="button" class="course-btn" id="rf-plans-import-cancel">Cancel</button>
+                <button type="submit" class="course-btn primary" id="rf-plans-import-submit" disabled>Import and activate</button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/table_actions.js?v=936b"></script>
-<script src="/static/js/execute_context.js?v=922"></script>
-<script src="/static/js/execute_plans.js?v=936b"></script>
+<script src="/static/js/table_actions.js?v=947"></script>
+<script src="/static/js/execute_context.js?v=947"></script>
+<script src="/static/js/execute_plans.js?v=947b"></script>
 {% endblock %}

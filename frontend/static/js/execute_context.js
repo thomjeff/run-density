@@ -19,6 +19,7 @@
                 var parts = [];
                 if (ctx.name) parts.push(ctx.name);
                 if (ctx.calendar_date) parts.push(ctx.calendar_date);
+                if (ctx.plan_id) parts.push(String(ctx.plan_id).slice(0, 8));
                 label.textContent = parts.join(" · ");
             } else {
                 label.textContent = "No plan active";

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -33,6 +33,13 @@ from app.core.execute.operator import (
     require_operator,
     set_operator_cookie,
 )
+from app.core.execute.participants import DuplicateBibError
+from app.core.execute.plan_participants import (
+    decode_roster,
+    import_plan_participants,
+    parse_roster,
+    participant_count,
+)
 from app.core.execute.published_plan import (
     PublishedPlanError,
     activate_published_plan,
@@ -46,6 +53,7 @@ from app.core.execute.published_plan import (
     map_snapshot,
     operations_board,
     operations_reopen_csv,
+    preview_published_plan,
     record_operations_close,
     record_operations_reopen,
     restore_published_plan,
@@ -110,25 +118,99 @@ def _actor_fail(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status, detail=str(exc))
 
 
-@router.post("/api/execute/plans/import")
-async def import_plan(
+NO_PARTICIPANTS_DETAIL = "Load a participant list before activating this Day Plan."
+
+
+def _participant_count(plan_id: str) -> int:
+    try:
+        return participant_count(plan_id)
+    except (PublishedPlanError, OSError, ValueError):
+        return 0
+
+
+async def _read_roster(upload: Optional[UploadFile]) -> Optional[str]:
+    if upload is None:
+        return None
+    raw = await upload.read()
+    if not raw:
+        return None
+    try:
+        text = decode_roster(raw)
+        parse_roster(text)
+    except DuplicateBibError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return text
+
+
+@router.post("/api/execute/plans/preview")
+async def preview_plan(
     request: Request,
     package: UploadFile = File(...),  # noqa: B008
 ):
     _guard(request)
     raw = await package.read()
     try:
-        result = import_published_plan(raw)
+        return {"ok": True, **preview_published_plan(raw)}
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
-    result["activated"] = False
+
+
+@router.post("/api/execute/plans/import")
+async def import_plan(
+    request: Request,
+    package: UploadFile = File(...),  # noqa: B008
+    participants: Optional[UploadFile] = File(None),  # noqa: B008
+    name: Optional[str] = Form(None),  # noqa: B008
+    calendar_date: Optional[str] = Form(None),  # noqa: B008
+    activate: bool = Form(False),  # noqa: B008
+):
+    """Import a Day Plan; with a roster it can activate in one step (#947)."""
+    _guard(request)
+    raw = await package.read()
+    roster = await _read_roster(participants)
+    if activate and roster is None:
+        raise HTTPException(status_code=400, detail=NO_PARTICIPANTS_DETAIL)
+    try:
+        if activate and preview_published_plan(raw)["archived"]:
+            raise PublishedPlanError("Restore this Day Plan before activating.")
+        result = import_published_plan(raw, name=name, calendar_date=calendar_date)
+        plan_id = result["plan_id"]
+        if roster is not None:
+            result["participants"] = import_plan_participants(plan_id, roster)["stats"]
+        result["activated"] = False
+        if activate:
+            activate_published_plan(plan_id)
+            result["activated"] = True
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
     return result
+
+
+@router.post("/api/execute/plans/{plan_id}/participants")
+async def import_plan_roster(
+    request: Request,
+    plan_id: str,
+    file: UploadFile = File(...),  # noqa: B008
+):
+    _guard(request)
+    roster = await _read_roster(file)
+    if roster is None:
+        raise HTTPException(status_code=400, detail="Choose a participant CSV.")
+    try:
+        result = import_plan_participants(plan_id, roster)
+    except PublishedPlanError as exc:
+        raise _fail(exc) from exc
+    return {"ok": True, **result}
 
 
 @router.post("/api/execute/plans/activate")
 async def activate_plan(request: Request, body: ActivateBody):
     _guard(request)
     try:
+        if participant_count(body.plan_id) < 1:
+            raise HTTPException(status_code=400, detail=NO_PARTICIPANTS_DETAIL)
         loaded = activate_published_plan(body.plan_id)
     except PublishedPlanError as exc:
         raise _fail(exc) from exc
@@ -171,10 +253,15 @@ async def restore_plan(request: Request, body: ActivateBody):
 async def list_plans(request: Request):
     _guard(request)
     listing = listed_plans()
+    rows = []
+    for row in listing["plans"]:
+        row = dict(row)
+        row["participant_count"] = _participant_count(row.get("plan_id") or "")
+        rows.append(row)
     return {
         "ok": True,
         "active_plan_id": listing["active_plan_id"],
-        "plans": listing["plans"],
+        "plans": rows,
     }
 
 

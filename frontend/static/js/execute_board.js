@@ -31,22 +31,26 @@
         reopened: "#10b981",
     };
     var layers = {
-        courses: true,
-        turnarounds: true,
+        aid: true,
+        course: true,
+        extract: true,
+        official: true,
         resources: true,
         sos: true,
-        reopen: true,
+        traffic: true,
         water: true,
-        all: false,
     };
     var LAYER_CHIP_LABELS = {
-        courses: "Courses",
-        turnarounds: "Turn-arounds",
+        aid: "Aid",
+        course: "Course",
+        extract: "Extract",
+        official: "Official",
         resources: "Resources",
         sos: "SOS",
-        reopen: "Reopen set",
-        water: "Aid / extract",
+        traffic: "Traffic",
+        water: "Water",
     };
+    var SERVICE_LAYERS = ["aid", "extract", "official", "water"];
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -80,11 +84,11 @@
         if (!mapInstance || !mapFitted) return true;
         if (typeof mapInstance.getBounds !== "function") return true;
         var latlng = stripLatLon(strip);
-        if (!latlng) return isWater(strip) && layers.water;
+        if (!latlng) return serviceLayerOn(strip);
         var bounds = mapInstance.getBounds();
         if (!bounds || (bounds.isValid && !bounds.isValid())) return true;
         if (bounds.contains(latlng)) return true;
-        return isWater(strip) && layers.water;
+        return serviceLayerOn(strip);
     }
 
     function stripMatches(strip) {
@@ -124,46 +128,48 @@
         return null;
     }
 
-    function isTurnaround(strip) {
+    function locTypeLayer(strip) {
         var type = String((strip && strip.loc_type) || "").toLowerCase();
+        if (type === "first_aid" || type === "first-aid") return "aid";
+        if (type === "extraction") return "extract";
+        if (type === "marshal") return "official";
         if (
-            type === "turnaround" ||
-            type === "turn-around" ||
-            type === "turn_around"
+            type === "aid" ||
+            type === "course" ||
+            type === "extract" ||
+            type === "official" ||
+            type === "traffic" ||
+            type === "water"
         ) {
-            return true;
+            return type;
         }
-        if (type === "water") return false;
-        var label = String((strip && strip.loc_label) || "");
-        if (/turn[\s-]?around/i.test(label)) return true;
-        if (!/\bturn\b/i.test(label)) return false;
-        return type === "official" || type === "course" || type === "";
+        return "";
     }
 
-    function isWater(strip) {
-        var type = String((strip && strip.loc_type) || "").toLowerCase();
-        return (
-            type === "water" ||
-            type === "aid" ||
-            type === "official" ||
-            type === "extract" ||
-            type === "first_aid" ||
-            type === "first-aid" ||
-            type === "extraction"
-        );
+    function serviceLayerOn(strip) {
+        var key = locTypeLayer(strip);
+        return SERVICE_LAYERS.indexOf(key) !== -1 && !!layers[key];
+    }
+
+    function allLayersOn() {
+        return Object.keys(layers).every(function (key) {
+            return layers[key];
+        });
     }
 
     function locationVisible(strip) {
         if (!stripMatches(strip)) return false;
-        if (layers.all) return true;
-        if (layers.turnarounds && isTurnaround(strip)) return true;
-        if (layers.water && isWater(strip)) return true;
-        if (!layers.reopen) return false;
-        if (strip.status === "closed" || strip.status === "reopened") return true;
-        if (strip.status === "reopen_next") {
-            return focusedCol === "reopen_next" || !!zoneFilter;
+        var key = locTypeLayer(strip);
+        if (key === "traffic") {
+            if (!layers.traffic) return false;
+            if (strip.status === "reopen_next") {
+                return focusedCol === "reopen_next" || !!zoneFilter;
+            }
+            return true;
         }
-        return false;
+        if (key) return !!layers[key];
+        // Untyped locations have no layer of their own.
+        return allLayersOn();
     }
 
     function statusTitle(status) {
@@ -989,7 +995,7 @@
             map.removeLayer(courseLayer);
             courseLayer = null;
         }
-        if (!layers.courses) return null;
+        if (!layers.course) return null;
         var courses = (board && board.courses) || {};
         var group = window.L.featureGroup();
         Object.keys(courses).forEach(function (raceId) {
@@ -1154,8 +1160,11 @@
             map.removeLayer(map._rfTurnLayer);
             map._rfTurnLayer = null;
         }
-        if (!layers.turnarounds || !window.L) return;
-        var pins = (board && board.turnarounds) || [];
+        if (!layers.course || !window.L) return;
+        // Location turn-arounds show under their own type layer.
+        var pins = ((board && board.turnarounds) || []).filter(function (pin) {
+            return pin.source === "course";
+        });
         var group = window.L.featureGroup();
         pins.forEach(function (pin) {
             if (pin.lat == null || pin.lon == null) return;
@@ -1722,9 +1731,7 @@
             return !layers[key];
         });
         var text = "";
-        if (layers.all) {
-            text = "All on";
-        } else if (hidden.length === 1) {
+        if (hidden.length === 1) {
             text = LAYER_CHIP_LABELS[hidden[0]] + " off";
         } else if (hidden.length > 1) {
             text = String(hidden.length) + " hidden";
@@ -1762,14 +1769,40 @@
             input.dataset.bound = "1";
             input.addEventListener("change", function (ev) {
                 var key = ev.target.getAttribute("data-layer");
-                if (Object.prototype.hasOwnProperty.call(layers, key)) {
-                    layers[key] = !!ev.target.checked;
-                    updateLayersChip();
-                    if (board) render();
+                var on = !!ev.target.checked;
+                if (key === "all") {
+                    Object.keys(layers).forEach(function (k) {
+                        layers[k] = on;
+                    });
+                } else if (Object.prototype.hasOwnProperty.call(layers, key)) {
+                    layers[key] = on;
+                } else {
+                    return;
                 }
+                syncLayerInputs();
+                updateLayersChip();
+                if (board) render();
             });
         });
+        syncLayerInputs();
         updateLayersChip();
+    }
+
+    function syncLayerInputs() {
+        var onCount = 0;
+        document.querySelectorAll("[data-layer]").forEach(function (input) {
+            var key = input.getAttribute("data-layer");
+            if (Object.prototype.hasOwnProperty.call(layers, key)) {
+                input.checked = !!layers[key];
+                if (layers[key]) onCount += 1;
+            }
+        });
+        var all = qs('[data-layer="all"]');
+        if (all) {
+            var total = Object.keys(layers).length;
+            all.checked = onCount === total;
+            all.indeterminate = onCount > 0 && onCount < total;
+        }
     }
 
     function bind() {

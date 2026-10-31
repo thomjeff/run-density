@@ -33,8 +33,10 @@
             <h3 class="card-title">Operations</h3>
         </div>
         <p class="card-help">
-            The map is the command surface. Use layers for courses, turn-arounds,
-            resources, SOS, the reopen set, and Water / aid / extract.
+            The map is the command surface. Layers match the Plan location types
+            (Aid, Course, Extract, Official, Traffic, Water), plus Resources
+            and SOS. Course also draws the route. All Layers turns every layer
+            on or off.
             Closed, Reopen next, and Reopened list locations in the current map
             view. Set Operator so reopen and assignment actions are attributed.
         </p>
@@ -68,6 +70,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/execute_context.js?v=922"></script>
+<script src="/static/js/execute_context.js?v=947"></script>
 {% endblock %}
 
