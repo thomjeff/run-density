@@ -944,6 +944,11 @@ html.rf-tabler:has(.rf-ex-theme-light) .container-xl.rf-tabler-content {
     box-shadow: none;
 }
 .rf-ex-map-swatch.is-sos { background: #be123c; }
+.rf-ex-map-swatch.is-off-course {
+    background: transparent;
+    border: 3px solid #94a3b8;
+    box-shadow: none;
+}
 
 .rf-execute-assign {
     position: fixed;

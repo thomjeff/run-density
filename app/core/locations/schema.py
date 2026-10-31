@@ -10,6 +10,10 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence
 
+from app.core.locations.loc_types import (
+    DEFAULT_LOCATION_TYPE,
+    normalize_type_and_placement,
+)
 from app.utils.constants import COURSE_EVENT_IDS
 
 # Stable 2027 defaults; packages may add more via config.json "resources".
@@ -130,7 +134,7 @@ def _yn(value: Any, default: str = "n") -> str:
 def _default_location_fields() -> Dict[str, Any]:
     fields: Dict[str, Any] = {
         "loc_label": "",
-        "loc_type": "course",
+        "loc_type": DEFAULT_LOCATION_TYPE,
         "lat": "",
         "lon": "",
         "proxy_pass_id": "",
@@ -278,8 +282,9 @@ def normalize_location_record(
     if out.get("proxy_loc_id") and not out.get("proxy_pass_id"):
         out["proxy_pass_id"] = out["proxy_loc_id"]
 
-    if not out.get("loc_type"):
-        out["loc_type"] = "course"
+    out["loc_type"], out["placement"] = normalize_type_and_placement(
+        out.get("loc_type"), out.get("placement")
+    )
 
     _sync_resources_dict(out, resource_codes)
     return out
@@ -298,7 +303,7 @@ def location_to_csv_row(
         "loc_id": human_loc,
         "pass_key": _export_pass_key(normalized),
         "loc_label": normalized.get("loc_label", ""),
-        "loc_type": normalized.get("loc_type", "course"),
+        "loc_type": normalized.get("loc_type", DEFAULT_LOCATION_TYPE),
         "lat": normalized.get("lat", ""),
         "lon": normalized.get("lon", ""),
         "proxy_pass_id": proxy,

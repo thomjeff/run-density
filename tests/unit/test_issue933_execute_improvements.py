@@ -96,7 +96,8 @@ def test_help_is_execute_only_before_logout():
         encoding="utf-8"
     )
     assert "Cases" in page
-    assert "Aid, Course, Extract, Official, Traffic, Water" in page
+    assert "Aid, Extract, Official, Traffic, Water" in page
+    assert "Off-course traffic shows as a ring" in page
 
 
 def test_participants_sample_sentence_uses_issue_attachment():

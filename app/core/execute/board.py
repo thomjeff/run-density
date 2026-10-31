@@ -13,6 +13,7 @@ from typing import (
     Tuple,
 )
 
+from app.core.execute.layers import LEGACY_COURSE_TYPE, is_off_course_row
 from app.core.execute.times import (
     REOPEN_NEXT_WINDOW_MINUTES,
     SKIP_RESOURCE_CODES,
@@ -199,10 +200,14 @@ def build_strip(
     run_id: str,
 ) -> Dict[str, Any]:
     loc_id = parse_optional_id(row.get("loc_id"))
+    loc_type = str(row.get("loc_type") or "").strip().lower()
+    if loc_type == LEGACY_COURSE_TYPE:
+        loc_type = "traffic"
     return {
         "loc_id": loc_id,
         "loc_label": row.get("loc_label") or "",
-        "loc_type": row.get("loc_type") or "",
+        "loc_type": loc_type,
+        "off_course": is_off_course_row({**row, "loc_type": loc_type}),
         "zone": zone_code(row.get("zone")),
         "loc_end": minutes_to_hhmm(loc_end_minutes),
         "loc_end_planned": row.get("loc_end"),

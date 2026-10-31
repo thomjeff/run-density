@@ -8,8 +8,7 @@
 
 // Location type colors (from requirements)
 const locationTypeColors = {
-    'traffic': '#808080',  // Gray
-    'course': '#4CAF50',   // Green
+    'traffic': '#4CAF50',  // Green
     'aid': '#F44336',      // Red
     'water': '#2196F3',    // Blue
     'marshal': '#FF9800',  // Orange (legacy)
@@ -84,7 +83,8 @@ function convertToGeoJSON(locations) {
                 paired: !!loc.paired,
                 passes: loc.passes || null,
                 loc_label: loc.loc_label || 'Unknown',
-                loc_type: loc.loc_type || 'unknown',
+                // Legacy loc_type "course" is on-course traffic (Issue #948).
+                loc_type: loc.loc_type === 'course' ? 'traffic' : loc.loc_type || 'unknown',
                 loc_start: loc.loc_start,
                 loc_end: loc.loc_end,
                 duration: loc.duration,

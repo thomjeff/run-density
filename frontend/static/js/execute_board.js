@@ -133,9 +133,9 @@
         if (type === "first_aid" || type === "first-aid") return "aid";
         if (type === "extraction") return "extract";
         if (type === "marshal") return "official";
+        if (type === "course") return "traffic";
         if (
             type === "aid" ||
-            type === "course" ||
             type === "extract" ||
             type === "official" ||
             type === "traffic" ||
@@ -160,13 +160,6 @@
     function locationVisible(strip) {
         if (!stripMatches(strip)) return false;
         var key = locTypeLayer(strip);
-        if (key === "traffic") {
-            if (!layers.traffic) return false;
-            if (strip.status === "reopen_next") {
-                return focusedCol === "reopen_next" || !!zoneFilter;
-            }
-            return true;
-        }
         if (key) return !!layers[key];
         // Untyped locations have no layer of their own.
         return allLayersOn();
@@ -641,14 +634,19 @@
         }
     }
 
+    function planLabel(b) {
+        if (!b) return "";
+        return [b.name, b.calendar_date, b.plan_id ? String(b.plan_id).slice(0, 8) : ""]
+            .filter(Boolean)
+            .join(" · ");
+    }
+
     function render(options) {
         if (!board) return;
         qs("#rf-execute-clock-time").textContent = board.now || "—";
         var label = qs("#rf-execute-plan-label");
         if (label) {
-            label.textContent = [board.name, board.calendar_date]
-                .filter(Boolean)
-                .join(" · ");
+            label.textContent = planLabel(board);
         }
         syncRefreshCountdown();
         renderStripCounts();
@@ -1245,12 +1243,13 @@
             var status = pin.strip.status || "closed";
             var locId = Number(pin.strip.loc_id);
             var focused = focusId != null && locId === Number(focusId);
+            var ring = locTypeLayer(pin.strip) === "traffic" && !!pin.strip.off_course;
             var marker = window.L.circleMarker(pin.latlng, {
                 radius: focused ? 12 : 8,
-                color: focused ? "#182433" : "#ffffff",
-                weight: focused ? 3 : 2,
-                fillColor: statusColor(status),
-                fillOpacity: 0.9,
+                color: focused ? "#182433" : ring ? statusColor(status) : "#ffffff",
+                weight: focused || ring ? 3 : 2,
+                fillColor: ring ? "#ffffff" : statusColor(status),
+                fillOpacity: ring ? 0.25 : 0.9,
                 opacity: 1,
             });
             marker.bindPopup(markerPopupHtml(pin.strip), { maxWidth: 280 });
@@ -1503,9 +1502,7 @@
         var plan = qs("#rf-execute-assign-plan");
         if (panel) panel.hidden = false;
         if (plan) {
-            plan.textContent = [board && board.name, board && board.calendar_date]
-                .filter(Boolean)
-                .join(" · ");
+            plan.textContent = planLabel(board);
         }
         assignStatus("");
         setAssignFormMode("add");

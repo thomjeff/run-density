@@ -52,7 +52,8 @@ from app.core.course.segment_library import (
     load_manifest,
     manifest_legs,
 )
-from app.utils.constants import COURSE_EVENT_IDS, ON_COURSE_LOCATION_TYPES
+from app.core.locations.loc_types import is_off_course, normalize_type_and_placement
+from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -299,11 +300,15 @@ def get_org_course_route_preview(course_id: str) -> Dict[str, Any]:
                 lon = loc.get("lon")
                 if lat is None or lon is None:
                     continue
+                loc_type, placement = normalize_type_and_placement(
+                    loc.get("loc_type"), loc.get("placement")
+                )
                 locations.append(
                     {
                         "loc_id": loc.get("loc_id"),
                         "loc_label": str(loc.get("loc_label") or "").strip(),
-                        "loc_type": str(loc.get("loc_type") or "course").strip(),
+                        "loc_type": loc_type,
+                        "placement": placement,
                         "lat": float(lat),
                         "lon": float(lon),
                         "zone": loc.get("zone"),
@@ -434,7 +439,7 @@ def _build_snapshot_locations(
             )
         ):
             key = leg_loc_key(leg_id, i)
-            on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
+            on_course = not is_off_course(loc)
             row: Dict[str, Any] = {
                 "id": allocate_location_id(used_ids),
                 "loc_label": loc["loc_label"],

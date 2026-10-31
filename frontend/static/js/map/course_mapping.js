@@ -1153,9 +1153,17 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function (e) { alert('Failed to save resources: ' + (e.message || String(e))); });
     }
 
-    function offCourseUsesProxyTiming(locType) {
+    // Legacy loc_type "course" is on-course traffic (Issue #948).
+    function normalizeLocType(locType) {
         var t = (locType || '').toString().toLowerCase();
-        return t === 'traffic' || t === 'extract';
+        return !t || t === 'course' ? 'traffic' : t;
+    }
+
+    function offCourseUsesProxyTiming(locType, placement) {
+        var raw = (locType || '').toString().toLowerCase();
+        if (raw === 'extract') return true;
+        if (raw !== 'traffic') return false;
+        return String(placement || 'off').toLowerCase() === 'off';
     }
 
     function proxyLocIdIsSet(loc) {
@@ -1279,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var opt = document.createElement('option');
             opt.value = t.value;
             opt.textContent = t.label;
-            if ((loc.loc_type || 'course') === t.value) opt.selected = true;
+            if (normalizeLocType(loc.loc_type) === t.value) opt.selected = true;
             selType.appendChild(opt);
         });
         selType.disabled = !editable;
@@ -1436,7 +1444,12 @@ document.addEventListener('DOMContentLoaded', function () {
             btnSave.textContent = 'Save';
             btnSave.onclick = function () {
                 loc.loc_label = inpLabel.value.trim();
-                loc.loc_type = selType.value || 'course';
+                if (normalizeLocType(loc.loc_type) !== selType.value) {
+                    loc.placement = selType.value === 'traffic' ? 'along' : '';
+                } else if (String(loc.loc_type || '').toLowerCase() === 'course') {
+                    loc.placement = 'along';
+                }
+                loc.loc_type = selType.value || 'traffic';
                 var lat = parseFloat(inpLat.value);
                 var lon = parseFloat(inpLon.value);
                 if (isNaN(lat) || isNaN(lon)) {
@@ -1471,7 +1484,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (proxyTarget && proxyLocIdIsSet(proxyTarget)) {
                         alert(
                             'Proxy timing source must be a direct timing source (not another proxied location). ' +
-                                'Choose a course/official location with a segment, or clear proxy on the target first.'
+                                'Choose an on-course location with a segment, or clear proxy on the target first.'
                         );
                         btnSave.disabled = false;
                         return;
@@ -1487,7 +1500,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnSave.disabled = false;
                     return;
                 }
-                if (loc.proxy_loc_id && offCourseUsesProxyTiming(loc.loc_type)) {
+                if (loc.proxy_loc_id && offCourseUsesProxyTiming(loc.loc_type, loc.placement)) {
                     loc.seg_id = '';
                 }
                 loc.onepage = inpOnepage.checked ? 'y' : 'n';
@@ -1624,10 +1637,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || [{ value: 'full', label: 'Full' }, { value: 'half', label: 'Half' }, { value: '10k', label: '10K' }, { value: 'elite', label: 'Elite' }, { value: 'open', label: 'Open' }];
     var LOCATION_PIN_COLORS = {
         aid: '#e74c3c',
-        course: '#27ae60',
         extract: '#9c27b0',
         official: '#f1c40f',
-        traffic: '#95a5a6',
+        traffic: '#27ae60',
         water: '#3498db'
     };
     var ROUTE_COLOR = '#2563eb';
@@ -3674,12 +3686,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function getLocationTypeLabel(locType) {
-        var t = LOCATION_TYPES.find(function (x) { return x.value === locType; });
-        return t ? t.label : (locType || '').toString();
+        var value = normalizeLocType(locType);
+        var t = LOCATION_TYPES.find(function (x) { return x.value === value; });
+        return t ? t.label : value;
     }
 
     function getLocationPinColor(locType) {
-        return LOCATION_PIN_COLORS[locType] || '#27ae60';
+        return LOCATION_PIN_COLORS[normalizeLocType(locType)] || '#27ae60';
     }
 
     function formatLocationResourceSummary(loc) {
@@ -4771,11 +4784,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 content.appendChild(btnCancel);
                 var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
                 btnAdd.onclick = function () {
-                    var locType = sel.value || 'course';
+                    var locType = sel.value || 'traffic';
                     var locLabel = (input.value && input.value.trim()) ? input.value.trim() : '';
                     var newLoc = {
                         id: nextLocationId(),
                         loc_type: locType,
+                        placement: locType === 'traffic' ? 'along' : '',
                         loc_label: locLabel,
                         notes: '',
                         lat: e.latlng.lat,

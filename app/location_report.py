@@ -24,6 +24,7 @@ from pyproj import Transformer
 from shapely.geometry import LineString, Point
 
 from app.core.gpx.processor import GPXCourse, load_all_courses
+from app.core.locations.loc_types import LEGACY_COURSE_TYPE
 from app.core.locations.report_json import authored_proxy_pass_id
 from app.core.locations.schema import _yn
 from app.core.trajectory.crossing import arrival_at_km
@@ -1132,7 +1133,9 @@ def generate_location_report(  # noqa: C901
             pass_id = location.get("loc_id")
         human_loc_id = location.get("loc_id")
         loc_label = location.get("loc_label", "")
-        loc_type = location.get("loc_type", "").lower()
+        loc_type = str(location.get("loc_type", "") or "").strip().lower()
+        if loc_type == LEGACY_COURSE_TYPE:
+            loc_type = "traffic"
 
         logger.debug(f"Processing pass {pass_id} (loc_id={human_loc_id}): {loc_label}")
 
@@ -1326,11 +1329,12 @@ def generate_location_report(  # noqa: C901
                 f"(severity={flag_severity}, los={flag_worst_los})"
             )
 
-        # Issue #751: Skip arrival modeling for traffic, or any loc_type with proxy_loc_id and empty seg_id
-        # (operational window filled from proxy in Issue #479 / #751 loop below).
-        skip_arrival_modeling = loc_type == "traffic" or (
-            proxy_loc_id_is_set(proxy_loc_id)
-            and seg_id_effectively_empty(location.get("seg_id"))
+        # Issue #751 / #948: Skip arrival modeling for off-course locations (empty
+        # seg_id with a proxy, or traffic with no seg_id). On-course traffic is
+        # modeled from its segment. Windows come from the proxy loop below.
+        no_seg = seg_id_effectively_empty(location.get("seg_id"))
+        skip_arrival_modeling = no_seg and (
+            loc_type == "traffic" or proxy_loc_id_is_set(proxy_loc_id)
         )
         if skip_arrival_modeling:
             report_rows.append(report_row)

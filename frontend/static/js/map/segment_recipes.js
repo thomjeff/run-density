@@ -429,7 +429,7 @@
     }
 
     function locationTypes() {
-        var raw = window.LOCATION_TYPES_FROM_SERVER || ['aid', 'course', 'traffic', 'water', 'official'];
+        var raw = window.LOCATION_TYPES_FROM_SERVER || ['aid', 'extract', 'official', 'traffic', 'water'];
         return raw.map(function (t) {
             if (typeof t === 'string') return { value: t, label: t.charAt(0).toUpperCase() + t.slice(1) };
             return { value: t.value || t.label, label: t.label || t.value };
@@ -634,22 +634,34 @@
 
     var LEG_LOCATION_PIN_COLORS = {
         aid: '#e74c3c',
-        course: '#27ae60',
         extract: '#9c27b0',
         official: '#f1c40f',
-        traffic: '#95a5a6',
+        traffic: '#27ae60',
         water: '#3498db'
     };
 
+    // Legacy loc_type "course" is on-course traffic (Issue #948).
+    function normalizeLocType(locType) {
+        var t = String(locType || '').toLowerCase();
+        return !t || t === 'course' ? 'traffic' : t;
+    }
+
+    function legLocationIsOffCourse(locType, placement) {
+        var t = normalizeLocType(locType);
+        if (t === 'extract') return true;
+        if (t !== 'traffic') return false;
+        if (String(locType || '').toLowerCase() === 'course') return false;
+        return String(placement || 'off').toLowerCase() === 'off';
+    }
+
     function locationTypeSnapsToLegRoute(locType, placement) {
+        var t = normalizeLocType(locType);
+        if (t === 'traffic') return !legLocationIsOffCourse(locType, placement);
         if (String(placement || '').toLowerCase() === 'off') {
             return false;
         }
-        var noSnap =
-            window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER ||
-            window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER ||
-            ['traffic', 'extract', 'aid'];
-        return noSnap.indexOf(String(locType || 'course').toLowerCase()) < 0;
+        var noSnap = window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER || ['extract', 'aid'];
+        return noSnap.indexOf(t) < 0;
     }
 
     function resolveLegLocationRecord(loc, opts, isPending) {
@@ -665,13 +677,26 @@
         return loc;
     }
 
-    function legLocationPlacement(locType) {
-        return locationTypeSnapsToLegRoute(locType) ? 'along' : 'off';
+    function legLocationPlacement(locType, placement) {
+        return locationTypeSnapsToLegRoute(locType, placement) ? 'along' : 'off';
     }
 
-    function offCourseUsesProxyTiming(locType) {
-        var t = String(locType || '').toLowerCase();
-        return t === 'traffic' || t === 'extract';
+    function offCourseUsesProxyTiming(locType, placement) {
+        return legLocationIsOffCourse(locType, placement);
+    }
+
+    function isOffCourseTraffic(loc) {
+        return (
+            !!loc &&
+            normalizeLocType(loc.loc_type) === 'traffic' &&
+            legLocationIsOffCourse(loc.loc_type, loc.placement)
+        );
+    }
+
+    function legLocationTypeText(loc) {
+        var t = normalizeLocType(loc && loc.loc_type);
+        if (t !== 'traffic') return t;
+        return isOffCourseTraffic(loc) ? 'traffic, off course' : 'traffic, on course';
     }
 
     function legLocationProxyIsSet(loc) {
@@ -697,13 +722,13 @@
             (leg.locations || []).forEach(function (loc, idx) {
                 var key = legLocKey(legId, idx);
                 if (excludeKey && key === excludeKey) return;
-                if (offCourseUsesProxyTiming(loc.loc_type)) return;
+                if (offCourseUsesProxyTiming(loc.loc_type, loc.placement)) return;
                 if (legLocationProxyIsSet(loc)) return;
                 items.push({
                     key: key,
                     legId: legId,
                     label: (loc.loc_label || '').trim() || 'Untitled',
-                    loc_type: loc.loc_type || 'course',
+                    loc_type: normalizeLocType(loc.loc_type),
                 });
             });
         });
@@ -894,7 +919,7 @@
             var zone = String(row.loc.zone != null ? row.loc.zone : '').trim();
             if (zone.toLowerCase() !== filters.zone.toLowerCase()) return false;
         }
-        var locType = String(row.loc.loc_type || 'course').toLowerCase();
+        var locType = normalizeLocType(row.loc.loc_type);
         if (filters.type && locType !== filters.type) return false;
         if (filters.query) {
             var label = String(row.loc.loc_label || '').toLowerCase();
@@ -1010,7 +1035,7 @@
         var group = L.layerGroup();
         rows.forEach(function (row) {
             var loc = row.loc;
-            var fill = legLocationColor(loc.loc_type || 'course');
+            var fill = legLocationColor(normalizeLocType(loc.loc_type));
             var highlight = legLocationsBrowserHighlightKey && row.key === legLocationsBrowserHighlightKey;
             var marker = L.marker([loc.lat, loc.lon], {
                 pane: ALL_LEG_LOCATIONS_PANE,
@@ -1024,9 +1049,9 @@
                         'px;height:' +
                         (highlight ? 12 : 10) +
                         'px;background:' +
-                        fill +
+                        (isOffCourseTraffic(loc) ? '#fff' : fill) +
                         ';border:2px solid ' +
-                        (highlight ? '#2c3e50' : '#fff') +
+                        (highlight ? '#2c3e50' : isOffCourseTraffic(loc) ? fill : '#fff') +
                         ';border-radius:50%;box-sizing:border-box;"></div>',
                     iconSize: [highlight ? 12 : 10, highlight ? 12 : 10],
                     iconAnchor: [highlight ? 6 : 5, highlight ? 6 : 5]
@@ -1040,7 +1065,7 @@
                     ' — ' +
                     (loc.loc_label || 'Location') +
                     ' (' +
-                    (loc.loc_type || 'course') +
+                    legLocationTypeText(loc) +
                     ')',
                 { sticky: true }
             );
@@ -1158,7 +1183,7 @@
                 row.legId,
                 String(row.locIndex),
                 (row.loc.loc_label || '').slice(0, 48),
-                row.loc.loc_type || 'course',
+                legLocationTypeText(row.loc),
                 row.loc.zone != null && String(row.loc.zone).trim() !== ''
                     ? String(row.loc.zone).trim()
                     : '—',
@@ -3911,14 +3936,14 @@
         opts = opts || {};
         if (loc.lat == null || loc.lon == null) return;
         var isPending = !!opts.isPending;
-        var fill = legLocationColor(loc.loc_type || 'course');
+        var fill = legLocationColor(normalizeLocType(loc.loc_type));
         var stroke = isPending ? '#2c3e50' : fill;
         var marker = L.marker([loc.lat, loc.lon], {
             icon: L.divIcon({
                 className: 'leg-location-pin' + (isPending ? ' leg-location-pin-pending' : ''),
                 html:
                     '<div style="width:14px;height:14px;background:' +
-                    fill +
+                    (isOffCourseTraffic(loc) ? '#fff' : fill) +
                     ';border:2px solid ' +
                     stroke +
                     ';border-radius:50%;box-sizing:border-box;cursor:grab;"></div>',
@@ -3929,11 +3954,10 @@
             autoPan: true
         });
         var suffix = isPending ? ' (unsaved)' : '';
-        if (loc.placement === 'off') suffix += ' (off-course)';
         marker.bindTooltip(
             (loc.loc_label || 'Location') +
                 ' (' +
-                (loc.loc_type || 'course') +
+                legLocationTypeText(loc) +
                 ')' +
                 suffix +
                 ' — drag to move; click to edit'
@@ -3981,7 +4005,10 @@
             var locations = (leg.locations || []).slice();
             if (opts.locIndex < 0 || opts.locIndex >= locations.length) return;
             locations[opts.locIndex] = Object.assign({}, locations[opts.locIndex], coords, {
-                placement: legLocationPlacement(locations[opts.locIndex].loc_type)
+                placement: legLocationPlacement(
+                    locations[opts.locIndex].loc_type,
+                    locations[opts.locIndex].placement
+                )
             });
             setLegStatus('Saving position…');
             saveLegLocations(selectedLegId, locations)
@@ -4009,11 +4036,11 @@
         };
     }
 
-    function applyLegLocationLabelType(loc, locLabel, locType) {
+    function applyLegLocationLabelType(loc, locLabel, locType, placement) {
         var updated = Object.assign({}, loc, {
             loc_label: locLabel,
             loc_type: locType,
-            placement: legLocationPlacement(locType)
+            placement: legLocationPlacement(locType, placement)
         });
         if (updated.lat != null && updated.lon != null) {
             var coords = finalizeLegLocationCoords(updated, updated.lat, updated.lon);
@@ -4208,7 +4235,7 @@
         content.appendChild(title);
 
         var sel = document.createElement('select');
-        var initialType = (opts.loc && opts.loc.loc_type) || 'course';
+        var initialType = normalizeLocType(opts.loc && opts.loc.loc_type);
         locationTypes().forEach(function (t) {
             var opt = document.createElement('option');
             opt.value = t.value;
@@ -4217,6 +4244,28 @@
             sel.appendChild(opt);
         });
         appendLegPopupField(content, 'Type', sel);
+
+        var placementSel = document.createElement('select');
+        [
+            { value: 'along', label: 'On course' },
+            { value: 'off', label: 'Off course' }
+        ].forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value = p.value;
+            opt.textContent = p.label;
+            placementSel.appendChild(opt);
+        });
+        placementSel.value =
+            opts.loc && legLocationIsOffCourse(opts.loc.loc_type, opts.loc.placement)
+                ? 'off'
+                : 'along';
+        var placementWrap = document.createElement('div');
+        placementWrap.className = 'leg-popup-field leg-popup-placement-field';
+        appendLegPopupField(placementWrap, 'Placement', placementSel);
+        content.appendChild(placementWrap);
+        function selectedPlacement() {
+            return sel.value === 'traffic' ? placementSel.value : '';
+        }
 
         var sourceLegIdForEdit =
             mode === 'edit-saved' && selectedLegId ? String(selectedLegId) : '';
@@ -4252,18 +4301,20 @@
         var hint = document.createElement('p');
         hint.className = 'leg-popup-hint';
         function syncPopupLocTypeFromSelect() {
-            var locType = sel.value || 'course';
+            var locType = sel.value || 'traffic';
             var target = opts.loc;
             if (target) {
                 target.loc_type = locType;
-                target.placement = legLocationPlacement(locType);
+                target.placement = legLocationPlacement(locType, selectedPlacement());
             }
             updatePlacementHint();
         }
         function updatePlacementHint() {
-            var usesProxy = offCourseUsesProxyTiming(sel.value);
+            var placement = selectedPlacement();
+            var usesProxy = offCourseUsesProxyTiming(sel.value, placement);
+            placementWrap.style.display = sel.value === 'traffic' ? '' : 'none';
             proxyWrap.style.display = usesProxy ? '' : 'none';
-            hint.textContent = locationTypeSnapsToLegRoute(sel.value)
+            hint.textContent = locationTypeSnapsToLegRoute(sel.value, placement)
                 ? 'Snaps to the purple route when saved. Runner times come from the mapped segment at export.'
                 : usesProxy
                   ? 'Stays at your click (off-course). Prefer a proxy on this leg (listed first); other legs are allowed for paired corridors.'
@@ -4271,6 +4322,7 @@
         }
         syncPopupLocTypeFromSelect();
         sel.addEventListener('change', syncPopupLocTypeFromSelect);
+        placementSel.addEventListener('change', syncPopupLocTypeFromSelect);
         content.appendChild(hint);
 
         var input = document.createElement('input');
@@ -4342,7 +4394,7 @@
                 var n = parseInt(resourceInputs[code].value, 10);
                 target.resources[code] = isNaN(n) || n < 0 ? 0 : Math.min(99, n);
             });
-            if (offCourseUsesProxyTiming(target.loc_type)) {
+            if (offCourseUsesProxyTiming(target.loc_type, target.placement)) {
                 var proxyKey = (proxySel.value || '').trim();
                 if (proxyKey) {
                     target.proxy_leg_loc_key = proxyKey;
@@ -4416,14 +4468,15 @@
             if (ev && ev.stopPropagation) ev.stopPropagation();
             if (ev && ev.preventDefault) ev.preventDefault();
             var locLabel = (input.value && input.value.trim()) || 'Location';
-            var locType = sel.value || 'course';
+            var locType = sel.value || 'traffic';
+            var locPlacement = selectedPlacement();
 
             if (mode === 'add') {
                 var clickLat = opts.clickLat;
                 var clickLon = opts.clickLon;
                 var placeLat = clickLat;
                 var placeLon = clickLon;
-                if (locationTypeSnapsToLegRoute(locType)) {
+                if (locationTypeSnapsToLegRoute(locType, locPlacement)) {
                     var snapped = snapClickToLegRoute(clickLat, clickLon, selectedLegLatLngs);
                     placeLat = snapped.lat;
                     placeLon = snapped.lon;
@@ -4433,7 +4486,7 @@
                     loc_type: locType,
                     lat: Math.round(placeLat * 1e6) / 1e6,
                     lon: Math.round(placeLon * 1e6) / 1e6,
-                    placement: legLocationPlacement(locType)
+                    placement: legLocationPlacement(locType, locPlacement)
                 };
                 applyOpsFields(newLoc);
                 pendingLegLocations.push(newLoc);
@@ -4454,7 +4507,8 @@
                 var pendingLoc = applyLegLocationLabelType(
                     pendingLegLocations[pIdx],
                     locLabel,
-                    locType
+                    locType,
+                    locPlacement
                 );
                 applyOpsFields(pendingLoc);
                 pendingLegLocations[pIdx] = pendingLoc;
@@ -4489,7 +4543,8 @@
                     var movedLoc = applyLegLocationLabelType(
                         locationsForMove[locIndex],
                         locLabel,
-                        locType
+                        locType,
+                        locPlacement
                     );
                     applyOpsFields(movedLoc);
                     locationsForMove[locIndex] = movedLoc;
@@ -4529,7 +4584,8 @@
                 var savedLoc = applyLegLocationLabelType(
                     locations[locIndex],
                     locLabel,
-                    locType
+                    locType,
+                    locPlacement
                 );
                 applyOpsFields(savedLoc);
                 locations[locIndex] = savedLoc;
@@ -4731,7 +4787,7 @@
         map.on('click', legLocationClickHandler);
         setLegStatus(
             'Click the map to add locations. Click a pin to edit label/type or delete. ' +
-                'Drag pins to move. Course, water, and official snap to the route; aid, traffic, and extract stay where you place them.'
+                'Drag pins to move. Water, official, and on-course traffic snap to the route; aid, extract, and off-course traffic stay where you place them.'
         );
     }
 
@@ -5405,7 +5461,11 @@
                 return legLocationProxyIsSet(loc);
             },
             isEligibleProxyTimingSource: function (other) {
-                return other && !offCourseUsesProxyTiming(other.loc_type) && !legLocationProxyIsSet(other);
+                return (
+                    other &&
+                    !offCourseUsesProxyTiming(other.loc_type, other.placement) &&
+                    !legLocationProxyIsSet(other)
+                );
             },
             buildProxySelect: buildGridProxySelect
         });

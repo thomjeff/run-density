@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from app.core.locations.loc_types import DEFAULT_LOCATION_TYPE, LEGACY_COURSE_TYPE
 from app.core.locations.report_json import locations_report_relpath
 from app.location_report import parse_by_event
 from app.storage import create_runflow_storage
@@ -73,6 +74,8 @@ def _normalize_location_api_row(row: Dict[str, Any]) -> Dict[str, Any]:
             row["flag"] = flag
         else:
             row["flag"] = str(flag).strip().lower() in ("true", "1", "y", "yes")
+    if str(row.get("loc_type") or "").strip().lower() == LEGACY_COURSE_TYPE:
+        row["loc_type"] = DEFAULT_LOCATION_TYPE
     return row
 
 

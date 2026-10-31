@@ -41,15 +41,11 @@ from app.core.course.segment_library import (
     set_manifest_legs,
     set_segment_leg_id,
 )
+from app.core.locations.loc_types import is_off_course, normalize_type_and_placement
 from app.utils.constants import (
     COURSE_EVENT_IDS,
     DEFAULT_FLOW_TYPE,
     FLOW_TYPE_VALUES,
-    LEG_MAP_NO_SNAP_LOCATION_TYPES,
-    LOCATION_PLACEMENT_CHOICES,
-    LOCATION_TYPE_CHOICES,
-    OFF_COURSE_LOCATION_TYPES,
-    ON_COURSE_LOCATION_TYPES,
     SEGMENT_DIRECTION_VALUES,
     SEGMENT_SCHEMA_VALUES,
 )
@@ -280,12 +276,11 @@ def _sanitize_location_proxy_timing(loc: Dict[str, Any]) -> None:
     """On-course rows use seg_id only; off-course rows use proxy timing only (Issue #751)."""
     if not isinstance(loc, dict):
         return
-    loc_type = str(loc.get("loc_type") or "").strip().lower()
-    if loc_type in ON_COURSE_LOCATION_TYPES:
+    if is_off_course(loc):
+        loc["seg_id"] = ""
+    else:
         loc.pop("proxy_loc_id", None)
         loc.pop("proxy_leg_loc_key", None)
-    elif loc_type in OFF_COURSE_LOCATION_TYPES:
-        loc["seg_id"] = ""
 
 
 def _normalize_locations(  # noqa: C901
@@ -296,7 +291,6 @@ def _normalize_locations(  # noqa: C901
 ) -> List[Dict[str, Any]]:
     if not isinstance(raw, list):
         return []
-    allowed_types = set(LOCATION_TYPE_CHOICES)
     used_keys: set[str] = set(used_location_keys or set())
     out: List[Dict[str, Any]] = []
     for item in raw:
@@ -305,22 +299,14 @@ def _normalize_locations(  # noqa: C901
         label = str(item.get("loc_label") or item.get("label") or "").strip()
         if not label:
             continue
-        loc_type = (
-            str(item.get("loc_type") or item.get("type") or "course").strip().lower()
+        loc_type, placement = normalize_type_and_placement(
+            item.get("loc_type") or item.get("type"), item.get("placement")
         )
-        if loc_type not in allowed_types:
-            loc_type = "course"
         try:
             lat = float(item.get("lat"))
             lon = float(item.get("lon"))
         except (TypeError, ValueError):
             continue
-        if loc_type in LEG_MAP_NO_SNAP_LOCATION_TYPES:
-            placement = "off"
-        else:
-            placement = str(item.get("placement") or "along").strip().lower()
-            if placement not in LOCATION_PLACEMENT_CHOICES:
-                placement = "along"
         row: Dict[str, Any] = {
             "loc_label": label,
             "loc_type": loc_type,
@@ -1042,26 +1028,21 @@ def refresh_location_seg_ids_from_segments(
     """
     Issue #774: Align on-course ``seg_id`` with current segments via ``leg_id``.
 
-    Off-course types (traffic, extract) get empty ``seg_id``. Returns count of
-    locations whose ``seg_id`` field changed.
+    Off-course locations (extract, off-course traffic) get empty ``seg_id``.
+    Returns count of locations whose ``seg_id`` field changed.
     """
     valid_seg_ids = _valid_segment_ids(segments)
     updated = 0
-    off_course = set(OFF_COURSE_LOCATION_TYPES)
 
     for loc in locations:
         if not isinstance(loc, dict):
             continue
-        loc_type = str(loc.get("loc_type") or "").strip().lower()
         old_seg = str(loc.get("seg_id") or "").strip()
 
-        if loc_type in off_course:
+        if is_off_course(loc):
             if old_seg:
                 loc["seg_id"] = ""
                 updated += 1
-            continue
-
-        if loc_type not in ON_COURSE_LOCATION_TYPES:
             continue
 
         leg_id = _leg_id_for_location(loc)
@@ -1155,11 +1136,9 @@ def validate_locations_for_export(course: Dict[str, Any]) -> List[str]:
             errors.append(
                 f'Location "{label}" (id={lid}): set only proxy_loc_id or seg_id, not both (Issue #751)'
             )
-        if loc_type in OFF_COURSE_LOCATION_TYPES and _parse_location_seg_ids(
-            loc.get("seg_id")
-        ):
+        if is_off_course(loc) and _parse_location_seg_ids(loc.get("seg_id")):
             errors.append(
-                f'Location "{label}" (id={lid}): {loc_type} locations should have empty seg_id when using proxy timing'
+                f'Location "{label}" (id={lid}): off-course {loc_type} locations should have empty seg_id when using proxy timing'
             )
 
     return errors
@@ -1293,7 +1272,7 @@ def merge_leg_locations_into_course(  # noqa: C901
             prev = existing_by_loc_key.get(loc_key) if loc_key else None
             if prev is None:
                 prev = existing_by_leg_loc_key.get(key)
-            on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
+            on_course = not is_off_course(loc)
             inherited_key = ""
             if prev:
                 inherited_key = str(
