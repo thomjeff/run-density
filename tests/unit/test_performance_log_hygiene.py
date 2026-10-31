@@ -6,7 +6,20 @@ import logging
 import time
 from pathlib import Path
 
+import pytest
+
 from app.core.v2.performance import PerformanceMonitor, log_elapsed, phase_display_name
+
+
+@pytest.fixture(autouse=True)
+def _no_live_progress(monkeypatch):
+    # Phase hooks write analysis/{run_id}/progress.json under the live root.
+    monkeypatch.setattr(
+        "app.core.v2.run_progress.mark_phase_started", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.core.v2.run_progress.mark_phase_complete", lambda *a, **k: None
+    )
 
 
 def test_phase_display_names():
@@ -30,7 +43,9 @@ def test_subsecond_setup_is_debug(caplog):
             phase_description="Density Setup",
         )
     info_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
-    assert not any("Density Setup" in m or "density setup" in m.lower() for m in info_msgs)
+    assert not any(
+        "Density Setup" in m or "density setup" in m.lower() for m in info_msgs
+    )
     assert not any("═" in r.getMessage() for r in caplog.records)
 
 
