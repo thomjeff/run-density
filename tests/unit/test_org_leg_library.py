@@ -1,5 +1,6 @@
 """Tests for org-level leg library (Issue #780)."""
 
+import pytest
 import yaml
 
 from app.core.config_package.org_leg_library import (
@@ -12,6 +13,16 @@ from app.core.config_package.org_leg_library import (
 )
 from app.core.config_package.segment_recipes import save_package_segment_manifest
 from app.core.config_package.storage import create_config_package
+
+
+@pytest.fixture(autouse=True)
+def _isolate_package_root(tmp_path, monkeypatch):
+    # Leg edits sync into every package under the config root; never the live one.
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path / "config",
+    )
+
 
 _GPX = """<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
