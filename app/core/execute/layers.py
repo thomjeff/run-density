@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from app.core.locations.report_json import parse_optional_id
+
+# Day Plans published before Issue #948 call on-course traffic "course".
+LEGACY_COURSE_TYPE = "course"
+
 TURNAROUND_RE = re.compile(r"turn[\s-]?around", re.I)
 TURN_WORD_RE = re.compile(r"\bturn\b", re.I)
 
@@ -20,7 +25,19 @@ def is_turnaround(row: Mapping[str, Any]) -> bool:
         return True
     if not TURN_WORD_RE.search(label):
         return False
+    if loc_type == "traffic":
+        return not is_off_course_row(row)
     return loc_type in {"official", "course", ""}
+
+
+def is_off_course_row(row: Mapping[str, Any]) -> bool:
+    """Day Plan rows carry no placement; off-course points are proxy-timed."""
+    loc_type = str(row.get("loc_type") or "").strip().lower()
+    if loc_type == "extract":
+        return True
+    if loc_type != "traffic":
+        return False
+    return parse_optional_id(row.get("proxy_loc_id")) is not None
 
 
 WATER_OR_SERVICE_TYPES = frozenset(

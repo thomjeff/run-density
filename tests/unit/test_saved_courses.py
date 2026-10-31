@@ -399,7 +399,7 @@ def test_build_race_exports_uses_saved_course_location_types(tmp_path, monkeypat
     rows = list(csv.DictReader((package_path / "passes.csv").open(encoding="utf-8")))
     george = [r for r in rows if r.get("loc_label") == "University at George"]
     assert len(george) == 1
-    assert george[0].get("loc_type") == "course"
+    assert george[0].get("loc_type") == "traffic"
     assert george[0].get("seg_id")
 
 

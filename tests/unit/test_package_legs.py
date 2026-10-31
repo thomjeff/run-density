@@ -581,7 +581,8 @@ def test_merge_clears_stale_proxy_on_on_course_locations(tmp_path, monkeypatch):
     )
     merged = load_config_course(config_id)
     loc = merged["locations"][0]
-    assert loc["loc_type"] == "course"
+    assert loc["loc_type"] == "traffic"
+    assert loc["placement"] == "along"
     assert loc.get("seg_id") == "S1"
     assert not loc.get("proxy_loc_id")
     assert not validate_locations_for_export(merged)

@@ -623,7 +623,8 @@ def test_update_org_leg_locations_skips_packages_without_course_json(
         },
     )
     leg = next(l for l in state["legs"] if l["id"] == "33")
-    assert leg["locations"][0]["loc_type"] == "course"
+    assert leg["locations"][0]["loc_type"] == "traffic"
+    assert leg["locations"][0]["placement"] == "along"
 
 
 _SPLIT_GPX = """<?xml version="1.0"?>

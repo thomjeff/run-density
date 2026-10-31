@@ -15,10 +15,9 @@
 
     var LOCATION_PIN_COLORS = {
         aid: '#e74c3c',
-        course: '#27ae60',
         extract: '#9c27b0',
         official: '#f1c40f',
-        traffic: '#95a5a6',
+        traffic: '#27ae60',
         water: '#3498db',
     };
 
@@ -211,7 +210,13 @@
     function buildOrgCourseLocationTooltip(loc) {
         var parts = [];
         if (loc.loc_label) parts.push(loc.loc_label);
-        if (loc.loc_type) parts.push(String(loc.loc_type));
+        if (loc.loc_type) {
+            parts.push(
+                loc.loc_type === 'traffic' && loc.placement === 'off'
+                    ? 'traffic, off course'
+                    : String(loc.loc_type)
+            );
+        }
         if (loc.zone) parts.push('Zone ' + loc.zone);
         var resources = loc.resources || {};
         Object.keys(resources).forEach(function (code) {

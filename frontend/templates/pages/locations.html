@@ -263,7 +263,7 @@
             </tr>
             <tr>
                 <td><strong>Type</strong></td>
-                <td>The location type: <em>traffic</em> (traffic control), <em>course</em> (on-course), <em>water</em> (water stop), <em>aid</em> (aid station), <em>official</em> (official point), <em>extract</em> (remote trail extract / stretcher-mule access), or <em>marshal</em> (legacy marshal point).</td>
+                <td>The location type: <em>traffic</em> (traffic control, on or off the course; older runs call on-course traffic <em>course</em>), <em>water</em> (water stop), <em>aid</em> (aid station), <em>official</em> (official point), <em>extract</em> (remote trail extract / stretcher-mule access), or <em>marshal</em> (legacy marshal point).</td>
             </tr>
             <tr>
                 <td><strong>Zone</strong></td>
@@ -294,7 +294,7 @@
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js?v=908"></script>
 <script src="/static/js/map/location_pairing.js?v=2026-07-28-810"></script>
-<script src="/static/js/map/locations.js?v=842c"></script>
+<script src="/static/js/map/locations.js?v=948"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -965,8 +965,7 @@
      */
     function getLocationMarkerColor(locType) {
         const locationTypeColors = {
-            'traffic': '#808080',  // Gray
-            'course': '#4CAF50',   // Green
+            'traffic': '#4CAF50',  // Green
             'aid': '#F44336',      // Red
             'water': '#2196F3',    // Blue
             'marshal': '#FF9800',  // Orange (legacy)

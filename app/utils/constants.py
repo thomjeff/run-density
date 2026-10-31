@@ -246,23 +246,24 @@ JUNCTION_SEGMENT_PROXIMITY_M = 20.0
 # Course Mapping location types (Issue #732 / #747) — alphabetical for UI dropdown
 LOCATION_TYPE_CHOICES = [
     "aid",
-    "course",
     "extract",
     "official",
     "traffic",
     "water",
 ]
 
-# Leg / course map placement (patterns from runflow/config/2026_final/locations.csv):
-# - traffic, extract: off-course pin, empty seg_id, proxy_loc_id for timing (Issue #751)
-# - course, water, official: on-course pin with seg_id
-# - aid: usually on-course in exports; leg map allows free placement (no route snap)
+# Leg / course map placement (Issue #751, #948). Rules live in
+# app/core/locations/loc_types.py:
+# - traffic: placement "along" is on course (snaps, seg_id timing);
+#   placement "off" is off course (click position, proxy timing).
+#   Legacy loc_type "course" is on-course traffic.
+# - extract: always off course with proxy timing.
+# - water, official: on-course pin with seg_id.
+# - aid: free placement on the leg map, seg_id timing.
+# Types whose proxy timing applies when off course.
 OFF_COURSE_LOCATION_TYPES = ["traffic", "extract"]
-# Legs tab map: types that stay at click / drag position (no snap to purple route)
-LEG_MAP_NO_SNAP_LOCATION_TYPES = ["traffic", "extract", "aid"]
-ON_COURSE_LOCATION_TYPES = [
-    t for t in LOCATION_TYPE_CHOICES if t not in OFF_COURSE_LOCATION_TYPES
-]
+# Legs tab map: types that never snap to the purple route.
+LEG_MAP_NO_SNAP_LOCATION_TYPES = ["extract", "aid"]
 
 LOCATION_PLACEMENT_CHOICES = ["along", "off", "start", "end"]
 

@@ -46,10 +46,13 @@
         return (locType || '').toString();
     }
 
-    function offCourseType(t) {
-        if (deps && deps.offCourseUsesProxyTiming) return deps.offCourseUsesProxyTiming(t);
+    function offCourseType(t, placement) {
+        if (deps && deps.offCourseUsesProxyTiming) {
+            return deps.offCourseUsesProxyTiming(t, placement);
+        }
         var x = (t || '').toLowerCase();
-        return x === 'traffic' || x === 'extract';
+        if (x === 'extract') return true;
+        return x === 'traffic' && String(placement || 'off').toLowerCase() === 'off';
     }
 
     function proxyLocIdIsSet(loc) {
@@ -316,7 +319,7 @@
             } else {
                 loc.proxy_loc_id = '';
             }
-            if (sel.value && offCourseType(loc.loc_type)) {
+            if (sel.value && offCourseType(loc.loc_type, loc.placement)) {
                 loc.seg_id = '';
             }
             markDirty();

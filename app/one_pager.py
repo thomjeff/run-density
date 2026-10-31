@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from app.core.locations.loc_types import DEFAULT_LOCATION_TYPE, LEGACY_COURSE_TYPE
 from app.utils.carto_basemaps import carto_light_tile_url
 
 logger = logging.getLogger(__name__)
@@ -319,7 +320,10 @@ def _render_onepager_html(
         title = f"LOCATION: {loc_label} ({ids})"
     else:
         title = f"LOCATION: {loc_id} - {loc_label}"
-    loc_type = html.escape(str(location.get("loc_type", "")))
+    loc_type = str(location.get("loc_type", "") or "")
+    if loc_type.strip().lower() == LEGACY_COURSE_TYPE:
+        loc_type = DEFAULT_LOCATION_TYPE
+    loc_type = html.escape(loc_type)
     resources = _extract_resources(location)
     lat = location.get("lat", "")
     lon = location.get("lon", "")

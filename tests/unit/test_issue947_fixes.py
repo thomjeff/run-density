@@ -118,13 +118,13 @@ def test_execute_layer_logic_by_type():
     assert "reopen:" not in js and "turnarounds:" not in js
     visible = js[js.index("function locationVisible") :]
     visible = visible[: visible.index("function statusTitle")]
-    assert 'key === "traffic"' in visible
-    assert 'focusedCol === "reopen_next"' in visible
+    assert "focusedCol" not in visible
     assert "if (key) return !!layers[key];" in visible
     type_map = js[js.index("function locTypeLayer") :]
     type_map = type_map[: type_map.index("function serviceLayerOn")]
-    for loc_type in ("aid", "course", "extract", "official", "traffic", "water"):
+    for loc_type in ("aid", "extract", "official", "traffic", "water"):
         assert f'type === "{loc_type}"' in type_map
+    assert 'if (type === "course") return "traffic";' in type_map
     assert 'pin.source === "course"' in js
     assert 'key === "all"' in js
     assert "all.indeterminate" in js
