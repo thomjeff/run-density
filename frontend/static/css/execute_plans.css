@@ -83,3 +83,101 @@ html.rf-tabler .race-config-page .rf-plans-assign .card-actions .course-map-acti
     padding: 0.35rem 0;
     font-size: 0.82rem;
 }
+
+.rf-execute-plans .course-map-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.rf-plans-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(24, 36, 51, 0.35);
+}
+
+.rf-plans-modal[hidden] {
+    display: none !important;
+}
+
+.rf-plans-modal-card {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    width: min(32rem, calc(100% - 2rem));
+    max-height: calc(100% - 2rem);
+    padding: 1.1rem 1.2rem;
+    overflow: auto;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 12px 32px rgba(24, 36, 51, 0.2);
+}
+
+.rf-plans-modal-card h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.rf-plans-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.rf-plans-field input {
+    font-weight: 400;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #e6e7e9;
+    border-radius: 4px;
+}
+
+.rf-plans-field input:disabled {
+    background: #f6f8fb;
+}
+
+.rf-plans-modal-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.rf-plans-modal-help,
+.rf-plans-modal-note,
+.rf-plans-modal-error {
+    margin: -0.35rem 0 0;
+    font-size: 0.75rem;
+    color: #667382;
+}
+
+.rf-plans-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125rem;
+    color: #667382;
+}
+
+.rf-plans-modal-note {
+    margin: 0;
+    padding: 0.45rem 0.6rem;
+    background: #fff8e6;
+    border-radius: 4px;
+    color: #7a4b00;
+}
+
+.rf-plans-modal-error {
+    margin: 0;
+    color: #b42318;
+}
+
+.rf-plans-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}

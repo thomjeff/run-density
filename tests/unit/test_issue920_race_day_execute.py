@@ -127,9 +127,7 @@ def test_import_does_not_activate(tmp_path: Path):
 
 def test_archive_restore_and_activate_rules(tmp_path: Path):
     archive = _package(calendar_date="2026-10-25", weekday_code="sun")
-    plan_id = import_published_plan(archive, root=tmp_path)[
-        "plan_id"
-    ]
+    plan_id = import_published_plan(archive, root=tmp_path)["plan_id"]
     activate_published_plan(plan_id, root=tmp_path)
     row = archive_published_plan(plan_id, root=tmp_path)
     assert row["archived"] is True
@@ -151,9 +149,7 @@ def test_reopen_writes_execute_owned_state(tmp_path: Path):
         weekday_code="sat",
         source_run_id="srcRun920",
     )
-    plan_id = import_published_plan(archive, root=tmp_path)[
-        "plan_id"
-    ]
+    plan_id = import_published_plan(archive, root=tmp_path)["plan_id"]
     activate_published_plan(plan_id, root=tmp_path)
     board = record_operations_reopen(2, root=tmp_path)
     reopened = board["columns"]["reopened"]
@@ -187,9 +183,7 @@ def test_active_day_context_uses_source_run(tmp_path: Path):
         weekday_code="sun",
         source_run_id="srcSun920",
     )
-    plan_id = import_published_plan(archive, root=tmp_path)[
-        "plan_id"
-    ]
+    plan_id = import_published_plan(archive, root=tmp_path)["plan_id"]
     assert active_day_context(root=tmp_path)["active"] is False
     activate_published_plan(plan_id, root=tmp_path)
     ctx = active_day_context(root=tmp_path)
@@ -222,6 +216,20 @@ def test_ops_http_uses_active_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     plan_id = body["plan_id"]
     listed = client.get("/api/execute/plans")
     assert listed.json()["active_plan_id"] is None
+    blocked = client.post("/api/execute/plans/activate", json={"plan_id": plan_id})
+    assert blocked.status_code == 400
+    roster = Path(__file__).resolve().parents[1] / "fixtures"
+    loaded = client.post(
+        f"/api/execute/plans/{plan_id}/participants",
+        files={
+            "file": (
+                "roster.csv",
+                (roster / "issue911_participant_list.csv").read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+    assert loaded.status_code == 200, loaded.text
     client.post(
         "/api/execute/plans/activate",
         json={"plan_id": plan_id},
@@ -237,28 +245,26 @@ def test_ops_http_uses_active_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_execute_nav_and_plans_copy():
     root = Path(__file__).resolve().parents[2]
-    base = (root / "frontend" / "templates" / "base.html").read_text(
-        encoding="utf-8"
-    )
+    base = (root / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     plans_html = (
         root / "frontend" / "templates" / "pages" / "execute_plans.html"
     ).read_text(encoding="utf-8")
-    plans_js = (
-        root / "frontend" / "static" / "js" / "execute_plans.js"
-    ).read_text(encoding="utf-8")
-    ops_js = (
-        root / "frontend" / "static" / "js" / "execute_board.js"
-    ).read_text(encoding="utf-8")
+    plans_js = (root / "frontend" / "static" / "js" / "execute_plans.js").read_text(
+        encoding="utf-8"
+    )
+    ops_js = (root / "frontend" / "static" / "js" / "execute_board.js").read_text(
+        encoding="utf-8"
+    )
     assert 'data-rf-execute-view="plans">Plans</a>' in base
     assert 'data-rf-execute-view="operations">Operations</a>' in base
-    assert "Import does not activate" in plans_html
+    assert "Import activates the plan" in plans_html
     assert "Volunteer location sheets are public" in plans_html
     assert "rf-plans-sheets" in plans_html
     assert "rf-plans-sheets-actions" in plans_html
     assert "rf-plans-assign-header-actions" in plans_html
     assert "table_actions.js" in plans_html
     assert "Activate this Day Plan" in plans_js
-    assert 'createIconButton(kind, title, function (ev)' in plans_js
+    assert "createIconButton(kind, title, function (ev)" in plans_js
     assert '"activate"' in plans_js
     assert '"archive"' in plans_js
     assert '"sheets"' in plans_js

@@ -901,6 +901,13 @@ html.rf-tabler:has(.rf-ex-theme-light) .container-xl.rf-tabler-content {
     min-height: 1.45rem;
 }
 
+.rf-execute-layers label.rf-ex-layers-all {
+    border-top: 1px solid var(--rf-ex-line);
+    margin-top: 0.2rem;
+    padding-top: 0.3rem;
+    font-weight: 600;
+}
+
 .rf-ex-map-legend {
     display: flex;
     flex-direction: column;

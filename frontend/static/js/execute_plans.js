@@ -15,6 +15,7 @@
     var activeId = null;
     var assignPlanId = null;
     var sheetsPlanId = null;
+    var rosterPlanId = null;
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -44,6 +45,10 @@
     function weekdayLabel(code) {
         var key = String(code || "").toLowerCase();
         return WEEKDAYS[key] || key || "—";
+    }
+
+    function shortPlanId(id) {
+        return String(id || "").slice(0, 8);
     }
 
     function statusLabel(row) {
@@ -86,17 +91,45 @@
 
     function appendAction(cell, kind, title, action, planId) {
         var ta = window.TableActions;
-        if (!ta) return;
-        cell.appendChild(
-            ta.createIconButton(kind, title, function (ev) {
-                ev.stopPropagation();
-                var work = runAction(action, planId);
-                if (work && work.catch) {
-                    work.catch(function (err) {
-                        setStatus(err.message || String(err), true);
-                    });
-                }
-            })
+        if (!ta) return null;
+        var btn = ta.createIconButton(kind, title, function (ev) {
+            ev.stopPropagation();
+            var work = runAction(action, planId);
+            if (work && work.catch) {
+                work.catch(function (err) {
+                    setStatus(err.message || String(err), true);
+                });
+            }
+        });
+        cell.appendChild(btn);
+        return btn;
+    }
+
+    function participantCount(row) {
+        return Number((row && row.participant_count) || 0);
+    }
+
+    function appendActivate(cell, row) {
+        var ready = participantCount(row) > 0;
+        var btn = appendAction(
+            cell,
+            "activate",
+            ready
+                ? "Activate Day Plan"
+                : "Add participants before activating",
+            "activate",
+            row.plan_id
+        );
+        if (btn && !ready) btn.disabled = true;
+    }
+
+    function appendParticipants(cell, row) {
+        appendAction(
+            cell,
+            "participants",
+            participantCount(row) > 0 ? "Replace participants" : "Add participants",
+            "participants",
+            row.plan_id
         );
     }
 
@@ -105,7 +138,7 @@
         if (!tbody) return;
         if (!plans.length) {
             tbody.innerHTML =
-                '<tr><td colspan="5" class="placeholder">No Day Plans yet. Click <strong>Import</strong> to add a published ZIP.</td></tr>';
+                '<tr><td colspan="7" class="placeholder">No Day Plans yet. Click <strong>Import</strong> to add a published ZIP and its participants.</td></tr>';
             return;
         }
         tbody.innerHTML = "";
@@ -120,11 +153,21 @@
                 "<td>" +
                 esc(row.name || "Day Plan") +
                 "</td>" +
+                '<td><span class="rf-plans-id" title="' +
+                esc(row.plan_id) +
+                '">' +
+                esc(shortPlanId(row.plan_id)) +
+                "</span></td>" +
                 "<td>" +
                 esc(row.calendar_date || "—") +
                 "</td>" +
                 "<td>" +
                 esc(weekdayLabel(row.weekday_code)) +
+                "</td>" +
+                "<td>" +
+                (participantCount(row) > 0
+                    ? esc(participantCount(row))
+                    : '<span class="text-secondary">None</span>') +
                 "</td>" +
                 '<td><span class="' +
                 cls +
@@ -145,6 +188,7 @@
                     id
                 );
                 appendAction(actions, "archive", "Archive Day Plan", "archive", id);
+                appendParticipants(actions, row);
                 appendAction(
                     actions,
                     "locations",
@@ -160,8 +204,9 @@
                     id
                 );
             } else {
-                appendAction(actions, "activate", "Activate Day Plan", "activate", id);
+                appendActivate(actions, row);
                 appendAction(actions, "archive", "Archive Day Plan", "archive", id);
+                appendParticipants(actions, row);
                 appendAction(
                     actions,
                     "locations",
@@ -257,7 +302,33 @@
         if (action === "sheets") {
             return openSheets(planId);
         }
+        if (action === "participants") {
+            rosterPlanId = planId;
+            var picker = qs("#rf-plans-roster-file");
+            if (picker) picker.click();
+        }
         return Promise.resolve();
+    }
+
+    function uploadRoster(planId, file) {
+        if (!planId || !file) return Promise.resolve();
+        var row = plans.filter(function (item) {
+            return item.plan_id === planId;
+        })[0];
+        var label = (row && (row.name || row.calendar_date)) || "Day Plan";
+        var body = new FormData();
+        body.append("file", file);
+        setStatus("Loading participants…");
+        return jsonFetch(
+            "/api/execute/plans/" + encodeURIComponent(planId) + "/participants",
+            { method: "POST", body: body, credentials: "same-origin" }
+        ).then(function (data) {
+            var starts = (data.stats && data.stats.starts) || 0;
+            setStatus(
+                "Loaded " + starts + " participants for " + label + "."
+            );
+            return loadPlans();
+        });
     }
 
     function assignStatus(message, isError) {
@@ -508,51 +579,229 @@
             });
     }
 
-    function importPackage(file) {
-        if (!file) return;
+    var importPreview = null;
+
+    function importError(message) {
+        var el = qs("#rf-plans-import-error");
+        if (!el) return;
+        el.hidden = !message;
+        el.textContent = message || "";
+    }
+
+    function importNote(message) {
+        var el = qs("#rf-plans-import-note");
+        if (!el) return;
+        el.hidden = !message;
+        el.textContent = message || "";
+    }
+
+    function importPlanId(id) {
+        var el = qs("#rf-plans-import-id");
+        if (!el) return;
+        el.hidden = !id;
+        el.title = id || "";
+        el.textContent = id ? "Plan ID " + shortPlanId(id) : "";
+    }
+
+    function weekdayHelp(code) {
+        var el = qs("#rf-plans-import-weekday");
+        if (!el) return;
+        var day = WEEKDAYS[String(code || "").toLowerCase()];
+        el.hidden = !day;
+        el.textContent = day ? "This is a " + day + " plan. Pick a " + day + " date." : "";
+    }
+
+    function dateWeekday(value) {
+        var parts = String(value || "").split("-");
+        if (parts.length !== 3) return "";
+        var d = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
+        if (isNaN(d.getTime())) return "";
+        return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getUTCDay()];
+    }
+
+    function importFormReady() {
+        var name = qs("#rf-plans-import-name");
+        var date = qs("#rf-plans-import-date");
+        var roster = qs("#rf-plans-import-roster");
+        var submit = qs("#rf-plans-import-submit");
+        var ok =
+            !!importPreview &&
+            !importPreview.archived &&
+            !!(name && name.value.trim()) &&
+            !!(date && date.value) &&
+            dateWeekday(date.value) === importPreview.weekday_code &&
+            !!(roster && roster.files && roster.files[0]);
+        if (submit) submit.disabled = !ok;
+        return ok;
+    }
+
+    function resetImportForm() {
+        importPreview = null;
+        var form = qs("#rf-plans-import-form");
+        if (form) form.reset();
+        ["#rf-plans-import-name", "#rf-plans-import-date"].forEach(function (sel) {
+            var input = qs(sel);
+            if (input) input.disabled = true;
+        });
+        importError("");
+        importNote("");
+        importPlanId("");
+        weekdayHelp("");
+        importFormReady();
+    }
+
+    function openImportModal() {
+        resetImportForm();
+        var modal = qs("#rf-plans-import-modal");
+        if (modal) modal.hidden = false;
+        var pkg = qs("#rf-plans-import-package");
+        if (pkg) pkg.focus();
+    }
+
+    function closeImportModal() {
+        var modal = qs("#rf-plans-import-modal");
+        if (modal) modal.hidden = true;
+        resetImportForm();
+    }
+
+    function previewPackage(file) {
+        importPreview = null;
+        importError("");
+        importNote("");
+        importPlanId("");
+        importFormReady();
+        if (!file) return Promise.resolve();
         var body = new FormData();
         body.append("package", file);
-        setStatus("Importing…");
-        return fetch("/api/execute/plans/import", {
+        return jsonFetch("/api/execute/plans/preview", {
             method: "POST",
             body: body,
             credentials: "same-origin",
         })
-            .then(function (resp) {
-                return resp.json().then(function (data) {
-                    if (!resp.ok) {
-                        throw new Error(data.detail || "Import failed.");
-                    }
-                    return data;
-                });
-            })
             .then(function (data) {
-                var label = data.calendar_date || "Day Plan";
-                setStatus(
-                    data.idempotent
-                        ? label + " was already imported."
-                        : "Imported " + label + ". Activate it to use it."
-                );
-                return loadPlans();
+                importPreview = data;
+                importPlanId(data.plan_id);
+                var name = qs("#rf-plans-import-name");
+                var date = qs("#rf-plans-import-date");
+                if (name) {
+                    name.disabled = false;
+                    name.value = data.name || "";
+                }
+                if (date) {
+                    date.disabled = false;
+                    date.value = data.calendar_date || "";
+                }
+                weekdayHelp(data.weekday_code);
+                if (data.archived) {
+                    importNote(
+                        "This Day Plan is archived. Restore it from the list before importing it again."
+                    );
+                } else if (data.already_imported) {
+                    importNote(
+                        "This Day Plan is already imported. Importing again updates its name and date and replaces its participant list."
+                    );
+                }
+                importFormReady();
             })
             .catch(function (err) {
-                setStatus(err.message || String(err), true);
+                importError(err.message || "Could not read this Day Plan ZIP.");
             });
     }
 
-    function bind() {
-        var importBtn = qs("#rf-plans-import");
-        var fileInput = qs("#rf-plans-file");
-        if (importBtn && fileInput) {
-            importBtn.addEventListener("click", function () {
-                fileInput.click();
+    function submitImport(ev) {
+        ev.preventDefault();
+        if (!importFormReady()) {
+            var date = qs("#rf-plans-import-date");
+            if (importPreview && date && date.value &&
+                dateWeekday(date.value) !== importPreview.weekday_code) {
+                importError(
+                    "Pick a " + weekdayLabel(importPreview.weekday_code) + " date."
+                );
+            }
+            return;
+        }
+        var pkg = qs("#rf-plans-import-package").files[0];
+        var roster = qs("#rf-plans-import-roster").files[0];
+        var body = new FormData();
+        body.append("package", pkg);
+        body.append("participants", roster);
+        body.append("name", qs("#rf-plans-import-name").value.trim());
+        body.append("calendar_date", qs("#rf-plans-import-date").value);
+        body.append("activate", "true");
+        var submit = qs("#rf-plans-import-submit");
+        if (submit) submit.disabled = true;
+        importError("");
+        return jsonFetch("/api/execute/plans/import", {
+            method: "POST",
+            body: body,
+            credentials: "same-origin",
+        })
+            .then(function (data) {
+                closeImportModal();
+                var starts = (data.participants && data.participants.starts) || 0;
+                setStatus(
+                    "Imported " +
+                        (data.name || data.calendar_date || "Day Plan") +
+                        " with " +
+                        starts +
+                        " participants. It is now active."
+                );
+                if (window.runflowRefreshExecuteContext) {
+                    window.runflowRefreshExecuteContext();
+                }
+                return loadPlans();
+            })
+            .catch(function (err) {
+                importError(err.message || "Import failed.");
+                importFormReady();
             });
-            fileInput.addEventListener("change", function () {
-                var file = fileInput.files && fileInput.files[0];
-                fileInput.value = "";
-                importPackage(file);
+    }
+
+    function bindImportModal() {
+        var importBtn = qs("#rf-plans-import");
+        if (importBtn) importBtn.addEventListener("click", openImportModal);
+        var form = qs("#rf-plans-import-form");
+        if (!form) return;
+        form.addEventListener("submit", submitImport);
+        form.addEventListener("input", function () {
+            importError("");
+            importFormReady();
+        });
+        var pkg = qs("#rf-plans-import-package");
+        if (pkg) {
+            pkg.addEventListener("change", function () {
+                previewPackage(pkg.files && pkg.files[0]);
             });
         }
+        var roster = qs("#rf-plans-import-roster");
+        if (roster) roster.addEventListener("change", importFormReady);
+        var cancel = qs("#rf-plans-import-cancel");
+        if (cancel) cancel.addEventListener("click", closeImportModal);
+        var modal = qs("#rf-plans-import-modal");
+        if (modal) {
+            modal.addEventListener("click", function (ev) {
+                if (ev.target === modal) closeImportModal();
+            });
+        }
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape" && modal && !modal.hidden) closeImportModal();
+        });
+        var rosterFile = qs("#rf-plans-roster-file");
+        if (rosterFile) {
+            rosterFile.addEventListener("change", function () {
+                var file = rosterFile.files && rosterFile.files[0];
+                var planId = rosterPlanId;
+                rosterFile.value = "";
+                rosterPlanId = null;
+                uploadRoster(planId, file).catch(function (err) {
+                    setStatus(err.message || String(err), true);
+                });
+            });
+        }
+    }
+
+    function bind() {
+        bindImportModal();
         var form = qs("#rf-plans-assign-form");
         if (form) form.addEventListener("submit", savePlanAssignment);
         var del = qs("#rf-plans-assign-delete");
