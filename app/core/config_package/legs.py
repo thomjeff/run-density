@@ -106,6 +106,12 @@ _RACE_EXPORT_PRESERVE_FIELDS = (
     "onepage",
 )
 
+# Location ops edited on Build → Legs (Issue #953). On race export the saved
+# course snapshot wins when it has a value; the package row only fills blanks.
+_RACE_EXPORT_LEG_FIRST_FIELDS = frozenset(
+    ("notes", "interval", "equipment", "contact", "onepage")
+)
+
 _BLANK_LOCATION_DAYS = frozenset({"", "nan", "none", "null"})
 
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
@@ -1195,7 +1201,8 @@ def merge_leg_locations_into_course(  # noqa: C901
     snapshots during Build race exports).     ``preserve_from_course`` controls which
     fields are kept from existing course rows; race builds use
     ``_RACE_EXPORT_PRESERVE_FIELDS`` so saved course snapshots win for
-    type/label/zone/buffer/resources.
+    type/label/zone/buffer/resources, and for onepage/notes/interval/
+    equipment/contact whenever the snapshot has a value.
     """
     from app.core.config_package.leg_library_resolver import (
         recipe_leg_ids_from_package,
@@ -1206,6 +1213,9 @@ def merge_leg_locations_into_course(  # noqa: C901
     # Default package merge: legs own off-course proxy timing. Race export passes
     # an explicit preserve list so package-course operational fields can win.
     leg_owns_proxy_fields = preserve_from_course is None
+    leg_first_fields = (
+        _RACE_EXPORT_LEG_FIRST_FIELDS if preserve_from_course is not None else ()
+    )
     preserve_fields = (
         tuple(preserve_from_course)
         if preserve_from_course is not None
@@ -1351,6 +1361,8 @@ def merge_leg_locations_into_course(  # noqa: C901
                     ):
                         continue
                     if field not in prev:
+                        continue
+                    if field in leg_first_fields and row.get(field) not in (None, ""):
                         continue
                     val = prev[field]
                     if field == "resources":
