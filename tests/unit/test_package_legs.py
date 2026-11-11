@@ -588,6 +588,87 @@ def test_merge_clears_stale_proxy_on_on_course_locations(tmp_path, monkeypatch):
     assert not validate_locations_for_export(merged)
 
 
+def test_race_export_takes_onepage_and_notes_from_legs(tmp_path, monkeypatch):
+    """Issue #953: Legs ops win on race export; package fills only blanks."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Onepage race export", "", event_day="sun", package_events=["10k"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "12",
+                        "seg_label": "St John",
+                        "file": "12.gpx",
+                        "locations": [
+                            {
+                                "loc_label": "St John at Churchill",
+                                "loc_type": "traffic",
+                                "lat": 45.954494,
+                                "lon": -66.641406,
+                                "placement": "along",
+                                "location_key": "5CMTM",
+                                "onepage": "y",
+                                "notes": "Hold traffic on Churchill",
+                            }
+                        ],
+                    }
+                ],
+                "recipes": {"10k": ["12"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {"seg_id": "S1", "leg_id": "12", "events": ["10k"], "from_km": 0, "to_km": 1.0}
+    ]
+    course["locations"] = [
+        {
+            "id": 1,
+            "loc_id": 1,
+            "loc_label": "St John at Churchill",
+            "loc_type": "traffic",
+            "lat": 45.954494,
+            "lon": -66.641406,
+            "leg_id": "12",
+            "leg_loc_key": "12:0",
+            "pass_key": "5CMTM",
+            "location_key": "5CMTM",
+            "source": "leg",
+            "seg_id": "S1",
+            "onepage": "n",
+            "notes": "Old package notes",
+            "contact": "Zone 1 lead",
+            "10k": "y",
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(
+        config_id,
+        preserve_from_course=_RACE_EXPORT_PRESERVE_FIELDS,
+    )
+    loc = load_config_course(config_id)["locations"][0]
+    assert loc["onepage"] == "y"
+    assert loc["notes"] == "Hold traffic on Churchill"
+    assert loc["contact"] == "Zone 1 lead"
+    assert loc["pass_id"] == 1
+
+
 def test_merge_leg_locations_assigns_unique_ids(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.core.config_package.storage.get_config_root",
