@@ -98,9 +98,50 @@ def test_self_paired_leg_occurrences_emit_corridor_rows():
     assert len(corridor) == 1
     row = corridor[0]
     assert (row["event_a"], row["event_b"]) == ("10k", "10k")
-    assert row["flow_type"] == "counterflow"
+    assert row["flow_type"] == "overtake"
+    assert row["direction"] == "bi"
+    assert row["notes"].startswith("Same-direction repeat pass")
     assert (float(row["from_km_a"]), float(row["to_km_a"])) == (2.7, 4.3)
     assert (float(row["from_km_b"]), float(row["to_km_b"])) == (4.3, 5.9)
+
+
+def test_paired_and_repeated_legs_get_distinct_flow_types():
+    """Paired legs oppose; a repeated leg (lap) runs the same direction."""
+    segments = [
+        {
+            "seg_id": "S1",
+            "leg_id": "47",
+            "leg_occurrence": 1,
+            "paired_with": "50",
+            "events": ["5k"],
+            "5k_from_km": 0.0,
+            "5k_to_km": 2.2,
+        },
+        {
+            "seg_id": "S2",
+            "leg_id": "47",
+            "leg_occurrence": 2,
+            "paired_with": "50",
+            "events": ["5k"],
+            "5k_from_km": 2.2,
+            "5k_to_km": 4.4,
+        },
+        {
+            "seg_id": "S3",
+            "leg_id": "50",
+            "paired_with": "47",
+            "events": ["5k"],
+            "5k_from_km": 4.4,
+            "5k_to_km": 6.6,
+        },
+    ]
+    rows = {
+        r["flow_id"]: r for r in _parse(build_flow_csv_from_segments(segments, ["5k"]))
+    }
+    assert rows["S1_S2_5k_5k"]["flow_type"] == "overtake"
+    assert rows["S1_S3_5k_5k"]["flow_type"] == "counterflow"
+    assert rows["S2_S3_5k_5k"]["flow_type"] == "counterflow"
+    assert all(r["direction"] == "bi" for r in rows.values())
 
 
 def test_unpaired_segments_output_unchanged():
@@ -159,7 +200,9 @@ def test_cross_event_only_by_default():
     assert len(rows) == 3
     pairs = {(r["event_a"], r["event_b"]) for r in rows}
     assert pairs == {("full", "half"), ("full", "10k"), ("half", "10k")}
-    assert all(r["flow_id"] == default_flow_id("S1", r["event_a"], r["event_b"]) for r in rows)
+    assert all(
+        r["flow_id"] == default_flow_id("S1", r["event_a"], r["event_b"]) for r in rows
+    )
     assert not any(r["event_a"] == r["event_b"] for r in rows)
 
 
