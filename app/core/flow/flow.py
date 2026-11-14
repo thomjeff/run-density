@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 from app.utils.constants import (
     CONFLICT_LENGTH_LONG_SEGMENT_M,
     CONVERGENCE_POINT_TOLERANCE_KM,
+    COURSE_EVENT_IDS,
     DEFAULT_CONFLICT_LENGTH_METERS,
     DEFAULT_CONVERGENCE_STEP_KM,
     DEFAULT_MIN_OVERLAP_DURATION,
@@ -447,6 +448,17 @@ def build_segment_flow_cache(
     )
 
 
+def _known_event_km_range(segment: Any, event_lower: str) -> Tuple[Any, Any]:
+    """``{event}_from_km`` / ``{event}_to_km`` for a known event id."""
+    from_km = segment.get(f"{event_lower}_from_km", 0)
+    to_km = segment.get(f"{event_lower}_to_km", 0)
+    if event_lower == "10k":
+        # Older segments.csv files used capitalized 10K columns.
+        from_km = from_km or segment.get("10K_from_km", 0)
+        to_km = to_km or segment.get("10K_to_km", 0)
+    return from_km, to_km
+
+
 def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, float]:
     """
     Extract distance range for a specific event from segment data.
@@ -455,29 +467,14 @@ def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, fl
 
     Args:
         segment: Segment data row
-        event: Event name (lowercase: 'full', 'half', '10k', 'elite', 'open')
+        event: Event id (lowercase; see COURSE_EVENT_IDS)
 
     Returns:
         Tuple of (from_km, to_km) for the event
     """
-    # Normalize to lowercase for consistent matching
     event_lower = event.lower()
-
-    # Issue #553 Phase 4.2: Support hardcoded events for backward compatibility,
-    # but add dynamic fallback for any event name
-    if event_lower == "full":
-        return segment.get("full_from_km", 0), segment.get("full_to_km", 0)
-    elif event_lower == "half":
-        return segment.get("half_from_km", 0), segment.get("half_to_km", 0)
-    elif event_lower == "10k":
-        # Issue #548 Bug 1: Use lowercase '10k' to match CSV column names
-        return segment.get("10k_from_km", 0) or segment.get(
-            "10K_from_km", 0
-        ), segment.get("10k_to_km", 0) or segment.get("10K_to_km", 0)
-    elif event_lower == "elite":
-        return segment.get("elite_from_km", 0), segment.get("elite_to_km", 0)
-    elif event_lower == "open":
-        return segment.get("open_from_km", 0), segment.get("open_to_km", 0)
+    if event_lower in COURSE_EVENT_IDS:
+        return _known_event_km_range(segment, event_lower)
     else:
         # Issue #553 Phase 4.2: Dynamic lookup for any event name
         # Try dynamic lookup: {event}_from_km and {event}_to_km
@@ -505,22 +502,15 @@ def _get_segment_events(segment: pd.Series) -> List[str]:
         segment: Segment data row
 
     Returns:
-        List of lowercase event names present in the segment ('full', 'half', '10k', 'elite', 'open')
+        Lowercase event ids flagged ``y`` on the segment, in COURSE_EVENT_IDS order
     """
     events = []
-    # Issue #548 Bug 1: Check lowercase column names to match CSV format
-    if segment.get("full") == "y":
-        events.append("full")
-    if segment.get("half") == "y":
-        events.append("half")
-    if (
-        segment.get("10k") == "y" or segment.get("10K") == "y"
-    ):  # Handle both cases for backward compatibility
-        events.append("10k")
-    if segment.get("elite") == "y":
-        events.append("elite")
-    if segment.get("open") == "y":
-        events.append("open")
+    for event_id in COURSE_EVENT_IDS:
+        flag = segment.get(event_id)
+        if event_id == "10k" and flag != "y":
+            flag = segment.get("10K")
+        if flag == "y":
+            events.append(event_id)
     return events
 
 
@@ -4820,45 +4810,12 @@ def _extract_segment_parameters_from_new_format(
     event_a_lower = event_a.lower()
     event_b_lower = event_b.lower()
 
-    # Extract parameters for event_a
-    if event_a_lower == "full":
-        from_km_a = segment.get("full_from_km", 0)
-        to_km_a = segment.get("full_to_km", 0)
-    elif event_a_lower == "half":
-        from_km_a = segment.get("half_from_km", 0)
-        to_km_a = segment.get("half_to_km", 0)
-    elif event_a_lower == "10k":
-        # Issue #548 Bug 1: Use lowercase '10k' to match CSV column names
-        from_km_a = segment.get("10k_from_km", 0) or segment.get("10K_from_km", 0)
-        to_km_a = segment.get("10k_to_km", 0) or segment.get("10K_to_km", 0)
-    elif event_a_lower == "elite":
-        from_km_a = segment.get("elite_from_km", 0)
-        to_km_a = segment.get("elite_to_km", 0)
-    elif event_a_lower == "open":
-        from_km_a = segment.get("open_from_km", 0)
-        to_km_a = segment.get("open_to_km", 0)
-    else:
+    if event_a_lower not in COURSE_EVENT_IDS:
         raise ValueError(f"Unsupported event type: {event_a}")
-
-    # Extract parameters for event_b
-    if event_b_lower == "full":
-        from_km_b = segment.get("full_from_km", 0)
-        to_km_b = segment.get("full_to_km", 0)
-    elif event_b_lower == "half":
-        from_km_b = segment.get("half_from_km", 0)
-        to_km_b = segment.get("half_to_km", 0)
-    elif event_b_lower == "10k":
-        # Issue #548 Bug 1: Use lowercase '10k' to match CSV column names
-        from_km_b = segment.get("10k_from_km", 0) or segment.get("10K_from_km", 0)
-        to_km_b = segment.get("10k_to_km", 0) or segment.get("10K_to_km", 0)
-    elif event_b_lower == "elite":
-        from_km_b = segment.get("elite_from_km", 0)
-        to_km_b = segment.get("elite_to_km", 0)
-    elif event_b_lower == "open":
-        from_km_b = segment.get("open_from_km", 0)
-        to_km_b = segment.get("open_to_km", 0)
-    else:
+    if event_b_lower not in COURSE_EVENT_IDS:
         raise ValueError(f"Unsupported event type: {event_b}")
+    from_km_a, to_km_a = _known_event_km_range(segment, event_a_lower)
+    from_km_b, to_km_b = _known_event_km_range(segment, event_b_lower)
 
     return from_km_a, to_km_a, from_km_b, to_km_b
 

@@ -1,5 +1,7 @@
 import pandas as pd
 
+from app.utils.constants import COURSE_EVENT_IDS
+
 
 def _yn(x):
     s = str(x).strip().lower()
@@ -8,23 +10,16 @@ def _yn(x):
     return s  # leave as-is if unexpected; tests will catch
 
 
+def _normalize_event_flags(df: pd.DataFrame) -> None:
+    """Normalize y/n event flag columns (any case, e.g. legacy ``10K``)."""
+    for col in df.columns:
+        if str(col).lower() in COURSE_EVENT_IDS:
+            df[col] = df[col].map(_yn)
+
+
 def load_segments(path: str):
     df = pd.read_csv(path)
-    # normalize minimal bits required by current code
-    # Issue #553 Phase 4.2: Normalize known event columns, plus dynamically discover others
-    known_events = ["full", "half", "10K", "elite", "open"]
-    for ev in known_events:
-        if ev in df.columns:
-            df[ev] = df[ev].map(_yn)
-
-    # Dynamic discovery: normalize any other columns that look like event flags
-    # (columns that match event name pattern and aren't already normalized)
-    for col in df.columns:
-        if (
-            col.lower() in ["full", "half", "10k", "elite", "open"]
-            and col not in known_events
-        ):
-            df[col] = df[col].map(_yn)
+    _normalize_event_flags(df)
 
     if "width_m" in df.columns:
         df["width_m"] = pd.to_numeric(df["width_m"], errors="coerce")
@@ -83,18 +78,7 @@ def load_locations(path: str):
 
     # One-pager flag: canonical column name is ``onepage`` (y/n).
 
-    # Normalize event flags (y/n)
-    known_events = ["full", "half", "10K", "elite", "open"]
-    for ev in known_events:
-        if ev in df.columns:
-            df[ev] = df[ev].map(_yn)
-
-    for col in df.columns:
-        if (
-            col.lower() in ["full", "half", "10k", "elite", "open"]
-            and col not in known_events
-        ):
-            df[col] = df[col].map(_yn)
+    _normalize_event_flags(df)
 
     if "lat" in df.columns:
         df["lat"] = pd.to_numeric(df["lat"], errors="coerce")

@@ -39,11 +39,7 @@ PASSES_CSV_PREFIX_COLUMNS: List[str] = [
     "seg_id",
     "day",
     "zone",
-    "full",
-    "half",
-    "10k",
-    "elite",
-    "open",
+    *COURSE_EVENT_IDS,
     "buffer",
     "interval",
 ]

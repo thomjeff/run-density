@@ -28,12 +28,13 @@ from app.utils.auth import (
 )
 from app.utils.carto_basemaps import register_jinja_map_tiles
 from app.utils.constants import (
-    COURSE_EVENT_IDS,
+    COURSE_DISTANCES,
     DAY_SHORT_CODES,
     FLOW_TYPE_CHOICES,
     LEG_MAP_NO_SNAP_LOCATION_TYPES,
     LOCATION_TYPE_CHOICES,
     OFF_COURSE_LOCATION_TYPES,
+    RACE_EVENTS,
     SEGMENT_DIRECTION_CHOICES,
     SEGMENT_SCHEMA_CHOICES,
 )
@@ -66,6 +67,28 @@ def get_stub_meta() -> dict:
 
 
 # ===== Route Handlers =====
+
+
+def _event_choices() -> list[dict]:
+    """Event options for templates (all events; legacy ones flagged)."""
+    return [
+        {
+            "value": e["id"],
+            "label": e["label"],
+            "long_label": e["long_label"],
+            "distance": e["distance"],
+            "legacy": bool(e.get("legacy")),
+        }
+        for e in RACE_EVENTS
+    ]
+
+
+def _distance_choices() -> list[dict]:
+    """Course distance options for templates."""
+    return [{"value": d["id"], "label": d["label"]} for d in COURSE_DISTANCES]
+
+
+templates.env.globals["runflow_events"] = _event_choices()
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -474,10 +497,7 @@ async def course_mapping(request: Request):
     location_types = [
         {"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES
     ]
-    event_choices = [
-        {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
-        for e in COURSE_EVENT_IDS
-    ]
+    event_choices = _event_choices()
     segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
     segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
     flow_type_choices = list(FLOW_TYPE_CHOICES)
@@ -489,6 +509,7 @@ async def course_mapping(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "distance_choices": _distance_choices(),
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
             "flow_type_choices": flow_type_choices,
@@ -593,10 +614,7 @@ async def race_configuration_page(request: Request):
     location_types = [
         {"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES
     ]
-    event_choices = [
-        {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
-        for e in COURSE_EVENT_IDS
-    ]
+    event_choices = _event_choices()
     segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
     segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
     flow_type_choices = list(FLOW_TYPE_CHOICES)
@@ -608,6 +626,7 @@ async def race_configuration_page(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "distance_choices": _distance_choices(),
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
             "flow_type_choices": flow_type_choices,

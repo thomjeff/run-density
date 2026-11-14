@@ -9,22 +9,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
+from app.utils.constants import COURSE_EVENT_IDS, EVENT_LABELS
+
 
 def format_event_list(events: Sequence[str]) -> str:
-    """Human event list: Full, Half, 10k → 'Full+Half' / '10k' / 'Full+Half+10k'."""
-    order = ["full", "half", "10k", "elite", "open"]
-    labels = {
-        "full": "Full",
-        "half": "Half",
-        "10k": "10k",
-        "elite": "Elite",
-        "open": "Open",
-    }
+    """Human event list: Full, Half, 10k → 'Full+Half' / '10K' / 'Full+Half+10K'."""
+    order = COURSE_EVENT_IDS
     seen = []
     lower = {str(e).lower() for e in events if e}
     for key in order:
         if key in lower:
-            seen.append(labels[key])
+            seen.append(EVENT_LABELS[key])
     for e in sorted(lower):
         if e not in order:
             seen.append(e.title())
@@ -119,7 +114,7 @@ def format_interaction_description(
     Build a race-director description for one interaction.
 
     Cross example:
-      10k runners from Walking Bridge South to George (S8) crossing Full runners
+      10K runners from Walking Bridge South to George (S8) crossing Full runners
       from George to Aberdeen via Trail (reverse) (S11) left to
       George to Forest Hill (via University) (S25)
     """
@@ -170,7 +165,7 @@ def role_headline_labels(
     Labels for analysis headlines (Issue #819 §5).
 
     Returns primary_label / secondary_label with events, e.g.
-    'Unique 10k who met Full within 30s'.
+    'Unique 10K who met Full within 30s'.
     """
     nearby_by_id = nearby_by_id or {}
     itype = str(ix.get("type") or "").lower()

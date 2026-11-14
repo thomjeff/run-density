@@ -23,7 +23,7 @@ def test_active_events_subset_and_elite_open():
         "10k": "n",
     }
     assert active_events(row, ["elite", "open", "full"]) == ["elite", "open"]
-    assert display_events_from_flags(row) == ["Elite", "Open"]
+    assert display_events_from_flags(row) == ["5K Elite", "5K Open"]
 
 
 def test_build_segment_event_payload_includes_spans():

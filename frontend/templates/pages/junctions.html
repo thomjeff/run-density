@@ -108,8 +108,8 @@
     }
 
     function formatEventList(events) {
-        const order = ["full", "half", "10k", "elite", "open"];
-        const labels = { full: "Full", half: "Half", "10k": "10k", elite: "Elite", open: "Open" };
+        const order = (window.RUNFLOW_EVENTS || []).map((ev) => ev.value);
+        const labels = Object.fromEntries((window.RUNFLOW_EVENTS || []).map((ev) => [ev.value, ev.label]));
         const lower = new Set((events || []).map((e) => String(e).toLowerCase()).filter(Boolean));
         const seen = [];
         order.forEach((k) => {

@@ -15,6 +15,7 @@ SAMPLE_FREDERICTON = {
         "full": {"start_time": 420, "event_duration_minutes": 390},
         "half": {"start_time": 440, "event_duration_minutes": 180},
         "10k": {"start_time": 460, "event_duration_minutes": 120},
+        "5k": {"start_time": 480, "event_duration_minutes": 45},
         "elite": {"start_time": 480, "event_duration_minutes": 45},
         "open": {"start_time": 510, "event_duration_minutes": 75},
     },

@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Set
 import pandas as pd
 
 from app.io.loader import load_locations, load_segments
+from app.utils.constants import COURSE_EVENT_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def validate_segment_references(  # noqa: C901
 
         # Get events this location applies to
         events = []
-        for event_col in ["full", "half", "10k", "elite", "open"]:
+        for event_col in COURSE_EVENT_IDS:
             if str(location.get(event_col, "")).lower() in ["y", "yes", "true", "1"]:
                 events.append(event_col.lower())
 

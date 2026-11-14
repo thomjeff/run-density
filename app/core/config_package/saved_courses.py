@@ -2,8 +2,9 @@
 Global named courses (org library) and package course assignment.
 
 Courses live under ``runflow/org/courses/{course_id}/`` with snapshotted legs
-and frozen analysis exports. Packages assign one course per distance and can
-build a multi-distance race export at the package root for v2 analyze.
+and frozen analysis exports. Packages assign one course per event (matching
+the event's distance) and can build a multi-event race export at the package
+root for v2 analyze.
 """
 
 from __future__ import annotations
@@ -53,7 +54,12 @@ from app.core.course.segment_library import (
     manifest_legs,
 )
 from app.core.locations.loc_types import is_off_course, normalize_type_and_placement
-from app.utils.constants import COURSE_EVENT_IDS
+from app.utils.constants import (
+    COURSE_DISTANCE_IDS,
+    COURSE_EVENT_IDS,
+    EVENT_DISTANCES,
+    event_label,
+)
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -489,7 +495,7 @@ def save_org_course(
     distance = str(distance or "").strip().lower()
     if not distance:
         raise ValueError("distance is required")
-    if distance not in COURSE_EVENT_IDS:
+    if distance not in COURSE_DISTANCE_IDS:
         raise ValueError(f"Unsupported distance: {distance}")
 
     recipe_list = [str(x).strip() for x in recipe if str(x).strip()]
@@ -830,20 +836,24 @@ def set_package_course_assignments(
         if str(e).strip()
     ]
     clean: Dict[str, str] = {}
-    for distance, course_id in (assigned_courses or {}).items():
-        dist = str(distance or "").strip().lower()
+    for event, course_id in (assigned_courses or {}).items():
+        ev = str(event or "").strip().lower()
         cid_course = str(course_id or "").strip()
-        if not dist or not cid_course:
+        if not ev or not cid_course:
             continue
-        if events and dist not in events:
-            raise ValueError(f"Distance {dist} is not in this package's events")
+        if events and ev not in events:
+            raise ValueError(f"Event {ev} is not in this package's events")
+        want = EVENT_DISTANCES.get(ev)
+        if not want:
+            raise ValueError(f"Unknown event: {ev}")
         course = get_org_course(cid_course)
         course_dist = str(course.get("distance") or "").strip().lower()
-        if course_dist and course_dist != dist:
+        if course_dist and course_dist != want:
             raise ValueError(
-                f"Course {cid_course} is distance {course_dist}, not {dist}"
+                f"Course {cid_course} is distance {course_dist}; "
+                f"{event_label(ev)} needs a {want} course"
             )
-        clean[dist] = normalize_course_id(cid_course)
+        clean[ev] = normalize_course_id(cid_course)
 
     manifest["assigned_courses"] = clean
     save_config_manifest(package_path, manifest)
