@@ -100,14 +100,14 @@ def _corridor_pairs(
     segments: Sequence[Dict[str, Any]],
 ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """
-    Segment pairs that traverse the same physical corridor in opposite
-    directions (Issue #785).
+    Segment pairs that traverse the same physical corridor (Issue #785).
 
     Two sources:
     - Explicit leg pairing: leg metadata ``paired_with`` links two directional
-      legs (out vs back over one trail).
+      legs (out vs back over one trail) — opposite directions.
     - Self-pairing: the same leg appears more than once in a recipe
-      (``leg_occurrence`` 1, 2, ...) — implicitly its own paired pass.
+      (``leg_occurrence`` 1, 2, ...). Recipes cannot reverse a leg, so these
+      passes run in the same direction (laps), Issue #959.
 
     Returns ordered (first, second) pairs deduped by seg_id.
     """
@@ -317,16 +317,29 @@ def build_flow_csv_from_segments(  # noqa: C901
                 }
             )
 
-    # Issue #785: opposing-pass rows for corridor pairs (paired legs and
-    # repeated-leg out-and-backs). Each event window on one pass is compared
-    # against each event window on the opposing pass — including same-event
-    # out/back interactions, which have distinct km windows by construction.
+    # Issue #785: corridor rows for paired legs (opposing passes) and repeated
+    # legs (same-direction passes, Issue #959). Each event window on one pass
+    # is compared against each event window on the other pass — including
+    # same-event interactions, which have distinct km windows by construction.
+    # Both stay direction=bi so the per-minute overlap reports are generated.
     for seg_x, seg_y in _corridor_pairs(segments):
         x_id = str(seg_x["seg_id"]).strip()
         y_id = str(seg_y["seg_id"]).strip()
         x_label = str(seg_x.get("seg_label", "")).strip()
         y_label = str(seg_y.get("seg_label", "")).strip()
         pair_label = f"{x_label} / {y_label}" if x_label != y_label else x_label
+        same_leg = (
+            str(seg_x.get("leg_id") or "").strip()
+            == str(seg_y.get("leg_id") or "").strip()
+        )
+        if same_leg:
+            pair_flow_type = "overtake"
+            pair_note = (
+                f"Same-direction repeat pass on shared corridor ({x_id} vs {y_id})."
+            )
+        else:
+            pair_flow_type = "counterflow"
+            pair_note = f"Opposing passes on shared corridor ({x_id} vs {y_id})."
         active_x = _segment_active_events(seg_x, event_ids)
         active_y = _segment_active_events(seg_y, event_ids)
         for event_a in active_x:
@@ -350,12 +363,9 @@ def build_flow_csv_from_segments(  # noqa: C901
                         "to_km_a": to_a,
                         "from_km_b": from_b,
                         "to_km_b": to_b,
-                        "flow_type": "counterflow",
+                        "flow_type": pair_flow_type,
                         "direction": "bi",
-                        "notes": (
-                            f"Opposing passes on shared corridor "
-                            f"({x_id} vs {y_id})."
-                        ),
+                        "notes": pair_note,
                         "auto_generated": True,
                     }
                 )
