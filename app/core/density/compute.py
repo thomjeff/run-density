@@ -40,40 +40,26 @@ def get_event_intervals(
     Retrieves the (from_km, to_km) interval for a given event from the density configuration.
 
     Issue #548 Bug 1: Updated to use lowercase event names consistently (no v1 uppercase compatibility).
-    Supports: "full", "half", "10k", "elite", "open" (case-insensitive, converts to lowercase).
+    Known events (COURSE_EVENT_IDS) use ``{event}_from_km`` / ``{event}_to_km``.
 
     Args:
-        event: Event type (lowercase: "full", "half", "10k", "elite", "open")
+        event: Event id (case-insensitive)
         density_cfg: Density configuration dictionary containing event-specific parameters
 
     Returns:
         Tuple of (from_km, to_km) if event configuration exists, None otherwise
-
-    Supported event types:
-        - "full": Uses full_from_km and full_to_km
-        - "half": Uses half_from_km and half_to_km
-        - "10k": Uses 10k_from_km and 10k_to_km
-        - "elite": Uses elite_from_km and elite_to_km
-        - "open": Uses open_from_km and open_to_km
     """
+    from app.utils.constants import COURSE_EVENT_IDS
+
     event_lower = event.lower()
-
-    # Issue #548 Bug 1: Use lowercase event names consistently
-    if event_lower == "full" and density_cfg.get("full_from_km") is not None:
-        return (density_cfg["full_from_km"], density_cfg["full_to_km"])
-    elif event_lower == "half" and density_cfg.get("half_from_km") is not None:
-        return (density_cfg["half_from_km"], density_cfg["half_to_km"])
-    elif event_lower == "10k":
-        # Standardized on "10k_from_km"/"10k_to_km" keys (Issue #508)
-        # Handles both "10K_from_km" and "10k_from_km" CSV column formats
-        if density_cfg.get("10k_from_km") is not None:
-            return (density_cfg["10k_from_km"], density_cfg["10k_to_km"])
-
-    # v2 support: elite, open
-    if event_lower == "elite" and density_cfg.get("elite_from_km") is not None:
-        return (density_cfg["elite_from_km"], density_cfg["elite_to_km"])
-    elif event_lower == "open" and density_cfg.get("open_from_km") is not None:
-        return (density_cfg["open_from_km"], density_cfg["open_to_km"])
+    if (
+        event_lower in COURSE_EVENT_IDS
+        and density_cfg.get(f"{event_lower}_from_km") is not None
+    ):
+        return (
+            density_cfg[f"{event_lower}_from_km"],
+            density_cfg[f"{event_lower}_to_km"],
+        )
 
     # Try dynamic lookup for any event name (v2 fallback)
     from_key = f"{event_lower}_from_km"
@@ -280,19 +266,16 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             schema=schema,  # Issue #616: Include schema from CSV (SSOT for this analysis run)
             flow_type=str(r.get("flow_type", "default")),
             events=events,
-            # v1 events (backward compatibility)
-            full_from_km=(
-                float(r.get("full_from_km", 0)) if r.get("full_from_km") != "" else None
-            ),
-            full_to_km=(
-                float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None
-            ),
-            half_from_km=(
-                float(r.get("half_from_km", 0)) if r.get("half_from_km") != "" else None
-            ),
-            half_to_km=(
-                float(r.get("half_to_km", 0)) if r.get("half_to_km") != "" else None
-            ),
+            **{
+                f"{eid}_{end}_km": (
+                    float(r.get(f"{eid}_{end}_km", 0))
+                    if r.get(f"{eid}_{end}_km") != ""
+                    else None
+                )
+                for eid in COURSE_EVENT_IDS
+                if eid != "10k"
+                for end in ("from", "to")
+            },
             # Standardized on "10k_from_km"/"10k_to_km" keys (Issue #508)
             **{
                 "10k_from_km": (
@@ -308,21 +291,6 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
                     else None
                 )
             },
-            # v2 events
-            elite_from_km=(
-                float(r.get("elite_from_km", 0))
-                if r.get("elite_from_km") != ""
-                else None
-            ),
-            elite_to_km=(
-                float(r.get("elite_to_km", 0)) if r.get("elite_to_km") != "" else None
-            ),
-            open_from_km=(
-                float(r.get("open_from_km", 0)) if r.get("open_from_km") != "" else None
-            ),
-            open_to_km=(
-                float(r.get("open_to_km", 0)) if r.get("open_to_km") != "" else None
-            ),
         )
 
     return cfg

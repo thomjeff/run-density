@@ -100,6 +100,7 @@ from app.core.bin.hotspots import coarsen_plan, is_hotspot  # noqa: F401
 # Issue #466 Step 2: Storage consolidated to app.storage
 from app.utils.constants import (
     BIN_SCHEMA_VERSION,
+    COURSE_EVENT_IDS,
 )
 
 # LOS Thresholds for density classification (updated to match v2 rulebook)
@@ -3067,47 +3068,35 @@ def _build_segment_ranges_per_event(
     segment_ranges = {}
     for _, seg_row in segments_config.iterrows():
         seg_id = seg_row["seg_id"]
-        segment_ranges[seg_id] = {
-            "full": (
-                (seg_row["full_from_km"], seg_row["full_to_km"])
-                if pd.notna(seg_row.get("full_from_km"))
+        ranges: Dict[str, Optional[Tuple[float, float]]] = {}
+        for eid in COURSE_EVENT_IDS:
+            if eid == "10k":
+                continue
+            ranges[eid] = (
+                (seg_row[f"{eid}_from_km"], seg_row[f"{eid}_to_km"])
+                if pd.notna(seg_row.get(f"{eid}_from_km"))
                 else None
-            ),
-            "half": (
-                (seg_row["half_from_km"], seg_row["half_to_km"])
-                if pd.notna(seg_row.get("half_from_km"))
-                else None
-            ),
-            # Issue #548 Bug: Fix 10k range lookup - use pd.notna() check instead of 'or' to handle 0.0 values correctly
-            # When 10k_from_km is 0.0, 'or' treats it as falsy and returns None, causing km_range to be None
-            "10k": (
+            )
+        # Issue #548 Bug: use pd.notna() (not 'or') so a 0.0 10k_from_km is kept;
+        # older files use capitalized 10K columns.
+        ranges["10k"] = (
+            (
                 (
-                    (
-                        seg_row.get("10k_from_km")
-                        if pd.notna(seg_row.get("10k_from_km"))
-                        else seg_row.get("10K_from_km")
-                    ),
-                    (
-                        seg_row.get("10k_to_km")
-                        if pd.notna(seg_row.get("10k_to_km"))
-                        else seg_row.get("10K_to_km")
-                    ),
-                )
-                if pd.notna(seg_row.get("10k_from_km"))
-                or pd.notna(seg_row.get("10K_from_km"))
-                else None
-            ),
-            "elite": (
-                (seg_row["elite_from_km"], seg_row["elite_to_km"])
-                if pd.notna(seg_row.get("elite_from_km"))
-                else None
-            ),
-            "open": (
-                (seg_row["open_from_km"], seg_row["open_to_km"])
-                if pd.notna(seg_row.get("open_from_km"))
-                else None
-            ),
-        }
+                    seg_row.get("10k_from_km")
+                    if pd.notna(seg_row.get("10k_from_km"))
+                    else seg_row.get("10K_from_km")
+                ),
+                (
+                    seg_row.get("10k_to_km")
+                    if pd.notna(seg_row.get("10k_to_km"))
+                    else seg_row.get("10K_to_km")
+                ),
+            )
+            if pd.notna(seg_row.get("10k_from_km"))
+            or pd.notna(seg_row.get("10K_from_km"))
+            else None
+        )
+        segment_ranges[seg_id] = ranges
     return segment_ranges
 
 

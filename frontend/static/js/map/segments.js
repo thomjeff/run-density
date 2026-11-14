@@ -64,9 +64,17 @@ function formatDirectionLabel(direction) {
 
 function formatElapsedKm(elapsed) {
     if (!elapsed || typeof elapsed !== 'object') return '';
-    const labels = { full: 'Full', half: 'Half', '10k': '10K', elite: 'Elite', open: 'Open' };
+    const labels = {};
+    (window.RUNFLOW_EVENTS || []).forEach((ev) => { labels[ev.value] = ev.label; });
+    const order = Object.keys(labels).filter((event) => elapsed[event]);
+    Object.keys(elapsed).sort().forEach((event) => {
+        if (!labels[event]) {
+            labels[event] = event.toUpperCase();
+            order.push(event);
+        }
+    });
     const lines = [];
-    Object.keys(labels).forEach((event) => {
+    order.forEach((event) => {
         const range = elapsed[event];
         if (!range) return;
         const fromKm = Number(range.from_km);

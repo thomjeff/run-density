@@ -54,6 +54,7 @@
             return {
                 value: item.value || item.label,
                 label: item.label || item.value,
+                legacy: !!item.legacy,
             };
         });
     }
@@ -814,7 +815,9 @@
         const host = document.getElementById('race-config-new-events');
         if (!host) return;
         host.innerHTML = '';
-        eventChoiceList().forEach(function (choice) {
+        eventChoiceList().filter(function (choice) {
+            return !choice.legacy;
+        }).forEach(function (choice) {
             const id = 'race-config-ev-' + choice.value;
             const label = document.createElement('label');
             const cb = document.createElement('input');

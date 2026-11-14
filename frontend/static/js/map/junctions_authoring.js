@@ -871,14 +871,12 @@
     }
 
     function formatEventList(events) {
-        const order = ['full', 'half', '10k', 'elite', 'open'];
-        const labels = {
-            full: 'Full',
-            half: 'Half',
-            '10k': '10k',
-            elite: 'Elite',
-            open: 'Open',
-        };
+        const order = [];
+        const labels = {};
+        (window.RUNFLOW_EVENTS || []).forEach(function (ev) {
+            order.push(ev.value);
+            labels[ev.value] = ev.label;
+        });
         const lower = {};
         (events || []).forEach(function (e) {
             if (e) lower[String(e).toLowerCase()] = true;

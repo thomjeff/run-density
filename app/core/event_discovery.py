@@ -12,10 +12,10 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from app.utils.constants import COURSE_EVENT_IDS
+from app.utils.constants import COURSE_EVENT_IDS, EVENT_LABELS
 
 # Stable GPX / length tie-break among product events (Saturday first, then Sunday).
-GPX_EVENT_PRIORITY: List[str] = ["elite", "open", "10k", "half", "full"]
+GPX_EVENT_PRIORITY: List[str] = ["5k", "elite", "open", "10k", "half", "full"]
 
 
 def normalize_event_name(name: str) -> str:
@@ -25,9 +25,11 @@ def normalize_event_name(name: str) -> str:
 def event_display_label(event: str) -> str:
     """UI/GeoJSON label: 10k → 10K, full → Full."""
     e = normalize_event_name(event)
-    if e == "10k":
-        return "10K"
-    return e.capitalize() if e else ""
+    if not e:
+        return ""
+    if e in EVENT_LABELS:
+        return EVENT_LABELS[e]
+    return e.capitalize()
 
 
 def _row_get_ci(row: Mapping[str, Any], key: str) -> Any:

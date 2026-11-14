@@ -16,6 +16,7 @@ import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.core.v2.performance import log_span
+from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -683,19 +684,12 @@ def _export_ui_artifacts_v2(  # noqa: C901
                             if not seg_row.empty:
                                 events = []
                                 # Issue #548 Bug 1: Use lowercase column names to match CSV format
-                                if seg_row.iloc[0].get("full") == "y":
-                                    events.append("full")
-                                if seg_row.iloc[0].get("half") == "y":
-                                    events.append("half")
-                                if (
-                                    seg_row.iloc[0].get("10k") == "y"
-                                    or seg_row.iloc[0].get("10K") == "y"
-                                ):
-                                    events.append("10k")
-                                if seg_row.iloc[0].get("elite") == "y":
-                                    events.append("elite")
-                                if seg_row.iloc[0].get("open") == "y":
-                                    events.append("open")
+                                row0 = seg_row.iloc[0]
+                                for event_id in COURSE_EVENT_IDS:
+                                    if row0.get(event_id) == "y" or (
+                                        event_id == "10k" and row0.get("10K") == "y"
+                                    ):
+                                        events.append(event_id)
 
                                 # Add events to feature properties
                                 props = feature.get("properties", {})

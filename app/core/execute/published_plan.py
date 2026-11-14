@@ -30,7 +30,7 @@ from app.core.execute.state import (
     record_reopen,
 )
 from app.core.execute.times import wall_hhmmss
-from app.utils.constants import COURSE_EVENT_IDS, DISPLAY_TIMEZONE
+from app.utils.constants import COURSE_EVENT_IDS, DISPLAY_TIMEZONE, EVENT_LABELS
 from app.utils.path_mapper import resolve_runflow_root as get_runflow_root
 
 SCHEMA_VERSION = 1
@@ -39,13 +39,6 @@ MANIFEST_NAME = "manifest.json"
 LOCATIONS_NAME = "locations.json"
 COURSES_DIR = "courses"
 LOC_SHEETS_DIR = "loc_sheets"
-RACE_DISPLAY_NAMES = {
-    "elite": "5K Elite",
-    "open": "5K Open",
-    "10k": "10K",
-    "half": "Half",
-    "full": "Full",
-}
 _ISO_WEEKDAY_TO_CODE = {
     1: "mon",
     2: "tue",
@@ -99,7 +92,7 @@ def assert_uuid(value: Any) -> str:
 
 def race_display_name(race_id: str) -> str:
     key = str(race_id or "").strip().lower()
-    return RACE_DISPLAY_NAMES.get(key, key)
+    return EVENT_LABELS.get(key, key)
 
 
 def execute_store_root(root: Optional[Path] = None) -> Path:

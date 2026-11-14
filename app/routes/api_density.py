@@ -16,6 +16,8 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from app.utils.constants import COURSE_EVENT_IDS
+
 # Issue #466 Step 2: Storage consolidated to app.storage
 
 
@@ -316,7 +318,7 @@ def _enrich_label_lookup_from_csv(  # noqa: C901
                 label_lookup[seg_id]["description"] = str(description).strip()
 
             elapsed_km = {}
-            for event in ("full", "half", "10k", "elite", "open"):
+            for event in COURSE_EVENT_IDS:
                 flag = str(row.get(event, "")).strip().lower()
                 if flag in ("", "0", "n", "no", "false"):
                     continue

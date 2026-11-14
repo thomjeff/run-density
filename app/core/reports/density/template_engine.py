@@ -12,6 +12,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
+from app.utils.constants import event_label
+
 
 class DensityReportTemplateEngine:
     """Template engine for the new density report structure per Issue #246."""
@@ -288,19 +290,8 @@ class DensityReportTemplateEngine:
                 events.items(), key=lambda x: x[1].get("start_time", 0)
             )
 
-            # Event name mapping for display
-            event_display_names = {
-                "full": "Full Marathon",
-                "half": "Half Marathon",
-                "10k": "10K",
-                "elite": "Elite 5K",
-                "open": "Open 5K",
-            }
-
             for event_name, event_info in sorted_events:
-                display_name = event_display_names.get(
-                    event_name, event_name.capitalize()
-                )
+                display_name = event_label(event_name, long=True)
                 start_time_str = event_info.get("start_time_formatted", "N/A")
                 runner_count = event_info.get("runner_count", 0)
                 lines.append(

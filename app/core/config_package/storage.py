@@ -511,11 +511,18 @@ def list_config_packages() -> List[Dict[str, Any]]:
     return result
 
 
-def normalize_package_events(event_ids: Optional[Sequence[str]]) -> List[str]:
-    """Lowercase unique event ids for package configuration (must be non-empty when validating)."""
-    from app.utils.constants import COURSE_EVENT_IDS
+def normalize_package_events(
+    event_ids: Optional[Sequence[str]], *, allow_legacy: bool = True
+) -> List[str]:
+    """
+    Lowercase unique event ids for package configuration.
 
-    allowed = {e.lower() for e in COURSE_EVENT_IDS}
+    Existing packages may keep legacy events; new packages pass
+    ``allow_legacy=False`` so only active events can be selected.
+    """
+    from app.utils.constants import ACTIVE_EVENT_IDS, COURSE_EVENT_IDS
+
+    allowed = list(COURSE_EVENT_IDS if allow_legacy else ACTIVE_EVENT_IDS)
     out: List[str] = []
     seen: set = set()
     for raw in event_ids or []:
@@ -523,9 +530,11 @@ def normalize_package_events(event_ids: Optional[Sequence[str]]) -> List[str]:
         if not eid or eid in seen:
             continue
         if eid not in allowed:
-            raise ValueError(
-                f"Unknown event '{eid}'; allowed: {', '.join(sorted(allowed))}"
-            )
+            if eid in COURSE_EVENT_IDS:
+                raise ValueError(
+                    f"Event '{eid}' is legacy and can't be added to a new package"
+                )
+            raise ValueError(f"Unknown event '{eid}'; allowed: {', '.join(allowed)}")
         seen.add(eid)
         out.append(eid)
     return out
@@ -563,7 +572,7 @@ def create_config_package(
 
         if clean_event_day not in DAY_SHORT_CODES:
             raise ValueError(f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}")
-    clean_events = normalize_package_events(package_events)
+    clean_events = normalize_package_events(package_events, allow_legacy=False)
     if not clean_events:
         raise ValueError("Select at least one event for this configuration")
 

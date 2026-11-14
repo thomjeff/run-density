@@ -71,11 +71,31 @@
         return String(eid).toUpperCase();
     }
 
+    function eventDistance(eid) {
+        var choices = window.EVENT_CHOICES_FROM_SERVER || [];
+        var found = choices.find(function (c) {
+            return String(c.value || c).toLowerCase() === String(eid).toLowerCase();
+        });
+        return String((found && found.distance) || eid).toLowerCase();
+    }
+
+    function distanceChoices() {
+        return window.DISTANCE_CHOICES_FROM_SERVER || [];
+    }
+
+    function distanceLabel(distance) {
+        var found = distanceChoices().find(function (d) {
+            return String(d.value).toLowerCase() === String(distance).toLowerCase();
+        });
+        if (found && found.label) return found.label;
+        return String(distance || '').toUpperCase();
+    }
+
     function packageEvents() {
         if (window.CONFIG_PACKAGE_EVENTS && window.CONFIG_PACKAGE_EVENTS.length) {
             return window.CONFIG_PACKAGE_EVENTS.slice();
         }
-        return ['full', 'half', '10k'];
+        return [];
     }
 
     function fetchOrgLegsState() {
@@ -142,9 +162,10 @@
 
     function orderGridFromRecipe(recipe, distance) {
         var grid = {};
-        ['full', 'half', '10k', 'elite', 'open'].forEach(function (ev) {
-            grid[ev] = {};
+        distanceChoices().forEach(function (d) {
+            grid[d.value] = {};
         });
+        if (distance && !grid[distance]) grid[distance] = {};
         if (!distance || !grid[distance]) return grid;
         var positions = {};
         (recipe || []).forEach(function (legId, idx) {
@@ -371,7 +392,7 @@
                     metaEl.textContent =
                         (data.name || data.course_id) +
                         ' · ' +
-                        String(data.distance || '').toUpperCase() +
+                        distanceLabel(data.distance) +
                         ' · ' +
                         Number(data.length_km || 0).toFixed(2) +
                         ' km · ' +
@@ -428,7 +449,7 @@
             }
             tr.appendChild(td(sc.id));
             tr.appendChild(td(sc.name || sc.id));
-            tr.appendChild(td(String(sc.distance || '').toUpperCase()));
+            tr.appendChild(td(distanceLabel(sc.distance)));
             tr.appendChild(
                 td(sc.length_km != null ? Number(sc.length_km).toFixed(2) + ' km' : '—')
             );
@@ -510,7 +531,7 @@
         if (!tbody || !thead) return;
         thead.innerHTML =
             '<th>Leg</th><th>Label</th><th>km</th><th>' +
-            eventLabel(draftDistance) +
+            distanceLabel(draftDistance) +
             ' order</th>';
         tbody.innerHTML = '';
         if (!draftOrderGrid[draftDistance]) draftOrderGrid[draftDistance] = {};
@@ -554,20 +575,17 @@
                 alert('Add legs in the Legs library first.');
                 return;
             }
-            draftOrderGrid = {};
-            var events = ['full', 'half', '10k', 'elite', 'open'];
-            draftDistance = '10k';
-            events.forEach(function (ev) {
-                draftOrderGrid[ev] = {};
-            });
+            draftOrderGrid = orderGridFromRecipe([], null);
+            var distances = distanceChoices();
+            draftDistance = distances.length ? String(distances[0].value) : '';
             var distSel = document.getElementById('saved-course-distance');
             if (distSel) {
                 distSel.innerHTML = '';
-                ['full', 'half', '10k'].forEach(function (ev) {
+                distances.forEach(function (d) {
                     var opt = document.createElement('option');
-                    opt.value = ev;
-                    opt.textContent = eventLabel(ev);
-                    if (ev === draftDistance) opt.selected = true;
+                    opt.value = d.value;
+                    opt.textContent = d.label;
+                    if (d.value === draftDistance) opt.selected = true;
                     distSel.appendChild(opt);
                 });
             }
@@ -590,14 +608,14 @@
                 alert('Add legs in the Legs library first.');
                 return;
             }
-            draftDistance = String(course.distance || '10k').toLowerCase();
+            draftDistance = String(course.distance || '').toLowerCase();
             draftOrderGrid = orderGridFromRecipe(course.recipe || [], draftDistance);
             var distSel = document.getElementById('saved-course-distance');
             if (distSel) {
                 distSel.innerHTML = '';
                 var opt = document.createElement('option');
                 opt.value = draftDistance;
-                opt.textContent = eventLabel(draftDistance);
+                opt.textContent = distanceLabel(draftDistance);
                 opt.selected = true;
                 distSel.appendChild(opt);
             }
@@ -726,7 +744,7 @@
                 label.textContent = eventLabel(ev);
                 var sel = document.createElement('select');
                 sel.className = 'course-btn';
-                sel.dataset.distance = ev;
+                sel.dataset.event = ev;
                 sel.style.minWidth = '16rem';
                 var blank = document.createElement('option');
                 blank.value = '';
@@ -734,7 +752,7 @@
                 sel.appendChild(blank);
                 courses
                     .filter(function (c) {
-                        return String(c.distance || '').toLowerCase() === String(ev).toLowerCase();
+                        return String(c.distance || '').toLowerCase() === eventDistance(ev);
                     })
                     .forEach(function (c) {
                         var opt = document.createElement('option');
@@ -773,8 +791,8 @@
         var form = document.getElementById('assign-courses-form');
         if (!form) return;
         var assigned = {};
-        form.querySelectorAll('select[data-distance]').forEach(function (sel) {
-            if (sel.value) assigned[sel.dataset.distance] = sel.value;
+        form.querySelectorAll('select[data-event]').forEach(function (sel) {
+            if (sel.value) assigned[sel.dataset.event] = sel.value;
         });
         setAssignStatus('Saving assignments…');
         fetch(base + '/assigned-courses', {

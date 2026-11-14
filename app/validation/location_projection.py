@@ -22,6 +22,7 @@ from app.core.gpx.processor import generate_segment_coordinates, load_all_course
 from app.io.loader import load_locations, load_segments
 from app.location_report import project_point_to_course
 from app.utils.constants import (
+    COURSE_EVENT_IDS,
     LOCATION_SEGMENT_CLAMP_M,
     LOCATION_SNAP_THRESHOLD_M,
     METERS_PER_KM,
@@ -98,7 +99,7 @@ def validate_location_projections(  # noqa: C901
 
         # Check each event this location applies to
         events = []
-        for event_col in ["full", "half", "10k", "elite", "open"]:
+        for event_col in COURSE_EVENT_IDS:
             if location.get(event_col, "").lower() in ["y", "yes", "true", "1"]:
                 events.append(event_col)
 

@@ -1634,7 +1634,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var LOCATION_TYPES = (window.LOCATION_TYPES_FROM_SERVER || []).slice().sort(function (a, b) { return (a.label || a.value).localeCompare(b.label || b.value); });
-    var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || [{ value: 'full', label: 'Full' }, { value: 'half', label: 'Half' }, { value: '10k', label: '10K' }, { value: 'elite', label: 'Elite' }, { value: 'open', label: 'Open' }];
+    var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || window.RUNFLOW_EVENTS || [];
     var LOCATION_PIN_COLORS = {
         aid: '#e74c3c',
         extract: '#9c27b0',

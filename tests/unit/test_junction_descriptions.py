@@ -50,7 +50,7 @@ NEARBY = {
 
 
 def test_format_event_list():
-    assert format_event_list(["10k", "full"]) == "Full+10k"
+    assert format_event_list(["10k", "full"]) == "Full+10K"
     assert format_event_list(["half", "full"]) == "Full+Half"
 
 
@@ -64,7 +64,7 @@ def test_cross_description_george():
         "events": ["full", "10k"],
     }
     desc = format_interaction_description(ix, NEARBY)
-    assert "10k runners from Walking Bridge South to George (S8)" in desc
+    assert "10K runners from Walking Bridge South to George (S8)" in desc
     assert "Full runners from George to Aberdeen via Trail (reverse) (S11)" in desc
     assert "left to George to Forest Hill (via University) (S25)" in desc
 
@@ -77,7 +77,7 @@ def test_merge_description_george():
         "events": ["full", "half", "10k"],
     }
     desc = format_interaction_description(ix, NEARBY)
-    assert "10k runners from Forest Hill (via University) to George (S26)" in desc
+    assert "10K runners from Forest Hill (via University) to George (S26)" in desc
     assert "merging into Full+Half traffic" in desc
     assert "S9" in desc and "S22" in desc
 
@@ -92,8 +92,8 @@ def test_headline_labels_from_uniques():
             "crossed_with_copresence": {"all": 159, "full": 159},
         },
     )
-    assert labels["primary_label"] == "Unique 10k who met Full within 30s"
-    assert labels["secondary_label"] == "Unique Full who met 10k within 30s"
+    assert labels["primary_label"] == "Unique 10K who met Full within 30s"
+    assert labels["secondary_label"] == "Unique Full who met 10K within 30s"
 
 
 def test_normalize_preserves_description():

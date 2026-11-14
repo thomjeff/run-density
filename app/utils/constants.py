@@ -220,6 +220,7 @@ PROGRESSION_EVENT_COLORS = {
     "full": "#1a5276",
     "half": "#c0392b",
     "10k": "#1e8449",
+    "5k": "#2471a3",
     "elite": "#6c3483",
     "open": "#b9770e",
 }
@@ -267,8 +268,56 @@ LEG_MAP_NO_SNAP_LOCATION_TYPES = ["extract", "aid"]
 
 LOCATION_PLACEMENT_CHOICES = ["along", "off", "start", "end"]
 
-# Course Mapping segment events (Issue #732) — used for segment annotation event selection
-COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
+# Distances and events (Issue #955). A course belongs to a distance; a package
+# runs events, and each event has a distance. Event ids prefix per-event
+# columns ({event}_from_km) and runner files ({event}_runners.csv), so they
+# must stay lowercase letters, digits, and underscores. Legacy events still
+# load in existing packages, runs, and Day Plans but are not offered for new
+# packages. Execute mirrors these in app/utils/execute_constants.py.
+COURSE_DISTANCES = [
+    {"id": "5k", "label": "5K"},
+    {"id": "10k", "label": "10K"},
+    {"id": "half", "label": "Half"},
+    {"id": "full", "label": "Full"},
+]
+COURSE_DISTANCE_IDS = [d["id"] for d in COURSE_DISTANCES]
+
+RACE_EVENTS = [
+    {"id": "full", "label": "Full", "long_label": "Full Marathon", "distance": "full"},
+    {"id": "half", "label": "Half", "long_label": "Half Marathon", "distance": "half"},
+    {"id": "10k", "label": "10K", "long_label": "10K", "distance": "10k"},
+    {"id": "5k", "label": "5K", "long_label": "5K", "distance": "5k"},
+    {
+        "id": "elite",
+        "label": "5K Elite",
+        "long_label": "5K Elite",
+        "distance": "5k",
+        "legacy": True,
+    },
+    {
+        "id": "open",
+        "label": "5K Open",
+        "long_label": "5K Open",
+        "distance": "5k",
+        "legacy": True,
+    },
+]
+
+# Every known event id, in display order (loading, CSV columns, validation).
+COURSE_EVENT_IDS = [e["id"] for e in RACE_EVENTS]
+# Events offered when creating a package.
+ACTIVE_EVENT_IDS = [e["id"] for e in RACE_EVENTS if not e.get("legacy")]
+EVENT_LABELS = {e["id"]: e["label"] for e in RACE_EVENTS}
+EVENT_LONG_LABELS = {e["id"]: e["long_label"] for e in RACE_EVENTS}
+EVENT_DISTANCES = {e["id"]: e["distance"] for e in RACE_EVENTS}
+
+
+def event_label(event_id: str, long: bool = False) -> str:
+    """Display label for an event id; unknown ids fall back to upper case."""
+    key = str(event_id or "").strip().lower()
+    labels = EVENT_LONG_LABELS if long else EVENT_LABELS
+    return labels.get(key) or key.upper()
+
 
 # Segment schema keys (density rulebook + analysis pipeline; config/density_rulebook.yml schemas)
 SEGMENT_SCHEMA_CHOICES = [
