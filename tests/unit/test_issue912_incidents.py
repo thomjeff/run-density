@@ -161,12 +161,15 @@ def test_type_care_change_note_names_additions_and_removals():
         "Other reported problem: Bee sting. "
         "Care added: Ice / cold pack applied, Fluids provided."
     )
-    assert type_care_change_note(
-        ["heat_concern"],
-        ["heat_concern"],
-        ["fluids_provided"],
-        ["fluids_provided"],
-    ) == ""
+    assert (
+        type_care_change_note(
+            ["heat_concern"],
+            ["heat_concern"],
+            ["fluids_provided"],
+            ["fluids_provided"],
+        )
+        == ""
+    )
 
 
 def test_transfer_care_appends_handoff_note():
@@ -204,9 +207,14 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     active = listed.json()["active"]
     assert active[0]["updated_at_label"] == incident["updated_at_label"]
     assert "agencies" in listed.json()["catalog"]
-    assert [item["label"] for item in listed.json()["catalog"]["reporter_agencies"]][
-        0
-    ] == "ANB"
+    # Fixture plan has empty resources_available → only fixed non-staff reporters (#966).
+    reporter_labels = [
+        item["label"] for item in listed.json()["catalog"]["reporter_agencies"]
+    ]
+    assert "ANB" not in reporter_labels
+    assert "AWP" not in reporter_labels
+    assert reporter_labels[0] == "Participant"
+    assert "Spectator" in reporter_labels
 
     locs = client.get(f"/api/execute/locations")
     assert locs.status_code == 200
@@ -343,7 +351,9 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
             "location_loc_id": "",
         },
     )
-    assert free.json()["incident"]["location_text"] == "Between Water Stop and Brookside"
+    assert (
+        free.json()["incident"]["location_text"] == "Between Water Stop and Brookside"
+    )
     assert free.json()["incident"]["location_loc_id"] == ""
 
     xfer = client.post(
@@ -358,17 +368,13 @@ def test_api_timestamps_transfer_locations_and_quiet_save(tmp_path, monkeypatch)
     assert xfer_inc["notes"][-1]["detail"] == "walking, alert"
 
     stored = json.loads(
-        (dest / "sun" / "execution" / "incidents.json").read_text(
-            encoding="utf-8"
-        )
+        (dest / "sun" / "execution" / "incidents.json").read_text(encoding="utf-8")
     )
     assert stored["schema_version"] == SCHEMA_VERSION
     assert stored["plan_id"] == plan_id
     assert "run_id" not in stored
 
-    closed = client.post(
-        f"/api/execute/incidents/{iid}/close"
-    )
+    closed = client.post(f"/api/execute/incidents/{iid}/close")
     assert closed.status_code == 200
     assert closed.json()["incident"]["lifecycle"]["id"] == "closed"
     blocked = client.put(
@@ -431,9 +437,7 @@ def test_v1_record_opens_with_v2_fields(tmp_path, monkeypatch):
     )
     _import_roster(TestClient(app))
     client = TestClient(app)
-    got = client.get(
-        f"/api/execute/incidents/inc_legacy"
-    )
+    got = client.get(f"/api/execute/incidents/inc_legacy")
     assert got.status_code == 200, got.text
     incident = got.json()["incident"]
     assert incident["description"] == "Blister, still wants to continue."

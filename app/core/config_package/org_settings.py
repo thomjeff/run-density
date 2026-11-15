@@ -13,7 +13,7 @@ import logging
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 from app.core.locations.schema import (
     DEFAULT_PACKAGE_RESOURCES,
