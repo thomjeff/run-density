@@ -1,0 +1,88 @@
+<div id="clearance-workspace" class="clearance-workspace">
+    <p class="card-help" style="margin: 0 0 1rem 0;">
+        Authored reopen dependencies for Health &amp; Safety. A location (or proxy asset)
+        stays closed until <strong>all</strong> listed blockers have cleared — clearance is
+        <em>last runner at that point</em> from Locations analysis. This is the static playbook;
+        race-day clock UI is separate.
+    </p>
+
+    <div class="content-card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <h4 class="card-title" style="margin: 0;">Rules</h4>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="button" id="clearance-add-rule" class="course-btn">Add rule</button>
+                <button type="button" id="clearance-save" class="course-btn primary">Save</button>
+            </div>
+        </div>
+        <p id="clearance-status" class="card-help" style="margin: 0.5rem 0;"></p>
+        <div class="scrollable-table-container">
+            <table class="table-sticky-header" id="clearance-rules-table">
+                <thead>
+                    <tr>
+                        <th>Blocked</th>
+                        <th>Until (AND)</th>
+                        <th>Clear when</th>
+                        <th class="course-map-action-cell">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clearance-rules-tbody">
+                    <tr><td colspan="4" class="placeholder">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <h4 class="card-title" style="margin: 0;">Proxy / off-course assets</h4>
+            <button type="button" id="clearance-add-asset" class="course-btn">Add asset</button>
+        </div>
+        <p class="card-help" style="margin: 0.5rem 0;">Optional subjects that are not course location pins. Map to a <code>loc_id</code> when timings come from a proxy pass.</p>
+        <div class="scrollable-table-container">
+            <table class="table-sticky-header" id="clearance-assets-table">
+                <thead>
+                    <tr>
+                        <th>Asset id</th>
+                        <th>Label</th>
+                        <th>loc_id</th>
+                        <th class="course-map-action-cell">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clearance-assets-tbody">
+                    <tr><td colspan="4" class="placeholder">None yet</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="content-card">
+        <h4 class="card-title" style="margin: 0 0 0.5rem 0;">Static playbook preview</h4>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; margin-bottom: 0.75rem;">
+            <label style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
+                Run id
+                <input type="text" id="clearance-playbook-run-id" class="config-package-input" style="min-width: 14rem;" placeholder="analysis run_id" />
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
+                Day
+                <input type="text" id="clearance-playbook-day" class="config-package-input" style="width: 5rem;" placeholder="sat" />
+            </label>
+            <button type="button" id="clearance-playbook-load" class="course-btn primary">Preview</button>
+        </div>
+        <p id="clearance-playbook-status" class="card-help" style="margin: 0 0 0.5rem 0;"></p>
+        <div class="scrollable-table-container">
+            <table class="table-sticky-header" id="clearance-playbook-table">
+                <thead>
+                    <tr>
+                        <th>Blocked</th>
+                        <th>Reopen not before</th>
+                        <th>Blockers</th>
+                        <th>Explanation</th>
+                    </tr>
+                </thead>
+                <tbody id="clearance-playbook-tbody">
+                    <tr><td colspan="4" class="placeholder">Save rules, then preview with a run that has Locations timings.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

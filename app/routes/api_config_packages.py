@@ -474,6 +474,126 @@ async def api_save_config_course(
         )
 
 
+@router.get("/api/config/packages/{config_id}/clearance-rules")
+async def api_load_clearance_rules(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Load clearance_rules.json for a config package (Issue #832)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.clearance_rules import load_config_clearance_rules
+
+        doc = load_config_clearance_rules(config_id)
+        return JSONResponse(content={"ok": True, "config_id": config_id, **doc})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load clearance rules")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load clearance rules: {e}",
+        )
+
+
+@router.put("/api/config/packages/{config_id}/clearance-rules")
+async def api_save_clearance_rules(
+    request: Request,
+    config_id: str,
+    body: Dict[str, Any],
+) -> JSONResponse:
+    """Save clearance_rules.json for a config package (Issue #832)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.clearance_rules import (
+            load_config_clearance_rules,
+            save_config_clearance_rules,
+        )
+
+        payload = {
+            "version": body.get("version"),
+            "assets": body.get("assets") or [],
+            "rules": body.get("rules") or [],
+        }
+        save_config_clearance_rules(config_id, payload)
+        doc = load_config_clearance_rules(config_id)
+        return JSONResponse(content={"ok": True, "config_id": config_id, **doc})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save clearance rules")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save clearance rules: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/clearance/playbook")
+async def api_clearance_playbook(
+    request: Request,
+    config_id: str,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+) -> JSONResponse:
+    """Static clearance playbook using Locations last_runner (Issue #832)."""
+    require_auth(request)
+    try:
+        from app.core.clearance.playbook import build_static_playbook
+        from app.core.config_package.clearance_rules import load_config_clearance_rules
+        from app.core.config_package.storage import load_config_manifest
+        from app.core.locations.report_json import locations_report_relpath
+        from app.utils.run_id import get_runflow_root
+
+        doc = load_config_clearance_rules(config_id)
+        rid = (run_id or "").strip()
+        day_code = (day or "").strip().lower()
+        if not day_code:
+            manifest = load_config_manifest(config_id)
+            day_code = str(manifest.get("event_day") or "").strip().lower()
+        if not rid or not day_code:
+            return JSONResponse(
+                content={
+                    "ok": True,
+                    "config_id": config_id,
+                    "run_id": rid or None,
+                    "day": day_code or None,
+                    "steps": [],
+                    "message": "Provide run_id and day (or package event_day) to preview timings.",
+                    "rule_count": len(doc.get("rules") or []),
+                    "rules": doc.get("rules") or [],
+                }
+            )
+        report_path = (
+            get_runflow_root() / "runs" / rid / locations_report_relpath(day_code)
+        )
+        rows: List[Dict[str, Any]] = []
+        if report_path.is_file():
+            import json as _json
+
+            payload = _json.loads(report_path.read_text(encoding="utf-8"))
+            rows = list(payload.get("locations") or [])
+        playbook = build_static_playbook(doc, rows)
+        playbook["config_id"] = config_id
+        playbook["run_id"] = rid
+        playbook["day"] = day_code
+        playbook["report_found"] = report_path.is_file()
+        return JSONResponse(content=playbook)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to build clearance playbook")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build playbook: {e}",
+        )
+
+
 @router.get("/api/config/packages/{config_id}/junctions")
 async def api_load_config_junctions(
     request: Request,

@@ -145,6 +145,14 @@ If the **same leg appears twice in one recipe** (e.g. a single bidirectional con
 
 ---
 
+## Clearance rules (reopen playbook)
+
+Open a package → **Clearance** tab. Author **pair** or **group (AND)** rules: a **blocked** location or proxy asset waits until every **until** subject has cleared. Clearance time is **last runner at that point** from Locations analysis (not peak, not stream-passage windows).
+
+- Save writes `clearance_rules.json` on the package.
+- **Static playbook preview** needs an analysis `run_id` and day; it shows earliest reopen (`max` of blockers’ `last_runner`) and explains missing timings.
+- Cycles are rejected on save. Live race-day clock UI is separate.
+
 ## Locations on legs
 
 Place pins on **Legs** with **Add Locations** (select a leg first). Use **Edit Locations** on the **All leg locations** card for bulk ops (zone, buffer, resources, notes, one-pager). Location types:
