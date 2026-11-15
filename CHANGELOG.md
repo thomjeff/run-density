@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+## [v3.2.0] - 2026-11-15
+
+Minor product release after v3.1.0. Create and Execute are separate local images; Build gains org Settings and shared location icons; Packages assemble courses and runners only; clearance rules and a static reopen playbook land for Health & Safety; Execute Operations is map-first with GPS, accountable attention, and Day Plan–scoped Case agencies.
+
+### Org Settings and Packages assemble-only (#966)
+- Build → **Settings** is the SSOT for org resource types and display timezone (IANA dropdown)
+- Packages no longer edit resource types; create seeds from Settings; Edit configuration can change package events
+- Legs Manage resources writes the org catalog (no `localStorage`)
+- Execute Case reporter/agency options follow the active Day Plan’s `resources_available` (fixed non-staff reporters always remain)
+
+### Shared location-type icons (#929)
+- One glyph/color set for aid / water / extract / official / traffic across Build, Plan, and Execute
+- Execute keeps Reopen status as a separate ring; type icons stay visible when Closed / Reopen next / Reopened
+
+### Clearance rules and static playbook (#832)
+- Package **Clearance** tab authors pair and group (AND) rules, including optional proxy assets
+- `clearance_rules.json` validates subjects and rejects cycles
+- Static playbook preview uses Locations `last_runner` (not peak / stream passage). Live race-day clock (#830) remains parked
+
+### Flow and race-export fixes
+- Flow zone pass scoring uses zone km boundaries when A/B ranges do not overlap (#961)
+- Repeated legs generate same-direction overtake rows (#959)
+- Race export keeps Legs-tab proxy timing instead of stale package proxies (#962 / #963)
+- Build race exports take One Pager and notes from Legs (#953)
+
+### Distances, events, and traffic placement
+- Course distances are separate from events; 5K event added (#955)
+- Location type `course` merges into `traffic` with on/off-course placement (#948)
+
+### Runners
+- Race Roster import, scenario preview/lifecycle, and Run History time fix (#965)
+
+### Execute Operations, GPS, and Day Plans
+- Published Day Plan ZIP + Execute Operations Map (#917)
+- Race-day Plans | Operations | Participants | Cases (#920)
+- Purpose-built Execute image, `plan_id` identity, Postgres store (#922)
+- GPS overlay for Traccar positions and SOS (#925)
+- Drop leftover Execute analysis-board / `run_id` coupling (#924)
+- Map-first Operations with accountable attention (operator name, SOS ack, activity) (#928)
+- Volunteer location sheets in the Day Plan ZIP; public Execute URLs (#936)
+- Cases / Participants operator tweaks (#944)
+- Bug fixes and minor enhancements (#947)
+
+### Create / Execute split and CI
+- Local Make targets `create` and `execute` (#935)
+- Create image is Build + Plan only; race day is `make execute` (#938)
+- Code Quality gate: black/isort/flake8 line length 88; `app/` formatted (#940)
+- Create loc-sheet URLs drop leftover `{day}` (#942)
+- Unit tests stay out of the live Runflow data folder (#951)
+- Release preservation / combined-image verify for v3.1.0 rebuilds (#916)
+
 ### Create loc-sheet URLs drop leftover {day} (#942)
 - Public Create sheet URL is `/locsheets/{run_id}/{loc_id}`. Day is derived from the run, same as Overview
 - Leftover `/locsheets/{run_id}/{day}/{loc_id}` redirects to the two-segment URL. HTML still lives under `{run_id}/{day}/reports/loc_sheets/html/`
