@@ -155,7 +155,7 @@ def _compute_flow_segment_task(
     # Parse overlap duration
     overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
 
-    # Build zones from convergence points
+    # Build zones from convergence points (Issue #961: reverse B for counterflow)
     zones = build_conflict_zones(
         convergence_points,
         from_km_a,
@@ -163,6 +163,7 @@ def _compute_flow_segment_task(
         from_km_b,
         to_km_b,
         dynamic_conflict_length_m,
+        reverse_b=(str(flow_type or "").strip().lower() == "counterflow"),
     )
 
     # Issue #613: Build segment cache once per segment (shared across all zones)
@@ -176,6 +177,7 @@ def _compute_flow_segment_task(
         to_km_a,
         from_km_b,
         to_km_b,
+        flow_type=flow_type,
     )
 
     # Calculate metrics for all zones
@@ -350,6 +352,7 @@ class SegmentFlowCache:
         to_km_a: End of segment for event A
         from_km_b: Start of segment for event B
         to_km_b: End of segment for event B
+        flow_type: Segment flow_type (overtake, counterflow, …); Issue #961
     """
 
     event_a: str
@@ -366,6 +369,7 @@ class SegmentFlowCache:
     to_km_a: float
     from_km_b: float
     to_km_b: float
+    flow_type: str = ""
 
 
 def build_segment_flow_cache(
@@ -378,6 +382,7 @@ def build_segment_flow_cache(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
+    flow_type: str = "",
 ) -> Optional[SegmentFlowCache]:
     """
     Build a SegmentFlowCache from filtered DataFrames.
@@ -395,6 +400,7 @@ def build_segment_flow_cache(
         to_km_a: End of segment for event A
         from_km_b: Start of segment for event B
         to_km_b: End of segment for event B
+        flow_type: Segment flow_type (Issue #961 counterflow meetings)
 
     Returns:
         SegmentFlowCache object, or None if either DataFrame is empty
@@ -445,6 +451,7 @@ def build_segment_flow_cache(
         to_km_a=to_km_a,
         from_km_b=from_km_b,
         to_km_b=to_km_b,
+        flow_type=str(flow_type or "").strip().lower(),
     )
 
 
@@ -972,6 +979,8 @@ def build_conflict_zones(
     from_km_b: float,
     to_km_b: float,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    *,
+    reverse_b: bool = False,
 ) -> List[ConflictZone]:
     """
     Build non-overlapping conflict zones from convergence points.
@@ -987,6 +996,7 @@ def build_conflict_zones(
         from_km_b: Start of segment for event B (km)
         to_km_b: End of segment for event B (km)
         conflict_length_m: Conflict zone length in meters
+        reverse_b: Issue #961 — for counterflow, map A fraction t to B at (1−t)
 
     Returns:
         List of ConflictZone objects (non-overlapping, ordered by zone_start_km_a)
@@ -1067,8 +1077,15 @@ def build_conflict_zones(
         # Convert normalized boundaries to absolute coordinates
         zone_start_km_a = from_km_a + s_start * len_a
         zone_end_km_a = from_km_a + s_end * len_a
-        zone_start_km_b = from_km_b + s_start * len_b
-        zone_end_km_b = from_km_b + s_end * len_b
+        if reverse_b:
+            # Counterflow (#961): physical x on A aligns with (length − x) on B
+            zone_start_km_b = from_km_b + (1.0 - s_end) * len_b
+            zone_end_km_b = from_km_b + (1.0 - s_start) * len_b
+            if zone_start_km_b > zone_end_km_b:
+                zone_start_km_b, zone_end_km_b = zone_end_km_b, zone_start_km_b
+        else:
+            zone_start_km_b = from_km_b + s_start * len_b
+            zone_end_km_b = from_km_b + s_end * len_b
 
         # Clamp to segment boundaries
         zone_start_km_a = max(from_km_a, zone_start_km_a)
@@ -1431,52 +1448,21 @@ def calculate_zone_metrics_vectorized_direct(
     # Find pairs with sufficient temporal overlap
     has_sufficient_overlap = overlap_duration >= min_overlap_duration  # (n, m) boolean
 
-    # For true pass detection, compute boundary times once per zone (not per pair)
-    intersection_start = max(cache.from_km_a, cache.from_km_b)
-    intersection_end = min(cache.to_km_a, cache.to_km_b)
-
-    # Compute boundary arrival times for all runners (vectorized)
-    if intersection_start < intersection_end:
-        # Use intersection boundaries
-        boundary_start = intersection_start
-        boundary_end = intersection_end
-        start_time_a_all = (
-            cache.start_time_a + cache.offset_a + cache.pace_a * boundary_start
-        )  # (n,)
-        end_time_a_all = (
-            cache.start_time_a + cache.offset_a + cache.pace_a * boundary_end
-        )  # (n,)
-        start_time_b_all = (
-            cache.start_time_b + cache.offset_b + cache.pace_b * boundary_start
-        )  # (m,)
-        end_time_b_all = (
-            cache.start_time_b + cache.offset_b + cache.pace_b * boundary_end
-        )  # (m,)
-    else:
-        # Use normalized conflict zone (for finish line convergence like M1)
-        segment_length_a = cache.to_km_a - cache.from_km_a
-        segment_length_b = cache.to_km_b - cache.from_km_b
-        conflict_zone_length = min(segment_length_a, segment_length_b) * 0.2
-        boundary_start_norm = 0.0
-        boundary_end_norm = conflict_zone_length
-
-        abs_start_a = cache.from_km_a + boundary_start_norm
-        abs_end_a = cache.from_km_a + boundary_end_norm
-        abs_start_b = cache.from_km_b + boundary_start_norm
-        abs_end_b = cache.from_km_b + boundary_end_norm
-
-        start_time_a_all = (
-            cache.start_time_a + cache.offset_a + cache.pace_a * abs_start_a
-        )  # (n,)
-        end_time_a_all = (
-            cache.start_time_a + cache.offset_a + cache.pace_a * abs_end_a
-        )  # (n,)
-        start_time_b_all = (
-            cache.start_time_b + cache.offset_b + cache.pace_b * abs_start_b
-        )  # (m,)
-        end_time_b_all = (
-            cache.start_time_b + cache.offset_b + cache.pace_b * abs_end_b
-        )  # (m,)
+    # Issue #961: score passes using THIS zone's event-mapped boundaries.
+    # Do not fall back to absolute km intersection or "first 20% of segment"
+    # (that finish-line heuristic from #63 incorrectly zeroed mid-segment zones).
+    start_time_a_all = (
+        cache.start_time_a + cache.offset_a + cache.pace_a * zone_start_km_a
+    )  # (n,)
+    end_time_a_all = (
+        cache.start_time_a + cache.offset_a + cache.pace_a * zone_end_km_a
+    )  # (n,)
+    start_time_b_all = (
+        cache.start_time_b + cache.offset_b + cache.pace_b * zone_start_km_b
+    )  # (m,)
+    end_time_b_all = (
+        cache.start_time_b + cache.offset_b + cache.pace_b * zone_end_km_b
+    )  # (m,)
 
     # Vectorized pass detection: broadcast boundary times to (n, m) matrix
     start_time_a_2d = start_time_a_all[:, np.newaxis]  # (n, 1)
@@ -1484,28 +1470,34 @@ def calculate_zone_metrics_vectorized_direct(
     start_time_b_2d = start_time_b_all[np.newaxis, :]  # (1, m)
     end_time_b_2d = end_time_b_all[np.newaxis, :]  # (1, m)
 
-    # Vectorized pass detection: A passes B if A starts behind B but finishes ahead
-    a_passes_b = (start_time_a_2d > start_time_b_2d) & (
-        end_time_a_2d < end_time_b_2d
-    )  # (n, m)
-    b_passes_a = (start_time_b_2d > start_time_a_2d) & (
-        end_time_b_2d < end_time_a_2d
-    )  # (n, m)
+    is_counterflow = str(getattr(cache, "flow_type", "") or "").lower() == "counterflow"
+    if is_counterflow:
+        # Issue #961: head-on meetings, not directional overtakes
+        a_passes_b_with_overlap = has_sufficient_overlap
+        b_passes_a_with_overlap = has_sufficient_overlap
+        copresence = np.zeros_like(has_sufficient_overlap, dtype=bool)
+    else:
+        # A passes B if A starts behind B but finishes ahead
+        a_passes_b = (start_time_a_2d > start_time_b_2d) & (
+            end_time_a_2d < end_time_b_2d
+        )  # (n, m)
+        b_passes_a = (start_time_b_2d > start_time_a_2d) & (
+            end_time_b_2d < end_time_a_2d
+        )  # (n, m)
 
-    # Combine temporal overlap and pass detection
-    a_passes_b_with_overlap = a_passes_b & has_sufficient_overlap  # (n, m)
-    b_passes_a_with_overlap = b_passes_a & has_sufficient_overlap  # (n, m)
+        a_passes_b_with_overlap = a_passes_b & has_sufficient_overlap  # (n, m)
+        b_passes_a_with_overlap = b_passes_a & has_sufficient_overlap  # (n, m)
 
-    # Co-presence: temporal overlap without directional change
-    temporal_overlap_matrix = (start_time_a_2d < end_time_b_2d) & (
-        start_time_b_2d < end_time_a_2d
-    )  # (n, m)
-    copresence = (
-        temporal_overlap_matrix
-        & has_sufficient_overlap
-        & ~a_passes_b_with_overlap
-        & ~b_passes_a_with_overlap
-    )  # (n, m)
+        # Co-presence: temporal overlap without directional change
+        temporal_overlap_matrix = (start_time_a_2d < end_time_b_2d) & (
+            start_time_b_2d < end_time_a_2d
+        )  # (n, m)
+        copresence = (
+            temporal_overlap_matrix
+            & has_sufficient_overlap
+            & ~a_passes_b_with_overlap
+            & ~b_passes_a_with_overlap
+        )  # (n, m)
 
     # Reduce to per-runner counts (vectorized)
     a_has_pass = np.any(
@@ -3293,80 +3285,17 @@ def calculate_convergence_zone_overlaps_original(
         overlap_dur = min(exit_a, exit_b) - max(enter_a, enter_b)
 
         if overlap_dur >= min_overlap_duration:
-            # Temporal overlap detected - now check for directional change
-            # Calculate arrival times at boundaries to detect passing
-            # Use intersection boundaries if available, otherwise use conflict zone boundaries
-            intersection_start = max(from_km_a, from_km_b)
-            intersection_end = min(to_km_a, to_km_b)
-
-            if intersection_start < intersection_end:
-                # Use intersection boundaries for fair comparison
-                boundary_start = intersection_start
-                boundary_end = intersection_end
-            else:
-                # No intersection - use NORMALIZED CONFLICT ZONE for finish line convergence
-                # This handles cases like M1 where runners converge at the same physical location
-                # but have different absolute kilometer ranges
-
-                # CORRECT APPROACH:
-                # 1. Normalize each event's segment to 0.0-segment_length first
-                # 2. Calculate conflict zone in normalized space (e.g., 0.0-0.05 km for M1)
-                # 3. Compare runners at the same normalized position within their segments
-
-                # Calculate conflict zone in NORMALIZED space (0.0 to segment_length)
-                # Use a fixed normalized conflict zone that works for both events
-                # For M1: segment_length = 0.25 km, so conflict zone should be 0.0-0.05 km
-                segment_length_a = to_km_a - from_km_a
-                segment_length_b = to_km_b - from_km_b
-
-                # Use a small conflict zone (e.g., 20% of the shorter segment length)
-                conflict_zone_length = min(segment_length_a, segment_length_b) * 0.2
-                conflict_zone_norm_start = 0.0  # Start of conflict zone
-                conflict_zone_norm_end = conflict_zone_length  # End of conflict zone
-
-                # Map normalized conflict zone to absolute coordinates for each event
-                abs_start_a = from_km_a + conflict_zone_norm_start
-                abs_end_a = from_km_a + conflict_zone_norm_end
-                abs_start_b = from_km_b + conflict_zone_norm_start
-                abs_end_b = from_km_b + conflict_zone_norm_end
-
-                # Use the normalized conflict zone boundaries for directional change detection
-                # This ensures we're comparing runners at the same relative position within their segments
-                boundary_start = (
-                    conflict_zone_norm_start  # Normalized start position (0.0)
-                )
-                boundary_end = (
-                    conflict_zone_norm_end  # Normalized end position (0.05 for M1)
-                )
-
+            # Issue #961: use THIS conflict zone's event-mapped boundaries for
+            # pass detection (not absolute intersection / first-20% fallback).
             pace_a = df_a.iloc[i]["pace"] * 60.0
             offset_a = df_a.iloc[i].get("start_offset", 0)
             pace_b = df_b.iloc[j]["pace"] * 60.0
             offset_b = df_b.iloc[j].get("start_offset", 0)
 
-            if intersection_start < intersection_end:
-                # Use absolute coordinates for intersection-based segments
-                start_time_a = start_a + offset_a + pace_a * boundary_start
-                end_time_a = start_a + offset_a + pace_a * boundary_end
-                start_time_b = start_b + offset_b + pace_b * boundary_start
-                end_time_b = start_b + offset_b + pace_b * boundary_end
-            else:
-                # Use NORMALIZED CONFLICT ZONE for finish line convergence
-                # Map normalized conflict zone boundaries to absolute coordinates for each event
-                # boundary_start = 0.0 (start of conflict zone)
-                # boundary_end = conflict_zone_length (end of conflict zone)
-
-                # Map normalized conflict zone boundaries to absolute coordinates
-                abs_start_a = from_km_a + boundary_start  # from_km_a + 0.0
-                abs_end_a = from_km_a + boundary_end  # from_km_a + conflict_zone_length
-                abs_start_b = from_km_b + boundary_start  # from_km_b + 0.0
-                abs_end_b = from_km_b + boundary_end  # from_km_b + conflict_zone_length
-
-                # Calculate arrival times at the conflict zone boundaries
-                start_time_a = start_a + offset_a + pace_a * abs_start_a
-                end_time_a = start_a + offset_a + pace_a * abs_end_a
-                start_time_b = start_b + offset_b + pace_b * abs_start_b
-                end_time_b = start_b + offset_b + pace_b * abs_end_b
+            start_time_a = start_a + offset_a + pace_a * cp_km_a_start
+            end_time_a = start_a + offset_a + pace_a * cp_km_a_end
+            start_time_b = start_b + offset_b + pace_b * cp_km_b_start
+            end_time_b = start_b + offset_b + pace_b * cp_km_b_end
 
             # Check for directional pass (true overtaking)
             # Runner A passes Runner B if A starts behind B but finishes ahead of B
@@ -3389,12 +3318,8 @@ def calculate_convergence_zone_overlaps_original(
                 # Issue #552: Fix overtaking count logic - only count the runner who is actually overtaking
                 if a_passes_b:  # Runner A overtakes runner B
                     a_bibs_overtakes.add(a_bib)  # Only count A as overtaking
-                    # B was overtaken by A, so track B as overtaken
-                    # (Note: B is already in copresence, but we track explicitly for clarity)
                 if b_passes_a:  # Runner B overtakes runner A
                     b_bibs_overtakes.add(b_bib)  # Only count B as overtaking
-                    # A was overtaken by B, so track A as overtaken
-                    # (Note: A is already in copresence, but we track explicitly for clarity)
 
             # Track unique pairs (ordered to avoid duplicates)
             unique_pairs.add((a_bib, b_bib))
