@@ -950,6 +950,20 @@ html.rf-tabler:has(.rf-ex-theme-light) .container-xl.rf-tabler-content {
     box-shadow: none;
 }
 
+.rf-ex-type-legend .rf-ex-type-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rf-ex-type-legend .rf-ex-type-icon .rf-loc-type-marker {
+    width: 1rem !important;
+    height: 1rem !important;
+}
+
 .rf-execute-assign {
     position: fixed;
     inset: 0;

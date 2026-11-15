@@ -1642,7 +1642,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var LOCATION_TYPES = (window.LOCATION_TYPES_FROM_SERVER || []).slice().sort(function (a, b) { return (a.label || a.value).localeCompare(b.label || b.value); });
     var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || window.RUNFLOW_EVENTS || [];
-    var LOCATION_PIN_COLORS = {
+    var LOCATION_PIN_COLORS = (window.LocationTypeIcons && window.LocationTypeIcons.COLORS) || {
         aid: '#e74c3c',
         extract: '#9c27b0',
         official: '#f1c40f',
@@ -3699,7 +3699,36 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function getLocationPinColor(locType) {
+        if (window.LocationTypeIcons) return window.LocationTypeIcons.color(locType);
         return LOCATION_PIN_COLORS[normalizeLocType(locType)] || '#27ae60';
+    }
+
+    function locationTypeDivIcon(loc, size) {
+        size = size || 16;
+        var Icons = window.LocationTypeIcons;
+        if (Icons && Icons.leafletDivIcon) {
+            return Icons.leafletDivIcon(L, loc && loc.loc_type, {
+                size: size,
+                offCourse: offCourseUsesProxyTiming(loc && loc.loc_type, loc && loc.placement),
+                className: 'location-pin-circle',
+            });
+        }
+        var fill = getLocationPinColor(loc && loc.loc_type);
+        return L.divIcon({
+            className: 'location-pin-circle',
+            html:
+                '<div style="width:' +
+                size +
+                'px;height:' +
+                size +
+                'px;background:' +
+                fill +
+                ';border:2px solid ' +
+                fill +
+                ';border-radius:50%;"></div>',
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
     }
 
     function formatLocationResourceSummary(loc) {
@@ -3749,14 +3778,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             if (isNaN(lat) || isNaN(lon)) return;
-            var fill = getLocationPinColor(loc.loc_type);
-            var stroke = fill;
-            var locIcon = L.divIcon({
-                className: 'location-pin-circle',
-                html: '<div style="width:16px;height:16px;background:' + fill + ';border:2px solid ' + stroke + ';border-radius:50%;"></div>',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
+            var locIcon = locationTypeDivIcon(loc, 16);
             var m = L.marker([lat, lon], { icon: locIcon, draggable: isEditMode });
             m._locationIndex = i;
             var tipHtml = buildConfigLocationTooltipHtml(loc, i) +

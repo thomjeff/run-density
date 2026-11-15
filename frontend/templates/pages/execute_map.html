@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_map.css?v=917b">
+<link rel="stylesheet" href="/static/css/execute_map.css?v=929">
 {% endblock %}
 
 {% block content %}
@@ -38,10 +38,15 @@
                 <input type="file" id="rf-ops-map-import-more" accept=".zip,application/zip">
             </label>
         </div>
-        <ul id="rf-ops-map-legend" class="rf-ops-map-legend" aria-label="Reopen status">
-            <li><span class="rf-ops-swatch is-closed"></span> Closed</li>
-            <li><span class="rf-ops-swatch is-next"></span> Reopen next</li>
-            <li><span class="rf-ops-swatch is-done"></span> Reopened</li>
+        <ul id="rf-ops-map-legend" class="rf-ops-map-legend" aria-label="Location type and reopen status">
+            <li class="rf-ops-type-legend" data-loc-type="water"><span class="rf-ops-type-icon" aria-hidden="true"></span> Water</li>
+            <li class="rf-ops-type-legend" data-loc-type="aid"><span class="rf-ops-type-icon" aria-hidden="true"></span> Aid</li>
+            <li class="rf-ops-type-legend" data-loc-type="extract"><span class="rf-ops-type-icon" aria-hidden="true"></span> Extract</li>
+            <li class="rf-ops-type-legend" data-loc-type="official"><span class="rf-ops-type-icon" aria-hidden="true"></span> Official</li>
+            <li class="rf-ops-type-legend" data-loc-type="traffic"><span class="rf-ops-type-icon" aria-hidden="true"></span> Traffic</li>
+            <li><span class="rf-ops-swatch is-closed"></span> Closed (ring)</li>
+            <li><span class="rf-ops-swatch is-next"></span> Reopen next (ring)</li>
+            <li><span class="rf-ops-swatch is-done"></span> Reopened (ring)</li>
         </ul>
         <div id="rf-ops-map" class="rf-ops-map" role="application" aria-label="Operations Map">
             <div id="basemap-toggle" aria-label="Basemap style">
@@ -56,5 +61,6 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
-<script src="/static/js/execute_map.js?v=922"></script>
+<script src="/static/js/map/location_type_icons.js?v=929"></script>
+<script src="/static/js/execute_map.js?v=929"></script>
 {% endblock %}
