@@ -85,20 +85,8 @@ def test_zone_local_boundaries_count_pass_outside_first_20_percent():
         zone, cache, min_overlap_duration=1.0
     )
     # B (fast) should overtake A (slow) inside this mid-segment zone
-    assert (
-        metrics["overtaking_b"] >= 1
-        or metrics.get("overtakes_b", 0) >= 1
-        or (
-            len(metrics.get("sample_b") or []) >= 1
-            or metrics.get("unique_encounters", 0) >= 1
-        )
-    )
-    # Prefer explicit overtaking fields used by the vectorized path
-    assert (
-        metrics.get("overtaking_b", metrics.get("overtakes_b", 0)) >= 1
-        or len(metrics.get("_b_bibs_overtakes") or []) >= 1
-        or len(metrics.get("sample_b") or []) >= 1
-    )
+    assert metrics["overtaking_b"] >= 1
+    assert metrics["unique_encounters"] >= 1
 
 
 def test_build_conflict_zones_reverses_b_for_counterflow():
