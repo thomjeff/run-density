@@ -71,6 +71,19 @@ _COURSE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 DEFAULT_RESOURCE_CODES = ("fpf", "yssr", "awp", "vol")
 
 
+def default_resource_codes() -> tuple:
+    """Org Settings SSOT when present; else schema defaults (Issue #966)."""
+    try:
+        from app.core.config_package.org_settings import org_resource_codes
+
+        codes = tuple(org_resource_codes())
+        if codes:
+            return codes
+    except Exception:
+        pass
+    return DEFAULT_RESOURCE_CODES
+
+
 def get_org_courses_dir() -> Path:
     return get_runflow_root() / "org" / ORG_COURSES_DIRNAME
 
@@ -537,7 +550,7 @@ def save_org_course(
             "flow.csv validation failed: " + "; ".join(flow_validation.errors)
         )
 
-    resource_codes = list(DEFAULT_RESOURCE_CODES)
+    resource_codes = list(default_resource_codes())
     course: Dict[str, Any] = {
         "name": name,
         "saved_course_id": slug,

@@ -203,9 +203,78 @@ def incidents_relpath(day: str) -> str:
     return f"{day}/execution/{INCIDENTS_FILENAME}"
 
 
-def catalog() -> Dict[str, Any]:
+# Non-staff reporters always offered regardless of Day Plan staffing (Issue #966).
+FIXED_REPORTER_KEYS = frozenset({"participant", "spectator", "race_crew", "volunteer"})
+
+
+def _normalize_resources_available(
+    resources_available: Optional[Sequence[Any]],
+) -> Optional[set[str]]:
+    """Return lowercase resource codes with count > 0, or None when unscoped."""
+    if resources_available is None:
+        return None
+    codes: set[str] = set()
+    for item in resources_available:
+        if isinstance(item, Mapping):
+            code = str(item.get("code") or item.get("id") or "").strip().lower()
+            try:
+                count = float(item.get("count", 1) or 0)
+            except (TypeError, ValueError):
+                count = 0.0
+            if code and count > 0:
+                codes.add(code)
+            continue
+        code = str(item or "").strip().lower()
+        if code:
+            codes.add(code)
+    return codes
+
+
+def _filter_pairs(
+    pairs: Sequence[tuple[str, str]],
+    *,
+    available: Optional[set[str]],
+    always: frozenset[str],
+) -> Sequence[tuple[str, str]]:
+    if available is None:
+        return pairs
+    return tuple(
+        (key, label) for key, label in pairs if key in always or key in available
+    )
+
+
+def catalog(
+    *,
+    resources_available: Optional[Sequence[Any]] = None,
+) -> Dict[str, Any]:
+    """Incident dropdown catalog.
+
+    When ``resources_available`` is provided (Day Plan staffing codes with
+    count > 0), reporter/agency lists exclude staff codes not on that plan
+    (e.g. no AWP on Saturday). Fixed non-staff reporters always remain.
+    Care-partner agencies that are not org resource codes stay available.
+    """
+
     def _pairs(items: Sequence[tuple[str, str]]) -> List[Dict[str, str]]:
         return [{"id": key, "label": label} for key, label in items]
+
+    available = _normalize_resources_available(resources_available)
+    # Resource-backed staffing codes (FPF/YSSR/AWP/VOL …) filter by the plan.
+    # Medical partners (SJA, SKI, ANB, FFD, …) that are not resource codes stay.
+    try:
+        from app.core.config_package.org_settings import org_resource_codes
+
+        resource_codes = frozenset(org_resource_codes())
+    except Exception:
+        resource_codes = frozenset({"fpf", "yssr", "awp", "vol"})
+
+    always_agencies = frozenset(
+        key for key, _label in AGENCIES if key not in resource_codes
+    )
+    agencies = _filter_pairs(AGENCIES, available=available, always=always_agencies)
+    reporters = _filter_pairs(
+        REPORTER_AGENCIES, available=available, always=FIXED_REPORTER_KEYS
+    )
 
     return {
         "fm_event": _pairs(FM_EVENTS),
@@ -215,9 +284,9 @@ def catalog() -> Dict[str, Any]:
         "shared_care_types": list(SHARED_CARE),
         "exclusive_incident_types": [NOT_YET_KNOWN],
         "exclusive_care_types": sorted(EXCLUSIVE_CARE),
-        "agencies": _pairs(AGENCIES),
-        "reporter_agencies": _pairs(REPORTER_AGENCIES),
-        "transferred_to": _pairs(AGENCIES),
+        "agencies": _pairs(agencies),
+        "reporter_agencies": _pairs(reporters),
+        "transferred_to": _pairs(agencies),
         "outcomes": _pairs(OUTCOMES),
         "catalog_review": (
             "Reported-problem and care catalogs have not been reviewed "

@@ -583,6 +583,12 @@ def create_config_package(
     if package_path.exists():
         raise FileExistsError(f"Config package path already exists: {config_id}")
 
+    if resources is None:
+        from app.core.config_package.org_settings import org_resource_registry
+
+        resource_registry = org_resource_registry()
+    else:
+        resource_registry = normalize_resource_registry(resources)
     now = datetime.now(timezone.utc).isoformat()
     manifest = {
         "config_id": config_id,
@@ -593,7 +599,7 @@ def create_config_package(
         "created": now,
         "updated": now,
         "legacy": False,
-        "resources": normalize_resource_registry(resources),
+        "resources": resource_registry,
     }
     package_path.mkdir(parents=True, exist_ok=False)
     save_config_manifest(package_path, manifest)

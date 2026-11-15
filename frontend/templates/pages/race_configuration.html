@@ -81,6 +81,36 @@
                     </div>
                 </div>
 
+                <div id="race-config-hub-settings" class="race-config-hub-panel" style="display: none;">
+                    <div class="card-header">
+                        <h3 class="card-title visually-hidden">Settings</h3>
+                    </div>
+                    <p class="card-help" style="margin: 0 0 0.75rem 0;">
+                        Org catalog for Build and Plan. Resource <em>types</em> are defined here;
+                        location <em>counts</em> stay on Legs. Packages assemble courses and runners only.
+                    </p>
+                    <div class="content-card" style="margin-bottom: 1rem;">
+                        <h4 class="card-title" style="margin: 0 0 0.5rem 0;">Resource types</h4>
+                        <p class="card-help" style="margin: 0 0 0.75rem 0;">Schedulable at locations on legs (e.g. FPF, YSSR, AWP, VOL).</p>
+                        <div id="org-settings-resources-list" class="race-config-modal-resources-list"></div>
+                        <div class="race-config-modal-resources-add" style="margin-top: 0.75rem;">
+                            <input type="text" id="org-settings-resource-code" placeholder="code" maxlength="16" aria-label="Resource code" />
+                            <input type="text" id="org-settings-resource-label" placeholder="Label" maxlength="64" aria-label="Resource label" />
+                            <button type="button" id="org-settings-resource-add" class="course-btn">Add</button>
+                        </div>
+                        <div style="margin-top: 1rem; display: flex; gap: 0.75rem; align-items: center;">
+                            <button type="button" id="org-settings-save" class="course-btn primary">Save resources</button>
+                            <span id="org-settings-status" class="card-help" style="margin: 0;"></span>
+                        </div>
+                    </div>
+                    <div class="content-card">
+                        <h4 class="card-title" style="margin: 0 0 0.5rem 0;">Display timezone</h4>
+                        <label for="org-settings-timezone" class="visually-hidden">Display timezone</label>
+                        <input type="text" id="org-settings-timezone" class="config-package-input" maxlength="64" style="max-width: 20rem;" />
+                        <p class="card-help" style="margin: 0.5rem 0 0 0;">IANA zone used for Build/Plan timestamps (e.g. America/Halifax).</p>
+                    </div>
+                </div>
+
                 <div id="race-config-hub-runners" class="race-config-hub-panel" style="display: none;">
                     <div class="card-header">
                         <h3 class="card-title visually-hidden">Runners</h3>
@@ -280,16 +310,7 @@
             <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
             <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
             <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
-            <div class="race-config-modal-resources">
-                <span class="race-config-modal-resources-label">Resources</span>
-                <p class="race-config-modal-resources-help">Schedulable at locations on legs (e.g. FPF, YSSR, Officials).</p>
-                <div id="race-config-edit-resources-list" class="race-config-modal-resources-list"></div>
-                <div class="race-config-modal-resources-add">
-                    <input type="text" id="race-config-edit-resource-code" placeholder="code" maxlength="16" aria-label="Resource code" />
-                    <input type="text" id="race-config-edit-resource-label" placeholder="Label" maxlength="64" aria-label="Resource label" />
-                    <button type="button" id="race-config-edit-resource-add" class="course-btn">Add resource</button>
-                </div>
-            </div>
+            <p class="card-help" style="margin: 0 0 1rem 0;">Resource types come from Build → Settings. Packages assemble courses and runners only.</p>
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
                 <button type="button" id="race-config-edit-cancel" class="course-btn">Cancel</button>
                 <button type="button" id="race-config-edit-save" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Save</button>
@@ -320,16 +341,7 @@
             </p>
             <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
             <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
-            <div class="race-config-modal-resources">
-                <span class="race-config-modal-resources-label">Resources</span>
-                <p class="race-config-modal-resources-help">Schedulable at locations on legs (e.g. FPF, YSSR, Officials).</p>
-                <div id="race-config-new-resources-list" class="race-config-modal-resources-list"></div>
-                <div class="race-config-modal-resources-add">
-                    <input type="text" id="race-config-new-resource-code" placeholder="code" maxlength="16" aria-label="Resource code" />
-                    <input type="text" id="race-config-new-resource-label" placeholder="Label" maxlength="64" aria-label="Resource label" />
-                    <button type="button" id="race-config-new-resource-add" class="course-btn">Add resource</button>
-                </div>
-            </div>
+            <p class="card-help" style="margin: 0 0 1rem 0;">Resource types seed from Build → Settings. Edit types there; this package only assigns courses and runners.</p>
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
                 <button type="button" id="race-config-new-cancel" class="course-btn">Cancel</button>
                 <button type="button" id="race-config-create-btn" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Create &amp; open</button>
@@ -428,5 +440,5 @@
 <script src="/static/js/runner_datasets.js?v=957-958"></script>
 <script src="/static/js/map/junctions_authoring.js?v=955"></script>
 <script src="/static/js/plan_run_analysis.js?v=906"></script>
-<script src="/static/js/race_configuration.js?v=957-958"></script>
+<script src="/static/js/race_configuration.js?v=966"></script>
 {% endblock %}

@@ -292,12 +292,16 @@ async def get_execute_incidents(
         key=lambda item: _when(item, "closed_at", "updated_at", "opened_at"),
         reverse=True,
     )
+    locations_doc = (
+        _loaded.get("locations") if isinstance(_loaded, dict) else None
+    ) or {}
+    resources_available = locations_doc.get("resources_available") or []
     return JSONResponse(
         content={
             "ok": True,
             "plan_id": rid,
             "day": selected_day,
-            "catalog": hs_incidents.catalog(),
+            "catalog": hs_incidents.catalog(resources_available=resources_available),
             "counts": {"active": len(active), "closed": len(closed)},
             "active": active,
             "closed": closed,
@@ -374,10 +378,14 @@ async def get_execute_incident(
             status_code=404,
             detail=f"Unknown incident_id {incident_id}.",
         ) from exc
+    locations_doc = (
+        _loaded.get("locations") if isinstance(_loaded, dict) else None
+    ) or {}
+    resources_available = locations_doc.get("resources_available") or []
     return JSONResponse(
         content={
             "ok": True,
-            "catalog": hs_incidents.catalog(),
+            "catalog": hs_incidents.catalog(resources_available=resources_available),
             "incident": _incident_view(incident, roster),
         }
     )

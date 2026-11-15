@@ -92,9 +92,9 @@ Use the **Package** dropdown to temporarily show only org legs used by a selecte
 
 The legs table shows each leg's ID, label, endpoints, length, width, schema, direction, flow type, **Pair** (corridor pairing partner), and location count. Use the **edit** action to open the leg editor.
 
-### Package resources
+### Org resource types (Settings)
 
-Each config package defines which **resource types** can be scheduled at locations (default: FPF, YSSR, AWP, VOL). Add custom types such as **Officials (`ofc`)** when creating or editing a configuration, or via **Manage resources** on the package Locations card after you open a package.
+**Resource types** (default: FPF, YSSR, AWP, VOL) are org-wide under **Build → Settings**. Location **counts** are set on Legs. Packages assemble courses and runners only — they do not add or edit resource types. New packages seed their export column shape from Settings. Use **Manage resources** on the Legs hub to edit the same org catalog.
 
 ### Leg editor fields
 
