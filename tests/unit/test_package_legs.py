@@ -588,6 +588,122 @@ def test_merge_clears_stale_proxy_on_on_course_locations(tmp_path, monkeypatch):
     assert not validate_locations_for_export(merged)
 
 
+def test_race_export_prefers_leg_proxy_key_over_stale_package_row(
+    tmp_path, monkeypatch
+):
+    """Issue #962: race export must not restore package proxies over Legs tab."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Race export proxy", "", event_day="sat", package_events=["5k"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "49",
+                        "seg_label": "Queen: Officers' Sq to York",
+                        "file": "49.gpx",
+                        "locations": [
+                            {
+                                "loc_label": "Carelton at Queen",
+                                "loc_type": "traffic",
+                                "lat": 45.962,
+                                "lon": -66.64,
+                                "placement": "along",
+                                "location_key": "5FDEJ",
+                            },
+                            {
+                                "loc_label": "Carleton at King",
+                                "loc_type": "traffic",
+                                "lat": 45.961,
+                                "lon": -66.641,
+                                "placement": "off",
+                                "location_key": "FSJRC",
+                                # Retargeted after split; package still has 47:2.
+                                "proxy_leg_loc_key": "49:0",
+                            },
+                        ],
+                    }
+                ],
+                "recipes": {"5k": ["49"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "leg_id": "49",
+            "events": ["5k"],
+            "from_km": 0,
+            "to_km": 0.36,
+        }
+    ]
+    # Prior package row matched by pass_key; stale proxy from pre-split leg 47.
+    course["locations"] = [
+        {
+            "id": 12,
+            "loc_id": 12,
+            "loc_label": "Carelton at Queen",
+            "loc_type": "traffic",
+            "lat": 45.962,
+            "lon": -66.64,
+            "leg_id": "47",
+            "leg_loc_key": "47:2",
+            "pass_key": "5FDEJ",
+            "location_key": "5FDEJ",
+            "source": "leg",
+            "seg_id": "S1",
+            "5k": "y",
+        },
+        {
+            "id": 4,
+            "loc_id": 14,
+            "loc_label": "Carleton at King",
+            "loc_type": "traffic",
+            "lat": 45.961,
+            "lon": -66.641,
+            "leg_id": "47",
+            "leg_loc_key": "47:3",
+            "pass_key": "FSJRC",
+            "location_key": "FSJRC",
+            "source": "leg",
+            "seg_id": "",
+            "proxy_leg_loc_key": "47:2",
+            "proxy_pass_id": 12,
+            "proxy_loc_id": 12,
+            "5k": "y",
+        },
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(
+        config_id,
+        preserve_from_course=_RACE_EXPORT_PRESERVE_FIELDS,
+    )
+    merged = load_config_course(config_id)
+    by_label = {loc["loc_label"]: loc for loc in merged["locations"]}
+    queen = by_label["Carelton at Queen"]
+    king = by_label["Carleton at King"]
+    assert king.get("proxy_leg_loc_key") == "49:0"
+    assert int(king.get("proxy_pass_id")) == queen["id"]
+    assert int(king.get("proxy_loc_id")) == queen["id"]
+    assert not validate_locations_for_export(merged)
+
+
 def test_race_export_takes_onepage_and_notes_from_legs(tmp_path, monkeypatch):
     """Issue #953: Legs ops win on race export; package fills only blanks."""
     monkeypatch.setattr(

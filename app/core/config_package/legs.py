@@ -92,7 +92,8 @@ _LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS + (_LEG_OWNED_ZONE_FIELD,)
 
 # Assigned-course race builds use saved course leg snapshots as source of truth
 # for labels/types/placement/zone/buffer/resources. Remaining operational
-# fields may stay on the package row.
+# fields may stay on the package row. Proxy timing is Legs-tab authored
+# (Issue #962) — never preserve package course.json proxies over the leg.
 _RACE_EXPORT_PRESERVE_FIELDS = (
     "notes",
     "interval",
@@ -1210,9 +1211,8 @@ def merge_leg_locations_into_course(  # noqa: C901
     )
 
     cid = validate_config_id(config_id)
-    # Default package merge: legs own off-course proxy timing. Race export passes
-    # an explicit preserve list so package-course operational fields can win.
-    leg_owns_proxy_fields = preserve_from_course is None
+    # Race export passes an explicit preserve list so package-course operational
+    # fields (notes/contact/…) can fill blanks; Legs-tab proxies always win.
     leg_first_fields = (
         _RACE_EXPORT_LEG_FIRST_FIELDS if preserve_from_course is not None else ()
     )
@@ -1353,12 +1353,11 @@ def merge_leg_locations_into_course(  # noqa: C901
                         continue
                     if field == _LEG_OWNED_ZONE_FIELD:
                         continue
-                    # On-course: never keep proxies. Default package merge: leg
-                    # owns off-course proxy timing (do not restore stale course
-                    # keys like 12:13 after Legs tab updates to 39:5).
-                    if field in _LEG_OWNED_PROXY_FIELDS and (
-                        on_course or leg_owns_proxy_fields
-                    ):
+                    # Proxies are Legs-tab authored (Issue #962). Never restore
+                    # stale package course.json keys (e.g. 47:2 after split to
+                    # 49:0), including on race export where pass_key still
+                    # matches the prior package row.
+                    if field in _LEG_OWNED_PROXY_FIELDS:
                         continue
                     if field not in prev:
                         continue
