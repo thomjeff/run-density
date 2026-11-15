@@ -33,7 +33,14 @@
 
     function getHubView() {
         const raw = getQuery().get('view');
-        if (raw === 'legs' || raw === 'courses' || raw === 'packages' || raw === 'runners') return raw;
+        if (
+            raw === 'legs' ||
+            raw === 'courses' ||
+            raw === 'packages' ||
+            raw === 'runners' ||
+            raw === 'settings'
+        )
+            return raw;
         return 'legs';
     }
 
@@ -67,23 +74,10 @@
         return found ? found.label : id.toUpperCase();
     }
 
-    const DEFAULT_PACKAGE_RESOURCES = [
-        { code: 'fpf', label: 'FPF' },
-        { code: 'yssr', label: 'YSSR' },
-        { code: 'awp', label: 'AWP' },
-        { code: 'vol', label: 'VOL' },
-    ];
     const RESOURCE_CODE_MAX_LEN = 16;
-    let newPackageResourcesDraft = [];
-    let editPackageResourcesDraft = [];
+    let orgSettingsResourcesDraft = [];
     let newPackageDatasets = [];
     let newPackageDatasetsLoaded = false;
-
-    function cloneDefaultResources() {
-        return DEFAULT_PACKAGE_RESOURCES.map(function (r) {
-            return { code: r.code, label: r.label };
-        });
-    }
 
     function normalizeResourceCodeInput(value) {
         let s = String(value || '')
@@ -102,10 +96,11 @@
         });
     }
 
-    function renderModalResourcesList(listEl, draft) {
+    function renderOrgSettingsResourcesList() {
+        const listEl = document.getElementById('org-settings-resources-list');
         if (!listEl) return;
         listEl.innerHTML = '';
-        draft.forEach(function (res, i) {
+        orgSettingsResourcesDraft.forEach(function (res, i) {
             const chip = document.createElement('span');
             chip.className = 'race-config-modal-resource-chip';
             chip.appendChild(
@@ -118,19 +113,21 @@
             rm.setAttribute('aria-label', 'Remove ' + res.code);
             rm.textContent = '×';
             rm.addEventListener('click', function () {
-                if (draft.length <= 1) {
+                if (orgSettingsResourcesDraft.length <= 1) {
                     alert('At least one resource is required.');
                     return;
                 }
-                draft.splice(i, 1);
-                renderModalResourcesList(listEl, draft);
+                orgSettingsResourcesDraft.splice(i, 1);
+                renderOrgSettingsResourcesList();
             });
             chip.appendChild(rm);
             listEl.appendChild(chip);
         });
     }
 
-    function tryAddModalResource(codeInput, labelInput, draft, listEl) {
+    function tryAddOrgSettingsResource() {
+        const codeInput = document.getElementById('org-settings-resource-code');
+        const labelInput = document.getElementById('org-settings-resource-label');
         const code = normalizeResourceCodeInput(codeInput && codeInput.value);
         const label =
             (labelInput && labelInput.value.trim()) || (code ? code.toUpperCase() : '');
@@ -142,44 +139,132 @@
             );
             return;
         }
-        if (draft.some(function (r) {
-            return r.code === code;
-        })) {
+        if (
+            orgSettingsResourcesDraft.some(function (r) {
+                return r.code === code;
+            })
+        ) {
             alert('Resource code already exists.');
             return;
         }
-        draft.push({ code: code, label: label });
+        orgSettingsResourcesDraft.push({ code: code, label: label });
         if (codeInput) codeInput.value = '';
         if (labelInput) labelInput.value = '';
-        renderModalResourcesList(listEl, draft);
+        renderOrgSettingsResourcesList();
     }
 
-    async function savePackageResourcesPut(configId, resources) {
-        const resp = await fetch(
-            '/api/config/packages/' + encodeURIComponent(configId) + '/resources',
-            {
-                method: 'PUT',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ resources: resources }),
-            }
-        );
-        const data = await resp.json().catch(function () {
-            return {};
-        });
-        if (!resp.ok) {
-            throw new Error((data && data.detail) || 'Failed to save resources');
-        }
-        return (data && data.resources) || resources;
-    }
-
-    function applyPackageResourcesToWorkspace(resources) {
+    function applyOrgResourcesToWorkspace(resources) {
         window.CONFIG_PACKAGE_RESOURCES = resources || [];
         document.dispatchEvent(
             new CustomEvent('package-resources-updated', {
                 detail: { resources: window.CONFIG_PACKAGE_RESOURCES },
             })
         );
+    }
+
+    function fillTimezoneSelect(selectEl, choices, selected) {
+        if (!selectEl) return;
+        const list = Array.isArray(choices) && choices.length ? choices.slice() : [];
+        const current = String(selected || '').trim();
+        if (current && list.indexOf(current) < 0) list.unshift(current);
+        if (!list.length) list.push('America/Halifax');
+        selectEl.innerHTML = '';
+        list.forEach(function (tz) {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            opt.textContent = tz;
+            if (tz === current) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+        if (!selectEl.value && list.length) selectEl.value = list[0];
+    }
+
+    async function loadOrgSettingsPanel() {
+        const status = document.getElementById('org-settings-status');
+        const tzSelect = document.getElementById('org-settings-timezone');
+        if (status) status.textContent = 'Loading…';
+        try {
+            const resp = await fetch('/api/org/settings', { credentials: 'same-origin' });
+            const data = await resp.json().catch(function () {
+                return {};
+            });
+            if (!resp.ok) {
+                throw new Error((data && data.detail) || 'Failed to load settings');
+            }
+            const settings = data.settings || {};
+            orgSettingsResourcesDraft = (settings.resources || []).map(function (r) {
+                return {
+                    code: String(r.code || '').toLowerCase(),
+                    label: r.label || String(r.code || '').toUpperCase(),
+                };
+            });
+            if (!orgSettingsResourcesDraft.length) {
+                orgSettingsResourcesDraft = [
+                    { code: 'fpf', label: 'FPF' },
+                    { code: 'yssr', label: 'YSSR' },
+                    { code: 'awp', label: 'AWP' },
+                    { code: 'vol', label: 'VOL' },
+                ];
+            }
+            renderOrgSettingsResourcesList();
+            fillTimezoneSelect(
+                tzSelect,
+                data.timezone_choices,
+                settings.display_timezone || 'America/Halifax'
+            );
+            applyOrgResourcesToWorkspace(orgSettingsResourcesDraft);
+            if (status) status.textContent = '';
+        } catch (err) {
+            if (status) status.textContent = err.message || String(err);
+        }
+    }
+
+    async function saveOrgSettingsPanel() {
+        const status = document.getElementById('org-settings-status');
+        const tzSelect = document.getElementById('org-settings-timezone');
+        const saveBtn = document.getElementById('org-settings-save');
+        if (saveBtn) saveBtn.disabled = true;
+        if (status) status.textContent = 'Saving…';
+        try {
+            const resp = await fetch('/api/org/settings', {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    resources: orgSettingsResourcesDraft.map(function (r) {
+                        return { code: r.code, label: r.label || r.code.toUpperCase() };
+                    }),
+                    display_timezone: tzSelect ? tzSelect.value : undefined,
+                }),
+            });
+            const data = await resp.json().catch(function () {
+                return {};
+            });
+            if (!resp.ok) {
+                throw new Error((data && data.detail) || 'Failed to save settings');
+            }
+            const settings = data.settings || {};
+            orgSettingsResourcesDraft = (settings.resources || orgSettingsResourcesDraft).map(
+                function (r) {
+                    return {
+                        code: String(r.code || '').toLowerCase(),
+                        label: r.label || String(r.code || '').toUpperCase(),
+                    };
+                }
+            );
+            renderOrgSettingsResourcesList();
+            fillTimezoneSelect(
+                tzSelect,
+                data.timezone_choices,
+                settings.display_timezone || (tzSelect && tzSelect.value)
+            );
+            applyOrgResourcesToWorkspace(orgSettingsResourcesDraft);
+            if (status) status.textContent = 'Saved.';
+        } catch (err) {
+            if (status) status.textContent = err.message || String(err);
+        } finally {
+            if (saveBtn) saveBtn.disabled = false;
+        }
     }
 
     function placeLegsPanelInHub() {
@@ -232,6 +317,10 @@
                 title: 'Runners',
                 lead: 'Immutable runner datasets used in planning. Import Race Roster results or CSV actuals, or create a scenario as a new dataset; packages select which dataset to use.',
             },
+            settings: {
+                title: 'Settings',
+                lead: 'Org catalog for Build and Plan: resource types, timezone, and shared vocabulary. Packages assemble courses and runners only.',
+            },
         };
         const cfg = copy[view] || copy.legs;
         titleEl.textContent = cfg.title;
@@ -244,6 +333,7 @@
         const legsPanel = document.getElementById('race-config-hub-legs');
         const coursesPanel = document.getElementById('race-config-hub-courses');
         const runnersPanel = document.getElementById('race-config-hub-runners');
+        const settingsPanel = document.getElementById('race-config-hub-settings');
         // Legacy in-page hub tabs (removed from markup; keep for safety if restored)
         document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
             const isActive = btn.getAttribute('data-hub-view') === view;
@@ -254,6 +344,7 @@
         if (legsPanel) legsPanel.style.display = view === 'legs' ? 'block' : 'none';
         if (coursesPanel) coursesPanel.style.display = view === 'courses' ? 'block' : 'none';
         if (runnersPanel) runnersPanel.style.display = view === 'runners' ? 'block' : 'none';
+        if (settingsPanel) settingsPanel.style.display = view === 'settings' ? 'block' : 'none';
         syncHubPageHeader(view);
 
         if (view === 'legs') {
@@ -281,6 +372,9 @@
             if (window.runnerDatasets && window.runnerDatasets.loadHub) {
                 window.runnerDatasets.loadHub();
             }
+        }
+        if (view === 'settings') {
+            loadOrgSettingsPanel();
         }
     }
 
@@ -561,6 +655,13 @@
             const data = await resp.json();
             const manifest = data.manifest || {};
             if (!data.manifest_editable) {
+                renderEditPackageEventChoices([]);
+                const editEvents = document.getElementById('race-config-edit-events');
+                if (editEvents) {
+                    editEvents.querySelectorAll('input').forEach(function (cb) {
+                        cb.disabled = true;
+                    });
+                }
                 if (eventsNote) {
                     eventsNote.textContent =
                         'Legacy package — metadata cannot be edited here.';
@@ -571,25 +672,12 @@
                 if (descInput) descInput.value = manifest.description || '';
                 if (dayInput) dayInput.value = manifest.event_day || '';
                 const events = manifest.package_events || [];
+                renderEditPackageEventChoices(events);
                 if (eventsNote) {
-                    eventsNote.textContent = events.length
-                        ? 'Events (set at create): ' +
-                          events.map(formatEventLabel).join(', ')
-                        : 'Events were not recorded for this package.';
+                    eventsNote.textContent =
+                        'Select at least one event (Full, Half, 10K, …).';
                 }
                 if (saveBtn) saveBtn.disabled = false;
-                editPackageResourcesDraft = (manifest.resources || cloneDefaultResources()).map(
-                    function (r) {
-                        return {
-                            code: String(r.code || '').toLowerCase(),
-                            label: r.label || String(r.code || '').toUpperCase(),
-                        };
-                    }
-                );
-                renderModalResourcesList(
-                    document.getElementById('race-config-edit-resources-list'),
-                    editPackageResourcesDraft
-                );
             }
             labelInput.focus();
         } catch (err) {
@@ -646,8 +734,13 @@
         const label = labelInput && labelInput.value.trim();
         const description = descInput && descInput.value.trim();
         const eventDay = dayInput && dayInput.value.trim();
+        const packageEvents = selectedEditPackageEvents();
         if (!label) {
             alert('Enter a name.');
+            return;
+        }
+        if (!packageEvents.length) {
+            alert('Select at least one event.');
             return;
         }
         if (saveBtn) saveBtn.disabled = true;
@@ -662,22 +755,16 @@
                         label: label,
                         description: description || '',
                         event_day: eventDay,
+                        package_events: packageEvents,
                     }),
                 }
             );
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.detail || 'Failed to save');
-            const savedResources = await savePackageResourcesPut(
-                editingPackageId,
-                editPackageResourcesDraft.map(function (r) {
-                    return { code: r.code, label: r.label || r.code.toUpperCase() };
-                })
-            );
             closeEditPackageModal();
             if (currentConfigId === editingPackageId) {
-                applyPackageResourcesToWorkspace(savedResources);
                 const m = data.manifest || {};
-                const events = m.package_events || [];
+                const events = m.package_events || packageEvents;
                 window.CONFIG_PACKAGE_EVENTS = events;
                 if (window.syncConfigPackageDetailsCard) {
                     window.syncConfigPackageDetailsCard(
@@ -728,14 +815,55 @@
         }
     }
 
-    function selectedNewPackageEvents() {
+    function selectedPackageEvents(hostSelector) {
         const packageEvents = [];
         document
-            .querySelectorAll('#race-config-new-events input[type="checkbox"]:checked')
+            .querySelectorAll(hostSelector + ' input[type="checkbox"]:checked')
             .forEach(function (cb) {
                 packageEvents.push(String(cb.value || '').toLowerCase());
             });
         return packageEvents;
+    }
+
+    function selectedNewPackageEvents() {
+        return selectedPackageEvents('#race-config-new-events');
+    }
+
+    function selectedEditPackageEvents() {
+        return selectedPackageEvents('#race-config-edit-events');
+    }
+
+    function renderPackageEventChoices(hostId, selectedEvents) {
+        const host = document.getElementById(hostId);
+        if (!host) return;
+        const selected = {};
+        (selectedEvents || []).forEach(function (eventId) {
+            selected[String(eventId || '').toLowerCase()] = true;
+        });
+        host.innerHTML = '';
+        eventChoiceList()
+            .filter(function (choice) {
+                return !choice.legacy;
+            })
+            .forEach(function (choice) {
+                const id = hostId + '-' + choice.value;
+                const label = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.id = id;
+                cb.value = choice.value;
+                cb.name = 'package_events';
+                if (selected[String(choice.value).toLowerCase()]) cb.checked = true;
+                if (hostId === 'race-config-new-events') {
+                    cb.addEventListener('change', renderNewPackageDatasetChoices);
+                }
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(choice.label));
+                host.appendChild(label);
+            });
+        if (hostId === 'race-config-new-events') {
+            renderNewPackageDatasetChoices();
+        }
     }
 
     function datasetCoversEvents(dataset, requiredEvents) {
@@ -812,25 +940,11 @@
     }
 
     function renderNewPackageEventChoices() {
-        const host = document.getElementById('race-config-new-events');
-        if (!host) return;
-        host.innerHTML = '';
-        eventChoiceList().filter(function (choice) {
-            return !choice.legacy;
-        }).forEach(function (choice) {
-            const id = 'race-config-ev-' + choice.value;
-            const label = document.createElement('label');
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.id = id;
-            cb.value = choice.value;
-            cb.name = 'package_events';
-            cb.addEventListener('change', renderNewPackageDatasetChoices);
-            label.appendChild(cb);
-            label.appendChild(document.createTextNode(choice.label));
-            host.appendChild(label);
-        });
-        renderNewPackageDatasetChoices();
+        renderPackageEventChoices('race-config-new-events', []);
+    }
+
+    function renderEditPackageEventChoices(selectedEvents) {
+        renderPackageEventChoices('race-config-edit-events', selectedEvents || []);
     }
 
     function openNewModal() {
@@ -844,11 +958,6 @@
         renderNewPackageEventChoices();
         renderNewPackageDatasetChoices();
         loadNewPackageDatasets();
-        newPackageResourcesDraft = cloneDefaultResources();
-        renderModalResourcesList(
-            document.getElementById('race-config-new-resources-list'),
-            newPackageResourcesDraft
-        );
         if (modal) modal.classList.add('open');
         if (labelInput) labelInput.focus();
     }
@@ -893,9 +1002,6 @@
                     event_day: eventDay,
                     package_events: packageEvents,
                     runners_dataset_id: runnersDatasetId || null,
-                    resources: newPackageResourcesDraft.map(function (r) {
-                        return { code: r.code, label: r.label || r.code.toUpperCase() };
-                    }),
                 }),
             });
             const data = await resp.json();
@@ -982,30 +1088,11 @@
         const createBtn = document.getElementById('race-config-create-btn');
         if (createBtn) createBtn.addEventListener('click', createPackage);
 
-        attachResourceCodeInput(document.getElementById('race-config-new-resource-code'));
-        attachResourceCodeInput(document.getElementById('race-config-edit-resource-code'));
-        const newResAdd = document.getElementById('race-config-new-resource-add');
-        if (newResAdd) {
-            newResAdd.addEventListener('click', function () {
-                tryAddModalResource(
-                    document.getElementById('race-config-new-resource-code'),
-                    document.getElementById('race-config-new-resource-label'),
-                    newPackageResourcesDraft,
-                    document.getElementById('race-config-new-resources-list')
-                );
-            });
-        }
-        const editResAdd = document.getElementById('race-config-edit-resource-add');
-        if (editResAdd) {
-            editResAdd.addEventListener('click', function () {
-                tryAddModalResource(
-                    document.getElementById('race-config-edit-resource-code'),
-                    document.getElementById('race-config-edit-resource-label'),
-                    editPackageResourcesDraft,
-                    document.getElementById('race-config-edit-resources-list')
-                );
-            });
-        }
+        attachResourceCodeInput(document.getElementById('org-settings-resource-code'));
+        const orgResAdd = document.getElementById('org-settings-resource-add');
+        if (orgResAdd) orgResAdd.addEventListener('click', tryAddOrgSettingsResource);
+        const orgSave = document.getElementById('org-settings-save');
+        if (orgSave) orgSave.addEventListener('click', saveOrgSettingsPanel);
 
         const editCancel = document.getElementById('race-config-edit-cancel');
         if (editCancel) editCancel.addEventListener('click', closeEditPackageModal);

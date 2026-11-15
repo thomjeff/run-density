@@ -1101,14 +1101,21 @@ document.addEventListener('DOMContentLoaded', function () {
             var orgNormalized = resourcesEditorDraft.map(function (r) {
                 return { code: r.code, label: r.label || r.code.toUpperCase() };
             });
+            var done = function () {
+                hideModal(document.getElementById('resources-editor-modal'));
+                resourcesEditorOrgHub = false;
+            };
             if (window.segmentRecipes && window.segmentRecipes.saveOrgLegHubResources) {
-                window.segmentRecipes.saveOrgLegHubResources(orgNormalized);
+                Promise.resolve(window.segmentRecipes.saveOrgLegHubResources(orgNormalized))
+                    .then(done)
+                    .catch(function (err) {
+                        alert(err.message || String(err));
+                    });
             } else {
                 window.CONFIG_PACKAGE_RESOURCES = orgNormalized;
                 notifyPackageResourcesUpdated(orgNormalized);
+                done();
             }
-            hideModal(document.getElementById('resources-editor-modal'));
-            resourcesEditorOrgHub = false;
             return;
         }
         var pkgId = resourcesEditorPackageId || resolveConfigPackageId();

@@ -137,6 +137,10 @@ class UpdateConfigPackageRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field("", max_length=255)
     event_day: str = Field("", max_length=16)
+    package_events: Optional[List[str]] = Field(
+        default=None,
+        description="Event ids for this package (e.g. full, half, 10k); omit to leave unchanged",
+    )
 
 
 class ImportRunnersRequest(BaseModel):
@@ -191,6 +195,11 @@ class JunctionNearbyRequest(BaseModel):
 
 class SavePackageResourcesRequest(BaseModel):
     resources: List[PackageResourceEntry]
+
+
+class OrgSettingsPatchRequest(BaseModel):
+    resources: Optional[List[PackageResourceEntry]] = None
+    display_timezone: Optional[str] = None
 
 
 class SuggestLocationEventsRequest(BaseModel):
@@ -385,7 +394,11 @@ async def api_update_config_package(
     require_auth(request)
     try:
         result = update_config_package_metadata(
-            config_id, body.label, body.description, body.event_day
+            config_id,
+            body.label,
+            body.description,
+            body.event_day,
+            package_events=body.package_events,
         )
         return JSONResponse(content={"ok": True, **result})
     except FileNotFoundError as e:
@@ -1910,13 +1923,52 @@ async def api_export_config_package_segments(
         )
 
 
+@router.get("/api/org/settings")
+async def api_get_org_settings(request: Request) -> JSONResponse:
+    """Org Settings catalog SSOT for Build/Plan (Issue #966)."""
+    require_auth(request)
+    from app.core.config_package.org_settings import org_settings_api_payload
+
+    return JSONResponse(content={"ok": True, **org_settings_api_payload()})
+
+
+@router.patch("/api/org/settings")
+async def api_patch_org_settings(
+    request: Request,
+    body: OrgSettingsPatchRequest,
+) -> JSONResponse:
+    """Update org Settings (resource types, timezone). Packages assemble-only."""
+    require_auth(request)
+    from app.core.config_package.org_settings import (
+        org_settings_api_payload,
+        save_org_settings,
+    )
+
+    try:
+        patch: Dict[str, Any] = {}
+        if body.resources is not None:
+            patch["resources"] = [r.model_dump() for r in body.resources]
+        if body.display_timezone is not None:
+            patch["display_timezone"] = body.display_timezone
+        save_org_settings(patch)
+        return JSONResponse(content={"ok": True, **org_settings_api_payload()})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save org settings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save org settings: {e}",
+        )
+
+
 @router.put("/api/config/packages/{config_id}/resources")
 async def api_save_package_resources(
     request: Request,
     config_id: str,
     body: SavePackageResourcesRequest,
 ) -> JSONResponse:
-    """Update schedulable resource types for this config package (FPF, YSSR, etc.)."""
+    """Deprecated: resource types are org Settings (#966). Kept for legacy packages."""
     require_auth(request)
     try:
         payload = [r.model_dump() for r in body.resources]

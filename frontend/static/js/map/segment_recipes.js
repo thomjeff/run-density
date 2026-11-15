@@ -336,7 +336,6 @@
         { code: 'awp', label: 'AWP' },
         { code: 'vol', label: 'VOL' },
     ];
-    var ORG_LEG_RESOURCES_STORAGE_KEY = 'runflow.org.legResources';
 
     function getDefaultLegResources() {
         return DEFAULT_LEG_RESOURCES.map(function (res) {
@@ -344,43 +343,58 @@
         });
     }
 
-    function loadOrgLegResourcesFromStorage() {
-        try {
-            var raw = localStorage.getItem(ORG_LEG_RESOURCES_STORAGE_KEY);
-            if (!raw) return getDefaultLegResources();
-            var parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed) || !parsed.length) return getDefaultLegResources();
-            return parsed.map(function (r) {
-                return {
-                    code: String(r.code || '').trim(),
-                    label: String(r.label || r.code || '').trim(),
-                };
-            }).filter(function (r) { return r.code; });
-        } catch (e) {
-            return getDefaultLegResources();
-        }
-    }
-
-    function initOrgLegHubResources() {
-        window.CONFIG_PACKAGE_RESOURCES = loadOrgLegResourcesFromStorage();
-        document.dispatchEvent(
-            new CustomEvent('package-resources-updated', {
-                detail: { resources: window.CONFIG_PACKAGE_RESOURCES },
-            })
-        );
-    }
-
-    function saveOrgLegResourcesToStorage(resources) {
+    function applyOrgResources(resources) {
         var normalized = (resources || []).map(function (r) {
-            return { code: r.code, label: r.label || r.code.toUpperCase() };
+            return {
+                code: String(r.code || '').trim().toLowerCase(),
+                label: String(r.label || r.code || '').trim(),
+            };
+        }).filter(function (r) {
+            return r.code;
         });
-        localStorage.setItem(ORG_LEG_RESOURCES_STORAGE_KEY, JSON.stringify(normalized));
+        if (!normalized.length) normalized = getDefaultLegResources();
         window.CONFIG_PACKAGE_RESOURCES = normalized;
         document.dispatchEvent(
             new CustomEvent('package-resources-updated', {
                 detail: { resources: normalized },
             })
         );
+        return normalized;
+    }
+
+    function initOrgLegHubResources() {
+        fetch('/api/org/settings', { credentials: 'same-origin' })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    if (!resp.ok) throw new Error((data && data.detail) || 'settings');
+                    return data;
+                });
+            })
+            .then(function (data) {
+                applyOrgResources((data.settings && data.settings.resources) || []);
+            })
+            .catch(function () {
+                applyOrgResources(getDefaultLegResources());
+            });
+    }
+
+    function saveOrgLegResourcesToOrgSettings(resources) {
+        var normalized = applyOrgResources(resources);
+        return fetch('/api/org/settings', {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resources: normalized }),
+        }).then(function (resp) {
+            return resp.json().then(function (data) {
+                if (!resp.ok) {
+                    throw new Error((data && data.detail) || 'Failed to save org resources');
+                }
+                return applyOrgResources(
+                    (data.settings && data.settings.resources) || normalized
+                );
+            });
+        });
     }
 
     function afterLegLibraryMutation(data) {
@@ -6881,7 +6895,7 @@
         attachCoursePreviewBoundsFilter: attachCoursePreviewBoundsFilter,
         syncCoursePreviewBoundsFilterItems: syncCoursePreviewBoundsFilterItems,
         initOrgLegHubResources: initOrgLegHubResources,
-        saveOrgLegHubResources: saveOrgLegResourcesToStorage,
+        saveOrgLegHubResources: saveOrgLegResourcesToOrgSettings,
         getLegResources: getPackageResources,
         focusLegLocation: focusLegLocation,
         navigateToLegLocation: navigateToLegLocation,
