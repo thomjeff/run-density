@@ -154,6 +154,7 @@ def sample_new_runners(
     new_quantiles: Dict[str, float],
     baseline_start_offsets: np.ndarray,
     multiplier_curve: Callable[[np.ndarray], np.ndarray],
+    rng: Optional[np.random.Generator] = None,
 ) -> pd.DataFrame:
     """
     Sample new runners for a percentile segment.
@@ -164,6 +165,7 @@ def sample_new_runners(
         new_quantiles: Dictionary with new quantile values (p00, p05, p25, p50, p75, p95, p100)
         baseline_start_offsets: Array of baseline start_offset values for sampling
         multiplier_curve: Function for pace interpolation
+        rng: Optional NumPy generator (Issue #958: deterministic preview vs create)
 
     Returns:
         DataFrame with columns: pace, start_offset
@@ -180,9 +182,11 @@ def sample_new_runners(
     }
 
     p_min, p_max = segment_ranges.get(segment_name, (0.0, 1.0))
+    if rng is None:
+        rng = np.random.default_rng()
 
     # Sample percentiles uniformly within segment
-    percentile_samples = np.random.uniform(p_min, p_max, size=n_runners)
+    percentile_samples = rng.uniform(p_min, p_max, size=n_runners)
 
     # Get multipliers for sampled percentiles
     multipliers = multiplier_curve(percentile_samples)
@@ -209,7 +213,7 @@ def sample_new_runners(
 
     # Sample start_offset from baseline distribution
     if len(baseline_start_offsets) > 0:
-        start_offsets = np.random.choice(
+        start_offsets = rng.choice(
             baseline_start_offsets, size=n_runners, replace=True
         )
     else:
@@ -297,12 +301,17 @@ def generate_runner_file(
 
     Issue: #676 - Runner file generation
     """
+    # Deterministic seed so preview and create produce the same paces (Issue #958)
+    seed_payload = (
+        f"{event_name}|{new_participants}|{sorted((k, control_vars.get(k)) for k in sorted(control_vars))}"
+    )
+    seed = int(hashlib.sha256(seed_payload.encode("utf-8")).hexdigest()[:8], 16)
+    rng = np.random.default_rng(seed)
+
     # Downsample if target participants are below baseline (random, unweighted)
     base_participants = len(baseline_df)
     if new_participants < base_participants:
         original_participants = base_participants
-        seed_source = f"{event_name}:{original_participants}:{new_participants}"
-        seed = int(hashlib.sha256(seed_source.encode("utf-8")).hexdigest()[:8], 16)
         baseline_df = baseline_df.sample(
             n=new_participants, random_state=seed
         ).reset_index(drop=True)
@@ -395,6 +404,7 @@ def generate_runner_file(
                 new_quantiles=new_quantiles,
                 baseline_start_offsets=baseline_start_offsets,
                 multiplier_curve=multiplier_curve,
+                rng=rng,
             )
             new_runners_list.append(segment_runners)
 

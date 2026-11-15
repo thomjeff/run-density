@@ -226,11 +226,11 @@
             },
             packages: {
                 title: 'Packages',
-                lead: 'Each package assigns one course per distance (Full / Half / 10K) and a compatible runner dataset for analysis.',
+                lead: 'Each package assigns one course per event (Full, Half, 10K, 5K, …) and a compatible runner dataset for analysis.',
             },
             runners: {
                 title: 'Runners',
-                lead: 'Immutable runner datasets used in planning. Import actuals or create a scenario as a new dataset; packages select which dataset to use.',
+                lead: 'Immutable runner datasets used in planning. Import Race Roster results or CSV actuals, or create a scenario as a new dataset; packages select which dataset to use.',
             },
         };
         const cfg = copy[view] || copy.legs;

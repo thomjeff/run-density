@@ -45,6 +45,15 @@ from app.core.config_package import (
     update_config_package_metadata,
     upload_runner_files_to_package,
 )
+from app.core.config_package.runner_datasets import (
+    create_raceroster_dataset,
+    delete_runner_dataset,
+    packages_using_dataset,
+    preview_raceroster_import,
+    preview_scenario_dataset,
+    set_runner_dataset_archived,
+    update_runner_dataset_metadata,
+)
 from app.core.config_package.legs import (
     create_package_leg,
     delete_package_leg,
@@ -146,6 +155,19 @@ class CreateRunnerScenarioRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field("", max_length=255)
     control_variables: Dict[str, Dict[str, Any]]
+
+
+class PreviewRunnerScenarioRequest(BaseModel):
+    control_variables: Dict[str, Dict[str, Any]]
+
+
+class UpdateRunnerDatasetRequest(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=120)
+    description: Optional[str] = Field(None, max_length=255)
+
+
+class ArchiveRunnerDatasetRequest(BaseModel):
+    archived: bool = True
 
 
 class SaveConfigCourseRequest(BaseModel):
@@ -946,20 +968,127 @@ async def api_list_org_runners(request: Request) -> JSONResponse:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/api/org/runners/{dataset_id}")
-async def api_get_org_runner_dataset(
-    request: Request,
-    dataset_id: str,
-) -> JSONResponse:
-    """Load one runner dataset."""
+@router.get("/api/org/runners/events")
+async def api_list_runner_import_events(request: Request) -> JSONResponse:
+    """Active event catalog for Race Roster sheet mapping (Issue #957)."""
     require_auth(request)
+    from app.core.baseline.raceroster_runners import active_event_choices
+
+    return JSONResponse(content={"ok": True, "events": active_event_choices()})
+
+
+@router.post("/api/org/runners/raceroster/inspect")
+async def api_inspect_raceroster_workbook(
+    request: Request,
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """List workbook sheets and suggested event mappings (Issue #957)."""
+    require_auth(request)
+    from app.core.baseline.raceroster_runners import (
+        active_event_choices,
+        list_workbook_sheets,
+    )
+
     try:
-        dataset = load_runner_dataset(dataset_id)
-        return JSONResponse(content={"ok": True, "dataset": dataset})
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        workbooks = []
+        for upload in files:
+            data = await upload.read()
+            if not data:
+                continue
+            name = upload.filename or "results.xlsx"
+            sheets = list_workbook_sheets(data)
+            workbooks.append({"filename": name, "sheets": sheets})
+        if not workbooks:
+            raise ValueError("Upload at least one Race Roster .xlsx workbook")
+        return JSONResponse(
+            content={
+                "ok": True,
+                "workbooks": workbooks,
+                "events": active_event_choices(),
+            }
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to inspect Race Roster workbook")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to inspect workbook: {e}",
+        )
+
+
+@router.post("/api/org/runners/raceroster/preview")
+async def api_preview_raceroster_import(
+    request: Request,
+    sheet_event_map: str = Form(...),
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Preview Race Roster → runner conversion without writing (Issue #957)."""
+    require_auth(request)
+    import json as _json
+
+    try:
+        try:
+            mapping = _json.loads(sheet_event_map)
+        except _json.JSONDecodeError as exc:
+            raise ValueError(f"sheet_event_map must be JSON: {exc}") from exc
+        if not isinstance(mapping, dict):
+            raise ValueError("sheet_event_map must be a JSON object")
+        workbooks = []
+        for upload in files:
+            data = await upload.read()
+            if not data:
+                continue
+            workbooks.append((upload.filename or "results.xlsx", data))
+        preview = preview_raceroster_import(workbooks, mapping)
+        return JSONResponse(content={"ok": True, **preview})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to preview Race Roster import")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview Race Roster import: {e}",
+        )
+
+
+@router.post("/api/org/runners/raceroster")
+async def api_create_raceroster_dataset(
+    request: Request,
+    label: str = Form(...),
+    description: str = Form(""),
+    sheet_event_map: str = Form(...),
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Create a runner dataset from Race Roster workbooks (Issue #957)."""
+    require_auth(request)
+    import json as _json
+
+    try:
+        try:
+            mapping = _json.loads(sheet_event_map)
+        except _json.JSONDecodeError as exc:
+            raise ValueError(f"sheet_event_map must be JSON: {exc}") from exc
+        if not isinstance(mapping, dict):
+            raise ValueError("sheet_event_map must be a JSON object")
+        workbooks = []
+        for upload in files:
+            data = await upload.read()
+            if not data:
+                continue
+            workbooks.append((upload.filename or "results.xlsx", data))
+        dataset = create_raceroster_dataset(
+            label, workbooks, mapping, description=description
+        )
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to create Race Roster dataset")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create Race Roster dataset: {e}",
+        )
 
 
 @router.post("/api/org/runners")
@@ -969,7 +1098,7 @@ async def api_create_org_runner_dataset(
     description: str = Form(""),
     files: List[UploadFile] = File(...),
 ) -> JSONResponse:
-    """Import actuals as a new immutable runner dataset."""
+    """Import actuals as a new immutable runner dataset (CSV upload)."""
     require_auth(request)
     try:
         uploads = []
@@ -989,6 +1118,102 @@ async def api_create_org_runner_dataset(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create runner dataset: {e}",
+        )
+
+
+@router.get("/api/org/runners/{dataset_id}")
+async def api_get_org_runner_dataset(
+    request: Request,
+    dataset_id: str,
+) -> JSONResponse:
+    """Load one runner dataset."""
+    require_auth(request)
+    try:
+        dataset = load_runner_dataset(dataset_id)
+        dataset["used_by"] = packages_using_dataset(dataset_id)
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/api/org/runners/{dataset_id}")
+async def api_update_org_runner_dataset(
+    request: Request,
+    dataset_id: str,
+    body: UpdateRunnerDatasetRequest,
+) -> JSONResponse:
+    """Update dataset label/description (Issue #958)."""
+    require_auth(request)
+    try:
+        if body.label is None and body.description is None:
+            raise ValueError("Provide label and/or description")
+        dataset = update_runner_dataset_metadata(
+            dataset_id, label=body.label, description=body.description
+        )
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/runners/{dataset_id}/archive")
+async def api_archive_org_runner_dataset(
+    request: Request,
+    dataset_id: str,
+    body: ArchiveRunnerDatasetRequest,
+) -> JSONResponse:
+    """Archive or restore a runner dataset (Issue #958)."""
+    require_auth(request)
+    try:
+        dataset = set_runner_dataset_archived(dataset_id, body.archived)
+        return JSONResponse(content={"ok": True, "dataset": dataset})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/api/org/runners/{dataset_id}")
+async def api_delete_org_runner_dataset(
+    request: Request,
+    dataset_id: str,
+) -> JSONResponse:
+    """Delete a runner dataset when unused (Issue #958)."""
+    require_auth(request)
+    try:
+        result = delete_runner_dataset(dataset_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/runners/{dataset_id}/scenarios/preview")
+async def api_preview_org_runner_scenario(
+    request: Request,
+    dataset_id: str,
+    body: PreviewRunnerScenarioRequest,
+) -> JSONResponse:
+    """Dry-run scenario generation (Issue #958)."""
+    require_auth(request)
+    try:
+        preview = preview_scenario_dataset(
+            dataset_id, control_variables=body.control_variables
+        )
+        return JSONResponse(content={"ok": True, **preview})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to preview runner scenario")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview runner scenario: {e}",
         )
 
 

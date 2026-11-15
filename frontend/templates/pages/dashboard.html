@@ -276,32 +276,21 @@
             const description = (run.description || '').substring(0, 25) + (run.description && run.description.length > 25 ? '...' : '');
             const days = run.event_summary?.days || 0;
             const events = run.event_summary?.events || 0;
-            // Issue #638: Format run time - handle both legacy hh:mm and new mm:ss formats
-            // Legacy runs: "00:08" = hh:mm (0 hours 8 minutes = 8 minutes)
-            // New runs: "08:57" = mm:ss (8 minutes 57 seconds)
-            let runTime = run.total_elapsed_minutes || '—';
-            if (runTime && typeof runTime === 'string' && runTime.includes(':')) {
-                const parts = runTime.split(':');
+            // Issue #964: Prefer total_elapsed_seconds; never treat 00:SS as legacy hh:mm
+            let runTime = '—';
+            if (run.total_elapsed_seconds != null && !Number.isNaN(Number(run.total_elapsed_seconds))) {
+                const total = Math.max(0, Math.round(Number(run.total_elapsed_seconds)));
+                const minutes = Math.floor(total / 60);
+                const seconds = total % 60;
+                runTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            } else if (run.total_elapsed_minutes && typeof run.total_elapsed_minutes === 'string') {
+                const parts = run.total_elapsed_minutes.split(':');
                 if (parts.length === 2) {
-                    const firstPart = parseInt(parts[0], 10) || 0;
-                    const secondPart = parseInt(parts[1], 10) || 0;
-                    
-                    // Detect format: if first part is 00 and second < 60, likely legacy hh:mm format
-                    // Otherwise, assume mm:ss format (new format)
-                    if (firstPart === 0 && secondPart < 60 && parts[0] === '00') {
-                        // Legacy hh:mm format: "00:08" = 0 hours 8 minutes = 8 minutes
-                        // Display as "8:00" (8 minutes 0 seconds in mm:ss format)
-                        runTime = `${secondPart}:00`;
-                    } else {
-                        // New mm:ss format: "08:57" = 8 minutes 57 seconds
-                        // Remove leading zero from minutes if < 10 for readability
-                        if (firstPart < 10 && parts[0].startsWith('0')) {
-                            runTime = `${firstPart}:${secondPart.toString().padStart(2, '0')}`;
-                        } else {
-                            // Already formatted correctly
-                            runTime = `${firstPart}:${secondPart.toString().padStart(2, '0')}`;
-                        }
-                    }
+                    const minutes = parseInt(parts[0], 10) || 0;
+                    const seconds = parseInt(parts[1], 10) || 0;
+                    runTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                } else {
+                    runTime = run.total_elapsed_minutes;
                 }
             }
             const isSelected = run.run_id === selectedRunId;
@@ -499,17 +488,10 @@
         if (parts.length !== 2) {
             return 0;
         }
-        const firstPart = parseInt(parts[0], 10) || 0;
-        const secondPart = parseInt(parts[1], 10) || 0;
-        
-        // Detect format: if first part is 00 and second < 60, likely legacy hh:mm format
-        if (firstPart === 0 && secondPart < 60 && parts[0] === '00') {
-            // Legacy hh:mm format: "00:08" = 0 hours 8 minutes = 8 minutes = 480 seconds
-            return secondPart * 60;
-        } else {
-            // New mm:ss format: "08:57" = 8 minutes 57 seconds = 537 seconds
-            return (firstPart * 60) + secondPart;
-        }
+        const minutes = parseInt(parts[0], 10) || 0;
+        const seconds = parseInt(parts[1], 10) || 0;
+        // Issue #964: always treat stored string as mm:ss
+        return (minutes * 60) + seconds;
     }
     
     function sortRuns() {
@@ -537,9 +519,13 @@
                     bVal = b.event_summary?.events || 0;
                     break;
                 case 'total_elapsed_minutes':
-                    // Issue #638: Sort by converting mm:ss (or decimal) to total seconds for comparison
-                    aVal = _parseHhmmToMinutes(a.total_elapsed_minutes);
-                    bVal = _parseHhmmToMinutes(b.total_elapsed_minutes);
+                    // Issue #964: prefer total_elapsed_seconds for sort
+                    aVal = (a.total_elapsed_seconds != null && !Number.isNaN(Number(a.total_elapsed_seconds)))
+                        ? Number(a.total_elapsed_seconds)
+                        : _parseHhmmToMinutes(a.total_elapsed_minutes);
+                    bVal = (b.total_elapsed_seconds != null && !Number.isNaN(Number(b.total_elapsed_seconds)))
+                        ? Number(b.total_elapsed_seconds)
+                        : _parseHhmmToMinutes(b.total_elapsed_minutes);
                     break;
                 default:
                     return 0;

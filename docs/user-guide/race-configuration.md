@@ -16,14 +16,14 @@ GLOBAL
 └── Runners  → immutable runner datasets (actuals or scenarios)
 
 RACE CONFIGURATION (package)
-├── Assign one global course per distance (full / half / 10k)
+├── Assign one global course per event (full / half / 10k / 5k)
 ├── Assign a compatible runner dataset (freeze-copies required CSVs)
-└── Build race exports → package-root multi-distance CSVs/GPX for v2 analyze
+└── Build race exports → package-root multi-event CSVs/GPX for v2 analyze
 ```
 
 - **Legs** are short GPX sections (e.g. "Bridge at Mill → Half Turn") in `runflow/org/legs/`. They are shared across all race configurations.
 - **Courses** are named frozen snapshots for one distance (e.g. **10K University**, **10K River Trail**) in `runflow/org/courses/{id}/`. Saving a course copies the legs used at that moment; later org leg edits do not change already-saved courses.
-- **Race configurations (packages)** assign one course per distance and a compatible **runner dataset**, then freeze `{event}_runners.csv` into `runflow/config/{config_id}/` for analysis.
+- **Race configurations (packages)** assign one course per event (Full, Half, 10K, 5K, …) and a compatible **runner dataset**, then freeze `{event}_runners.csv` into `runflow/config/{config_id}/` for analysis.
 
 **Key benefits:**
 
@@ -43,7 +43,7 @@ Open **Race Configuration** from the main menu. The hub has four top-level views
 | **Packages** | Create/open race packages; assign courses and a runner dataset |
 | **Legs** | Organization leg library — import/draw routes, edit metadata, place locations |
 | **Courses** | Create and manage named frozen courses by distance (**New course**) |
-| **Runners** | Immutable runner datasets — import actuals or create a scenario as a new dataset |
+| **Runners** | Immutable runner datasets — import Race Roster / CSV actuals or create a scenario as a new dataset |
 
 Inside a package, the workspace includes:
 
@@ -59,7 +59,7 @@ Inside a package, the workspace includes:
 1. **Legs** — Import or draw shared route pieces; place locations.
 2. **Courses** → **Save course…** — Compose **10K University** (order legs 1…n for the University route). Save again as **10K River Trail** with a different leg order.
 3. Save **Full** and **Half** courses the same way (each distance can have many named courses).
-4. Open a **race configuration** → **Courses** tab — assign Full / Half / 10K (pick University or River Trail for 10K). Assign a compatible **runner dataset** on the Runners tab.
+4. Open a **race configuration** → **Courses** tab — assign a course per package event (Full, Half, 10K, 5K, …). Assign a compatible **runner dataset** on the Runners tab.
 5. **Build race exports** — writes combined `segments.csv`, `flow.csv`, `locations.csv`, and `{event}.gpx` at the package root.
 6. Analyze with `data_dir` pointing at `runflow/config/{config_id}` (all distances together), or at a single course folder for one-distance runs.
 
@@ -220,33 +220,24 @@ Analyze with `data_dir`: `runflow/config/{config_id}`.
 
 Runner files are **immutable datasets** in `runflow/org/runners/{dataset_id}/`. A Package stores `runners_dataset_id` and freeze-copies the required `{event}_runners.csv` files into the package folder. Analysis still reads those package-local files.
 
-### Import actuals
+### Import Race Roster (recommended)
 
-After a race, import **chip-timed** finisher data as `{event}_runners.csv` files:
+After a race, import **chip-timed** finisher data from a Race Roster results workbook:
 
 1. Export results from Race Roster as an Excel workbook (one sheet per event).
-2. Run the conversion script (once per results file). From the repo root, either use a local Python env with `requirements.txt` installed, or Create (`make create`):
+2. Open **Build → Runners → Import Race Roster**.
+3. Name the dataset, upload the `.xlsx`, and click **Map sheets**.
+4. For each sheet, pick an event from the active catalog (Full, Half, 10K, 5K). Legacy Elite/Open sheets should map to **5K**. Suggestions come from the sheet title.
+5. Click **Preview** to see runner counts, skipped rows (no chip), pace percentiles (P00–P100), and start_offset range. Nothing is written yet.
+6. Click **Create dataset**. Bib numbers are replaced with random 7-character Base62 `runner_id`s (unique across existing datasets). Names and bibs are not stored. The workbook is not kept under `runflow/`.
 
-   ```bash
-   python scripts/build_raceroster_runner_csvs.py \
-     --xlsx "/path/to/FM2026 Results.xlsx" \
-     --out-dir /tmp/fm2026-runners \
-     --events 10k,half,full
-   ```
+Open the package → **Runners** tab and assign a dataset that includes **all** package events. The tab shows participant counts and pace percentiles for the selected dataset.
 
-   ```bash
-   docker exec runflow-create python scripts/build_raceroster_runner_csvs.py \
-     --xlsx "/app/cursor/FM2026 Results.xlsx" \
-     --out-dir /app/cursor \
-     --events 10k,half,full
-   ```
+**CSV import** (**Import CSV**) remains for hand-built `{event}_runners.csv` files. Offline conversion is still available via `scripts/build_raceroster_runner_csvs.py` (use `--anonymize` to match the in-app id policy).
 
-   Omit `--events` to export all default sheets (5K Elite, 5K Open, 10K, Half, Full). Use `--list-sheets` to see mappings.
+### Create scenario
 
-3. Open **Build → Runners → Import actuals**. Name the dataset and upload the generated `*_runners.csv` files. `runner_id` must be unique across every file in the dataset.
-4. Open the package → **Runners** tab and assign a dataset that includes **all** package events (extra event files on the dataset are allowed). The tab shows participant counts and pace percentiles (P00–P100, min/km) for the selected dataset.
-
-Scaling pace or participant counts creates a **new** dataset (Create scenario). The source files do not change.
+Scaling pace or participant counts creates a **new** dataset. Use **Preview** in the scenario panel to compare source vs scenario participants and percentiles before Create. Source files are never changed. Edit / archive / delete icons manage metadata and cleanup; delete and archive are blocked while any package still references the dataset.
 
 ### Chip-only rule
 
@@ -254,10 +245,10 @@ Only finishers with both **Gun Time** and **Chip Time** are included. Rows with 
 
 | Output column | Source |
 |---------------|--------|
-| `runner_id` | Bib number (`No.`) |
-| `pace` | Chip finish time ÷ distance (min/km) |
+| `runner_id` | Random Base62 id (anonymized; not the bib) |
+| `pace` | Chip finish time ÷ event distance (min/km) |
 | `start_offset` | Gun time − chip time (seconds), minimum 0 |
-| `distance` | Fixed per event (5, 10, 21.1, or 42.2 km) |
+| `distance` | From the mapped event (5, 10, 21.1, or 42.2 km) |
 
 Requires `openpyxl` (`pip install openpyxl` or use the project `requirements.txt`).
 

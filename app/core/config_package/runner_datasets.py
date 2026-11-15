@@ -91,6 +91,17 @@ def _read_manifest(dataset_dir: Path) -> Dict[str, Any]:
     return data
 
 
+def _lineage_from_manifest(manifest: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Compact per-event participant / P50 deltas for scenario rows (Issue #958)."""
+    source_id = manifest.get("source_dataset_id")
+    lineage = manifest.get("lineage")
+    if isinstance(lineage, dict) and lineage:
+        return dict(lineage)
+    if not source_id:
+        return None
+    return {"source_dataset_id": source_id}
+
+
 def _public_dataset(manifest: Mapping[str, Any]) -> Dict[str, Any]:
     events = ordered_dataset_events(manifest.get("events") or [])
     files = manifest.get("files") or dataset_files_map(events)
@@ -99,8 +110,12 @@ def _public_dataset(manifest: Mapping[str, Any]) -> Dict[str, Any]:
         "label": manifest.get("label") or manifest.get("dataset_id"),
         "description": manifest.get("description") or "",
         "created": manifest.get("created"),
+        "updated": manifest.get("updated"),
+        "archived": bool(manifest.get("archived")),
         "source_dataset_id": manifest.get("source_dataset_id"),
         "control_variables": manifest.get("control_variables"),
+        "provenance": manifest.get("provenance"),
+        "lineage": _lineage_from_manifest(manifest),
         "events": events,
         "files": files,
         "summary": manifest.get("summary") or {},
@@ -138,7 +153,7 @@ def load_runner_dataset(dataset_id: str) -> Dict[str, Any]:
     return public
 
 
-def list_runner_datasets() -> List[Dict[str, Any]]:
+def list_runner_datasets(*, include_usage: bool = True) -> List[Dict[str, Any]]:
     root = get_org_runners_dir()
     if not root.is_dir():
         return []
@@ -151,7 +166,41 @@ def list_runner_datasets() -> List[Dict[str, Any]]:
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("Skipping invalid runner dataset %s: %s", child.name, exc)
             continue
-    rows.sort(key=lambda r: ((r.get("label") or "").lower(), r.get("created") or ""))
+    if include_usage and rows:
+        usage_by_id: Dict[str, List[Dict[str, str]]] = {
+            str(r.get("dataset_id")): [] for r in rows if r.get("dataset_id")
+        }
+        try:
+            from app.core.config_package.storage import (
+                list_config_packages,
+                load_config_manifest,
+            )
+
+            for pkg in list_config_packages():
+                cid = pkg.get("config_id")
+                if not cid:
+                    continue
+                try:
+                    manifest = load_config_manifest(cid)
+                except FileNotFoundError:
+                    continue
+                assigned = manifest.get("runners_dataset_id")
+                if assigned and str(assigned) in usage_by_id:
+                    usage_by_id[str(assigned)].append(
+                        {"config_id": cid, "label": pkg.get("label") or cid}
+                    )
+        except Exception as exc:
+            logger.warning("Could not resolve runner dataset package usage: %s", exc)
+        for row in rows:
+            did = str(row.get("dataset_id") or "")
+            row["used_by"] = usage_by_id.get(did, [])
+    rows.sort(
+        key=lambda r: (
+            bool(r.get("archived")),
+            (r.get("label") or "").lower(),
+            r.get("created") or "",
+        )
+    )
     return rows
 
 
@@ -222,6 +271,8 @@ def create_runner_dataset(
     description: str = "",
     source_dataset_id: Optional[str] = None,
     control_variables: Optional[Dict[str, Any]] = None,
+    provenance: Optional[Dict[str, Any]] = None,
+    lineage: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Create an immutable runner dataset from CSV bytes.
@@ -250,12 +301,17 @@ def create_runner_dataset(
         "label": clean_label,
         "description": clean_description,
         "created": created,
+        "archived": False,
         "source_dataset_id": source_id,
         "control_variables": control_variables,
         "events": events,
         "files": dataset_files_map(events),
         "summary": summarize_runner_frames(frames),
     }
+    if provenance:
+        manifest["provenance"] = provenance
+    if lineage:
+        manifest["lineage"] = lineage
     _write_dataset_tree(dataset_id, manifest, by_event)
     logger.info(
         "Created runner dataset %s (%s) events=%s source=%s",
@@ -271,14 +327,16 @@ def _new_participant_count(base_participants: int, chg_participants: float) -> i
     return int(base_participants * (1 + chg_participants))
 
 
-def create_scenario_dataset(
+def _build_scenario_frames(
     source_dataset_id: str,
-    *,
-    label: str,
     control_variables: Dict[str, Dict[str, Any]],
-    description: str = "",
 ) -> Dict[str, Any]:
-    """Generate a new immutable dataset from a source dataset + control variables."""
+    """
+    Shared scenario generation for preview and create (Issue #958).
+
+    Returns source summary, scenario frames/uploads/summary, and lineage deltas.
+    Writes nothing.
+    """
     source = load_runner_dataset(source_dataset_id)
     if not control_variables:
         raise ValueError("control_variables is required")
@@ -294,6 +352,8 @@ def create_scenario_dataset(
     source_dir = get_dataset_dir(source["dataset_id"])
     used_runner_ids: set[str] = set()
     uploads: List[Tuple[str, bytes]] = []
+    frames: List[Tuple[str, pd.DataFrame]] = []
+    source_summary = source.get("summary") or {}
 
     for event_name, control_vars in control_variables.items():
         filename = f"{event_name}{RUNNERS_FILENAME_SUFFIX}"
@@ -329,14 +389,311 @@ def create_scenario_dataset(
         )
         used_runner_ids.update(new_df["runner_id"].astype(str).tolist())
         uploads.append((filename, new_df.to_csv(index=False).encode("utf-8")))
+        frames.append((event_name, new_df))
+
+    scenario_summary = summarize_runner_frames(frames)
+    lineage_events: Dict[str, Any] = {}
+    for event_name in control_variables:
+        src = source_summary.get(event_name) or {}
+        scn = scenario_summary.get(event_name) or {}
+        src_n = src.get("participants")
+        scn_n = scn.get("participants")
+        src_p50 = src.get("p50")
+        scn_p50 = scn.get("p50")
+        delta_n = None
+        delta_pct = None
+        if src_n is not None and scn_n is not None:
+            delta_n = int(scn_n) - int(src_n)
+            if int(src_n) != 0:
+                delta_pct = float(delta_n) / float(src_n)
+        delta_p50 = None
+        if src_p50 is not None and scn_p50 is not None:
+            delta_p50 = float(scn_p50) - float(src_p50)
+        lineage_events[event_name] = {
+            "source_participants": src_n,
+            "scenario_participants": scn_n,
+            "participants_delta": delta_n,
+            "participants_delta_pct": delta_pct,
+            "source_p50": src_p50,
+            "scenario_p50": scn_p50,
+            "p50_delta": delta_p50,
+            "source": src,
+            "scenario": scn,
+        }
+
+    return {
+        "source": source,
+        "uploads": uploads,
+        "frames": frames,
+        "source_summary": source_summary,
+        "scenario_summary": scenario_summary,
+        "lineage": {
+            "source_dataset_id": source["dataset_id"],
+            "events": lineage_events,
+        },
+    }
+
+
+def preview_scenario_dataset(
+    source_dataset_id: str,
+    *,
+    control_variables: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Dry-run scenario generation: no library writes (Issue #958)."""
+    built = _build_scenario_frames(source_dataset_id, control_variables)
+    return {
+        "source_dataset_id": built["source"]["dataset_id"],
+        "source_label": built["source"].get("label"),
+        "source_summary": built["source_summary"],
+        "scenario_summary": built["scenario_summary"],
+        "events": built["lineage"]["events"],
+        "lineage": built["lineage"],
+    }
+
+
+def create_scenario_dataset(
+    source_dataset_id: str,
+    *,
+    label: str,
+    control_variables: Dict[str, Dict[str, Any]],
+    description: str = "",
+) -> Dict[str, Any]:
+    """Generate a new immutable dataset from a source dataset + control variables."""
+    built = _build_scenario_frames(source_dataset_id, control_variables)
+    return create_runner_dataset(
+        label,
+        built["uploads"],
+        description=description,
+        source_dataset_id=built["source"]["dataset_id"],
+        control_variables=control_variables,
+        lineage=built["lineage"],
+    )
+
+
+def collect_all_runner_ids() -> set[str]:
+    """All ``runner_id`` values across org runner datasets (for anonymize collisions)."""
+    used: set[str] = set()
+    root = get_org_runners_dir()
+    if not root.is_dir():
+        return used
+    for child in root.iterdir():
+        if not child.is_dir() or child.name.startswith(_STAGING_PREFIX):
+            continue
+        for csv_path in child.glob(f"*{RUNNERS_FILENAME_SUFFIX}"):
+            try:
+                df = pd.read_csv(csv_path, dtype={"runner_id": "string"})
+            except Exception as exc:
+                logger.warning("Could not read %s for id scan: %s", csv_path, exc)
+                continue
+            if "runner_id" not in df.columns:
+                continue
+            used.update(
+                str(v).strip() for v in df["runner_id"].dropna().tolist() if str(v).strip()
+            )
+    return used
+
+
+def create_raceroster_dataset(
+    label: str,
+    workbooks: Sequence[Tuple[str, bytes]],
+    sheet_event_map: Mapping[str, str],
+    *,
+    description: str = "",
+) -> Dict[str, Any]:
+    """
+    Create a dataset from Race Roster workbook bytes (Issue #957).
+
+    Workbooks are processed in memory and never stored under runflow/.
+    """
+    from app.core.baseline.raceroster_runners import convert_raceroster_workbook
+
+    if not workbooks:
+        raise ValueError("At least one Race Roster workbook is required")
+    if len(workbooks) != 1:
+        # Multi-workbook: merge sheet maps per file in a follow-up if needed.
+        # Acceptance allows one or more; combine sequentially with shared used ids.
+        pass
+
+    used = collect_all_runner_ids()
+    all_uploads: List[Tuple[str, bytes]] = []
+    merged_provenance: Dict[str, Any] = {
+        "source": "raceroster",
+        "anonymized": True,
+        "source_filenames": [],
+        "sheet_event_map": {},
+        "skipped_by_event": {},
+    }
+    seen_events: set[str] = set()
+
+    for filename, data in workbooks:
+        if not data:
+            continue
+        converted = convert_raceroster_workbook(
+            data,
+            sheet_event_map,
+            anonymize=True,
+            used_runner_ids=used,
+            source_filenames=[filename],
+        )
+        for event_id in converted["events"]:
+            if event_id in seen_events:
+                raise ValueError(
+                    f"Event '{event_id}' appears in more than one workbook mapping"
+                )
+            seen_events.add(event_id)
+        all_uploads.extend(converted["uploads"])
+        merged_provenance["source_filenames"].extend(
+            converted["provenance"].get("source_filenames") or []
+        )
+        merged_provenance["sheet_event_map"].update(
+            converted["provenance"].get("sheet_event_map") or {}
+        )
+        for event_id, skipped in (
+            converted["provenance"].get("skipped_by_event") or {}
+        ).items():
+            merged_provenance["skipped_by_event"][event_id] = skipped
+
+    if not all_uploads:
+        raise ValueError("No runner rows produced from the workbook mapping")
 
     return create_runner_dataset(
         label,
-        uploads,
+        all_uploads,
         description=description,
-        source_dataset_id=source["dataset_id"],
-        control_variables=control_variables,
+        provenance=merged_provenance,
     )
+
+
+def preview_raceroster_import(
+    workbooks: Sequence[Tuple[str, bytes]],
+    sheet_event_map: Mapping[str, str],
+) -> Dict[str, Any]:
+    """Preview Race Roster conversion without writing a dataset (Issue #957)."""
+    from app.core.baseline.raceroster_runners import convert_raceroster_workbook
+
+    if not workbooks:
+        raise ValueError("At least one Race Roster workbook is required")
+    used = collect_all_runner_ids()
+    # Preview uses a disposable id pool so we don't need real collisions here;
+    # anonymize still runs so counts match create.
+    preview_events: Dict[str, Any] = {}
+    sheets: List[Dict[str, Any]] = []
+    filenames: List[str] = []
+    for filename, data in workbooks:
+        if not data:
+            continue
+        filenames.append(filename)
+        converted = convert_raceroster_workbook(
+            data,
+            sheet_event_map,
+            anonymize=True,
+            used_runner_ids=set(used),
+            source_filenames=[filename],
+        )
+        preview_events.update(converted["preview"])
+        used.update(
+            rid
+            for df in converted["frames"].values()
+            for rid in df["runner_id"].astype(str).tolist()
+        )
+    return {
+        "source_filenames": filenames,
+        "events": preview_events,
+        "sheet_event_map": dict(sheet_event_map),
+    }
+
+
+def packages_using_dataset(dataset_id: str) -> List[Dict[str, str]]:
+    """Packages whose ``runners_dataset_id`` points at this dataset."""
+    from app.core.config_package.storage import list_config_packages, load_config_manifest
+
+    did = validate_dataset_id(dataset_id)
+    users: List[Dict[str, str]] = []
+    for pkg in list_config_packages():
+        cid = pkg.get("config_id")
+        if not cid:
+            continue
+        try:
+            manifest = load_config_manifest(cid)
+        except FileNotFoundError:
+            continue
+        assigned = manifest.get("runners_dataset_id")
+        if assigned and str(assigned) == did:
+            users.append(
+                {
+                    "config_id": cid,
+                    "label": pkg.get("label") or cid,
+                }
+            )
+    return users
+
+
+def update_runner_dataset_metadata(
+    dataset_id: str,
+    *,
+    label: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Edit label/description only; CSVs stay immutable (Issue #958)."""
+    did = validate_dataset_id(dataset_id)
+    dataset_dir = get_dataset_dir(did)
+    if not dataset_dir.is_dir():
+        raise FileNotFoundError(f"Runner dataset not found: {did}")
+    manifest = _read_manifest(dataset_dir)
+    if label is not None:
+        clean = label.strip()
+        if not clean:
+            raise ValueError("label is required")
+        if len(clean) > 120:
+            raise ValueError("label must be at most 120 characters")
+        manifest["label"] = clean
+    if description is not None:
+        clean_d = description.strip()
+        if len(clean_d) > 255:
+            raise ValueError("description must be at most 255 characters")
+        manifest["description"] = clean_d
+    manifest["updated"] = _now_iso()
+    path = dataset_dir / DATASET_MANIFEST_NAME
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+    return load_runner_dataset(did)
+
+
+def set_runner_dataset_archived(dataset_id: str, archived: bool) -> Dict[str, Any]:
+    """Archive or restore a dataset. Block archive while packages reference it."""
+    did = validate_dataset_id(dataset_id)
+    users = packages_using_dataset(did)
+    if archived and users:
+        names = ", ".join(u["label"] for u in users)
+        raise ValueError(
+            f"Cannot archive dataset while packages still use it: {names}"
+        )
+    dataset_dir = get_dataset_dir(did)
+    if not dataset_dir.is_dir():
+        raise FileNotFoundError(f"Runner dataset not found: {did}")
+    manifest = _read_manifest(dataset_dir)
+    manifest["archived"] = bool(archived)
+    manifest["updated"] = _now_iso()
+    with open(dataset_dir / DATASET_MANIFEST_NAME, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+    return load_runner_dataset(did)
+
+
+def delete_runner_dataset(dataset_id: str) -> Dict[str, Any]:
+    """Permanently delete a dataset. Blocked while any package references it."""
+    did = validate_dataset_id(dataset_id)
+    users = packages_using_dataset(did)
+    if users:
+        names = ", ".join(u["label"] for u in users)
+        raise ValueError(
+            f"Cannot delete dataset while packages still use it: {names}"
+        )
+    dataset_dir = get_dataset_dir(did)
+    if not dataset_dir.is_dir():
+        raise FileNotFoundError(f"Runner dataset not found: {did}")
+    shutil.rmtree(dataset_dir)
+    logger.info("Deleted runner dataset %s", did)
+    return {"dataset_id": did, "deleted": True}
 
 
 def assign_runner_dataset(  # noqa: C901

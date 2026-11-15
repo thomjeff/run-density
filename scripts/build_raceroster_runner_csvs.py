@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build analysis runner CSVs from a Race Roster results Excel export."""
+"""Build analysis runner CSVs from a Race Roster results Excel export.
+
+Prefer Build → Runners → Import Race Roster in the app (Issue #957). This script
+remains for offline/batch use; pass ``--anonymize`` to replace bib numbers with
+random Base62 runner ids (same as the in-app import).
+"""
 
 from __future__ import annotations
 
@@ -36,6 +41,12 @@ def main() -> int:
         "Example: 10k,half,full",
     )
     parser.add_argument(
+        "--anonymize",
+        action="store_true",
+        help="Replace bib numbers with random 7-character Base62 runner_ids "
+        "(recommended; matches in-app Import Race Roster)",
+    )
+    parser.add_argument(
         "--list-sheets",
         action="store_true",
         help="List default sheet → event mappings and exit",
@@ -43,7 +54,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.list_sheets:
-        print("Default sheet mappings:")
+        print("Default sheet mappings (legacy CLI; in-app import uses ACTIVE_EVENT_IDS):")
         for sheet, event, distance, filename in DEFAULT_SHEET_EVENTS:
             print(f"  {sheet!r} → {event} ({distance} km) → {filename}")
         return 0
@@ -57,6 +68,7 @@ def main() -> int:
             args.xlsx,
             args.out_dir,
             event_ids=event_ids,
+            anonymize=args.anonymize,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -65,12 +77,16 @@ def main() -> int:
     for row in summaries:
         skipped = row["skipped_no_chip"]
         skip_note = f", {skipped} skipped (no chip)" if skipped else ""
+        anon = ", anonymized" if row.get("anonymized") else ""
         print(
             f"{row['filename']}: {row['runner_count']} runners"
-            f"{skip_note} ← sheet {row['sheet']!r}"
+            f"{skip_note}{anon} ← sheet {row['sheet']!r}"
         )
     print(f"Wrote {len(summaries)} file(s) to {args.out_dir.resolve()}")
-    print("Upload via Race Configuration → Runners → Install runner files → Upload CSV files.")
+    print(
+        "Prefer Build → Runners → Import Race Roster. "
+        "Or upload CSVs via Build → Runners → Import CSV."
+    )
     return 0
 
 
