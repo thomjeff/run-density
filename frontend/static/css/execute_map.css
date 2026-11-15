@@ -15,11 +15,24 @@
 .rf-ops-map-status { margin-top: 0.75rem; color: #667382; }
 .rf-ops-map-legend {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
     list-style: none;
     padding: 0;
     margin: 0 0 0.75rem;
     font-size: 0.85rem;
+}
+.rf-ops-type-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.rf-ops-type-icon {
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .rf-ops-swatch {
     display: inline-block;

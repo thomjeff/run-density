@@ -13,7 +13,7 @@
     var orgCoursePreviewLine = null;
     var orgCoursePreviewLocationsLayer = null;
 
-    var LOCATION_PIN_COLORS = {
+    var LOCATION_PIN_COLORS = (window.LocationTypeIcons && window.LocationTypeIcons.COLORS) || {
         aid: '#e74c3c',
         extract: '#9c27b0',
         official: '#f1c40f',
@@ -225,7 +225,34 @@
     }
 
     function getLocationPinColor(locType) {
+        if (window.LocationTypeIcons) return window.LocationTypeIcons.color(locType);
         return LOCATION_PIN_COLORS[locType] || '#27ae60';
+    }
+
+    function orgCourseLocationIcon(loc) {
+        var Icons = window.LocationTypeIcons;
+        if (Icons && Icons.leafletDivIcon) {
+            var off =
+                Icons.normalizeType(loc.loc_type) === 'traffic' &&
+                String(loc.placement || '').toLowerCase() === 'off';
+            return Icons.leafletDivIcon(L, loc.loc_type, {
+                size: 14,
+                offCourse: off,
+                className: 'location-pin-circle',
+            });
+        }
+        var fill = getLocationPinColor(loc.loc_type);
+        return L.divIcon({
+            className: 'location-pin-circle',
+            html:
+                '<div style="width:14px;height:14px;background:' +
+                fill +
+                ';border:2px solid ' +
+                fill +
+                ';border-radius:50%;box-sizing:border-box;"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+        });
     }
 
     function buildOrgCourseLocationTooltip(loc) {
@@ -256,19 +283,8 @@
             var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             if (isNaN(lat) || isNaN(lon)) return;
-            var fill = getLocationPinColor(loc.loc_type);
             var marker = L.marker([lat, lon], {
-                icon: L.divIcon({
-                    className: 'location-pin-circle',
-                    html:
-                        '<div style="width:14px;height:14px;background:' +
-                        fill +
-                        ';border:2px solid ' +
-                        fill +
-                        ';border-radius:50%;box-sizing:border-box;"></div>',
-                    iconSize: [14, 14],
-                    iconAnchor: [7, 7],
-                }),
+                icon: orgCourseLocationIcon(loc),
                 interactive: true,
             });
             marker.bindTooltip(buildOrgCourseLocationTooltip(loc), {

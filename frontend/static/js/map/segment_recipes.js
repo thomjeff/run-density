@@ -632,7 +632,7 @@
         renderTotals(lengths);
     }
 
-    var LEG_LOCATION_PIN_COLORS = {
+    var LEG_LOCATION_PIN_COLORS = (window.LocationTypeIcons && window.LocationTypeIcons.COLORS) || {
         aid: '#e74c3c',
         extract: '#9c27b0',
         official: '#f1c40f',
@@ -1035,26 +1035,15 @@
         var group = L.layerGroup();
         rows.forEach(function (row) {
             var loc = row.loc;
-            var fill = legLocationColor(normalizeLocType(loc.loc_type));
             var highlight = legLocationsBrowserHighlightKey && row.key === legLocationsBrowserHighlightKey;
             var marker = L.marker([loc.lat, loc.lon], {
                 pane: ALL_LEG_LOCATIONS_PANE,
-                icon: L.divIcon({
+                icon: legLocationDivIcon(loc, {
+                    size: highlight ? 12 : 10,
+                    highlight: highlight,
                     className:
                         'leg-location-pin leg-location-pin-all-legs' +
                         (highlight ? ' leg-location-pin-all-legs-highlight' : ''),
-                    html:
-                        '<div style="width:' +
-                        (highlight ? 12 : 10) +
-                        'px;height:' +
-                        (highlight ? 12 : 10) +
-                        'px;background:' +
-                        (isOffCourseTraffic(loc) ? '#fff' : fill) +
-                        ';border:2px solid ' +
-                        (highlight ? '#2c3e50' : isOffCourseTraffic(loc) ? fill : '#fff') +
-                        ';border-radius:50%;box-sizing:border-box;"></div>',
-                    iconSize: [highlight ? 12 : 10, highlight ? 12 : 10],
-                    iconAnchor: [highlight ? 6 : 5, highlight ? 6 : 5]
                 }),
                 interactive: false
             });
@@ -1305,7 +1294,40 @@
     }
 
     function legLocationColor(locType) {
+        if (window.LocationTypeIcons) return window.LocationTypeIcons.color(locType);
         return LEG_LOCATION_PIN_COLORS[locType] || '#3498db';
+    }
+
+    function legLocationDivIcon(loc, opts) {
+        opts = opts || {};
+        var size = opts.size || 14;
+        var Icons = window.LocationTypeIcons;
+        if (Icons && Icons.leafletDivIcon) {
+            return Icons.leafletDivIcon(L, loc && loc.loc_type, {
+                size: size,
+                offCourse: isOffCourseTraffic(loc),
+                focused: !!opts.highlight,
+                className: opts.className || 'leg-location-pin',
+            });
+        }
+        var fill = legLocationColor(normalizeLocType(loc && loc.loc_type));
+        var stroke = opts.highlight ? '#2c3e50' : isOffCourseTraffic(loc) ? fill : '#fff';
+        var bg = isOffCourseTraffic(loc) ? '#fff' : fill;
+        return L.divIcon({
+            className: opts.className || 'leg-location-pin',
+            html:
+                '<div style="width:' +
+                size +
+                'px;height:' +
+                size +
+                'px;background:' +
+                bg +
+                ';border:2px solid ' +
+                stroke +
+                ';border-radius:50%;box-sizing:border-box;"></div>',
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
     }
 
     function getSelectedLeg() {
@@ -3936,19 +3958,11 @@
         opts = opts || {};
         if (loc.lat == null || loc.lon == null) return;
         var isPending = !!opts.isPending;
-        var fill = legLocationColor(normalizeLocType(loc.loc_type));
-        var stroke = isPending ? '#2c3e50' : fill;
         var marker = L.marker([loc.lat, loc.lon], {
-            icon: L.divIcon({
+            icon: legLocationDivIcon(loc, {
+                size: 14,
+                highlight: isPending,
                 className: 'leg-location-pin' + (isPending ? ' leg-location-pin-pending' : ''),
-                html:
-                    '<div style="width:14px;height:14px;background:' +
-                    (isOffCourseTraffic(loc) ? '#fff' : fill) +
-                    ';border:2px solid ' +
-                    stroke +
-                    ';border-radius:50%;box-sizing:border-box;cursor:grab;"></div>',
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
             }),
             draggable: true,
             autoPan: true

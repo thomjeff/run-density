@@ -4,7 +4,7 @@
 
 {% block extra_styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="/static/css/execute_board.css?v=948">
+<link rel="stylesheet" href="/static/css/execute_board.css?v=929">
 {% endblock %}
 
 {% block content %}
@@ -109,10 +109,15 @@
                     </div>
                     <p class="rf-ex-layers-group">How to read marks</p>
                     <ul id="rf-execute-map-legend" class="rf-ex-map-legend" aria-label="Location and GPS status">
-                        <li><span class="rf-ex-map-swatch is-closed"></span> Closed</li>
-                        <li><span class="rf-ex-map-swatch is-next"></span> Reopen next</li>
-                        <li><span class="rf-ex-map-swatch is-done"></span> Reopened</li>
-                        <li><span class="rf-ex-map-swatch is-off-course"></span> Off course (ring)</li>
+                        <li class="rf-ex-type-legend" data-loc-type="water"><span class="rf-ex-type-icon" aria-hidden="true"></span> Water</li>
+                        <li class="rf-ex-type-legend" data-loc-type="aid"><span class="rf-ex-type-icon" aria-hidden="true"></span> Aid</li>
+                        <li class="rf-ex-type-legend" data-loc-type="extract"><span class="rf-ex-type-icon" aria-hidden="true"></span> Extract</li>
+                        <li class="rf-ex-type-legend" data-loc-type="official"><span class="rf-ex-type-icon" aria-hidden="true"></span> Official</li>
+                        <li class="rf-ex-type-legend" data-loc-type="traffic"><span class="rf-ex-type-icon" aria-hidden="true"></span> Traffic</li>
+                        <li><span class="rf-ex-map-swatch is-closed"></span> Closed (ring)</li>
+                        <li><span class="rf-ex-map-swatch is-next"></span> Reopen next (ring)</li>
+                        <li><span class="rf-ex-map-swatch is-done"></span> Reopened (ring)</li>
+                        <li><span class="rf-ex-map-swatch is-off-course"></span> Off course</li>
                         <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps"></span> Live</li>
                         <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-gps-stale"></span> Last seen</li>
                         <li class="rf-ex-gps-legend"><span class="rf-ex-map-swatch is-sos"></span> SOS</li>
@@ -200,6 +205,7 @@
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js?v=908"></script>
+<script src="/static/js/map/location_type_icons.js?v=929"></script>
 <script src="/static/js/execute_context.js?v=947"></script>
-<script src="/static/js/execute_board.js?v=948b"></script>
+<script src="/static/js/execute_board.js?v=929"></script>
 {% endblock %}

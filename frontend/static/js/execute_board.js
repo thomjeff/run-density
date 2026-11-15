@@ -1243,15 +1243,32 @@
             var status = pin.strip.status || "closed";
             var locId = Number(pin.strip.loc_id);
             var focused = focusId != null && locId === Number(focusId);
-            var ring = locTypeLayer(pin.strip) === "traffic" && !!pin.strip.off_course;
-            var marker = window.L.circleMarker(pin.latlng, {
-                radius: focused ? 12 : 8,
-                color: focused ? "#182433" : ring ? statusColor(status) : "#ffffff",
-                weight: focused || ring ? 3 : 2,
-                fillColor: ring ? "#ffffff" : statusColor(status),
-                fillOpacity: ring ? 0.25 : 0.9,
-                opacity: 1,
-            });
+            var typeKey = locTypeLayer(pin.strip) || pin.strip.loc_type || "unknown";
+            var offCourse =
+                locTypeLayer(pin.strip) === "traffic" && !!pin.strip.off_course;
+            var Icons = window.LocationTypeIcons;
+            var marker;
+            if (Icons && Icons.leafletDivIcon) {
+                marker = window.L.marker(pin.latlng, {
+                    icon: Icons.leafletDivIcon(window.L, typeKey, {
+                        size: focused ? 22 : 18,
+                        statusColor: statusColor(status),
+                        offCourse: offCourse,
+                        focused: focused,
+                        className: "rf-execute-loc-pin",
+                    }),
+                    zIndexOffset: focused ? 600 : 0,
+                });
+            } else {
+                marker = window.L.circleMarker(pin.latlng, {
+                    radius: focused ? 12 : 8,
+                    color: focused ? "#182433" : statusColor(status),
+                    weight: 3,
+                    fillColor: offCourse ? "#ffffff" : statusColor(status),
+                    fillOpacity: offCourse ? 0.25 : 0.9,
+                    opacity: 1,
+                });
+            }
             marker.bindPopup(markerPopupHtml(pin.strip), { maxWidth: 280 });
             marker.on("click", function () {
                 selectLocation(locId);
@@ -1737,7 +1754,19 @@
         chip.hidden = !text;
     }
 
+    function fillTypeLegend() {
+        var Icons = window.LocationTypeIcons;
+        if (!Icons || !Icons.markerHtml) return;
+        document.querySelectorAll(".rf-ex-type-legend[data-loc-type]").forEach(function (li) {
+            var type = li.getAttribute("data-loc-type");
+            var slot = li.querySelector(".rf-ex-type-icon");
+            if (!slot || !type) return;
+            slot.innerHTML = Icons.markerHtml(type, { size: 16 });
+        });
+    }
+
     function bindLayers() {
+        fillTypeLegend();
         var tools = qs("#rf-execute-map-tools");
         if (tools && window.L && window.L.DomEvent) {
             window.L.DomEvent.disableClickPropagation(tools);

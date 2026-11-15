@@ -111,14 +111,27 @@
         });
         (data.locations || []).forEach(function (pin) {
             if (pin.lat == null || pin.lon == null) return;
-            var color = STATUS_COLORS[pin.status] || STATUS_COLORS.closed;
-            var marker = L.circleMarker([pin.lat, pin.lon], {
-                radius: 7,
-                color: "#fff",
-                weight: 1,
-                fillColor: color,
-                fillOpacity: 0.95,
-            }).addTo(map);
+            var statusRing = STATUS_COLORS[pin.status] || STATUS_COLORS.closed;
+            var Icons = window.LocationTypeIcons;
+            var marker;
+            if (Icons && Icons.leafletDivIcon) {
+                marker = L.marker([pin.lat, pin.lon], {
+                    icon: Icons.leafletDivIcon(L, pin.loc_type, {
+                        size: 18,
+                        statusColor: statusRing,
+                        offCourse: !!pin.off_course,
+                        className: "rf-ops-loc-pin",
+                    }),
+                }).addTo(map);
+            } else {
+                marker = L.circleMarker([pin.lat, pin.lon], {
+                    radius: 7,
+                    color: "#fff",
+                    weight: 1,
+                    fillColor: statusRing,
+                    fillOpacity: 0.95,
+                }).addTo(map);
+            }
             marker.bindPopup(
                 "<div><strong>" +
                     (pin.loc_id || "") +
@@ -126,6 +139,8 @@
                     (pin.loc_label || "") +
                     "</strong><br>Zone " +
                     (pin.zone || "—") +
+                    "<br>Type " +
+                    (pin.loc_type || "—") +
                     "<br>Planned loc_end " +
                     (pin.loc_end || "—") +
                     "<br>" +
@@ -156,6 +171,18 @@
             });
     }
 
+    function fillTypeLegend() {
+        var Icons = window.LocationTypeIcons;
+        if (!Icons || !Icons.markerHtml) return;
+        document.querySelectorAll(".rf-ops-type-legend[data-loc-type]").forEach(function (li) {
+            var type = li.getAttribute("data-loc-type");
+            var slot = li.querySelector(".rf-ops-type-icon");
+            if (!slot || !type) return;
+            slot.innerHTML = Icons.markerHtml(type, { size: 16 });
+        });
+    }
+
+    fillTypeLegend();
     bindImport("rf-ops-map-import", true);
     bindImport("rf-ops-map-import-more", false);
     loadMap();

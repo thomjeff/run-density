@@ -448,3 +448,13 @@
     display: inline-block;
     margin-left: 0.5rem;
 }
+
+/* Shared location-type map icons (Issue #929) — clear Leaflet divIcon chrome */
+.rf-loc-type-icon,
+.location-type-pin,
+.leg-location-pin,
+.rf-execute-loc-pin,
+.rf-ops-loc-pin {
+    background: transparent !important;
+    border: none !important;
+}

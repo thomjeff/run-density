@@ -6,14 +6,14 @@
  * Issue #478: Add Interactive Map to Locations Report Table
  */
 
-// Location type colors (from requirements)
-const locationTypeColors = {
-    'traffic': '#4CAF50',  // Green
-    'aid': '#F44336',      // Red
-    'water': '#2196F3',    // Blue
+// Location type colors — shared with Build/Execute via LocationTypeIcons (#929)
+const locationTypeColors = (window.LocationTypeIcons && window.LocationTypeIcons.COLORS) || {
+    'traffic': '#27ae60',
+    'aid': '#e74c3c',
+    'water': '#3498db',
     'marshal': '#FF9800',  // Orange (legacy)
-    'official': '#FFC107', // Amber
-    'extract': '#9C27B0' // Purple — remote trail extract / stretcher access (Issue #747)
+    'official': '#f1c40f',
+    'extract': '#9c27b0'
 };
 
 /** Resource *_count fields only — exclude pass_count and other non-org counts. */
@@ -132,7 +132,29 @@ function convertToGeoJSON(locations) {
  * @returns {string} Color hex code
  */
 function getLocationMarkerColor(locType) {
+    if (window.LocationTypeIcons) return window.LocationTypeIcons.color(locType);
     return locationTypeColors[locType?.toLowerCase()] || '#999999';
+}
+
+function locationTypeMapIcon(locType, opts) {
+    opts = opts || {};
+    const Icons = window.LocationTypeIcons;
+    const size = opts.size || 18;
+    if (Icons && Icons.leafletDivIcon && window.L) {
+        return Icons.leafletDivIcon(L, locType, {
+            size: size,
+            focused: !!opts.focused,
+            className: 'location-type-pin',
+        });
+    }
+    const color = getLocationMarkerColor(locType);
+    return L.divIcon({
+        className: 'location-type-pin',
+        html:
+            `<div style="width:${size}px;height:${size}px;background:${color};border:2px solid #fff;border-radius:50%;box-sizing:border-box;"></div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+    });
 }
 
 /**
@@ -554,16 +576,10 @@ async function renderLocations(map) {
         const props = feature.properties;
         const [lon, lat] = feature.geometry.coordinates;
         const locType = props.loc_type?.toLowerCase() || 'unknown';
-        const color = getLocationMarkerColor(locType);
         
-        // Create circle marker
-        const marker = L.circleMarker([lat, lon], {
-            radius: 8,
-            fillColor: color,
-            color: '#ffffff',
-            weight: 2,
+        const marker = L.marker([lat, lon], {
+            icon: locationTypeMapIcon(locType, { size: 18 }),
             opacity: 1,
-            fillOpacity: 0.8
         });
         
         // Store feature data on marker for later use
@@ -585,19 +601,12 @@ async function renderLocations(map) {
             className: 'location-popup'
         });
         
-        // Add hover effects
         marker.on('mouseover', function(e) {
-            e.target.setStyle({
-                radius: 10,
-                weight: 3
-            });
+            e.target.setIcon(locationTypeMapIcon(locType, { size: 20, focused: true }));
         });
         
         marker.on('mouseout', function(e) {
-            e.target.setStyle({
-                radius: 8,
-                weight: 2
-            });
+            e.target.setIcon(locationTypeMapIcon(locType, { size: 18 }));
         });
         
         // Add click handler for table highlighting
@@ -717,19 +726,19 @@ function filterMapToLocation(locId) {
     
     // Dim all markers
     window.locationsLayer.eachLayer(function(marker) {
-        marker.setStyle({
-            fillOpacity: 0.3,
-            opacity: 0.5
-        });
+        marker.setOpacity(0.35);
+        if (marker.feature) {
+            const t = (marker.feature.properties || {}).loc_type || 'unknown';
+            marker.setIcon(locationTypeMapIcon(t, { size: 18 }));
+        }
     });
     
     // Highlight selected marker
-    targetMarker.setStyle({
-        fillOpacity: 1.0,
-        opacity: 1.0,
-        radius: 10,
-        weight: 3
-    });
+    const targetType = (targetMarker.feature && targetMarker.feature.properties
+        ? targetMarker.feature.properties.loc_type
+        : 'unknown') || 'unknown';
+    targetMarker.setOpacity(1);
+    targetMarker.setIcon(locationTypeMapIcon(targetType, { size: 22, focused: true }));
     
     // Pan and zoom to selected location (programmatic move - disable bounds filtering temporarily)
     const latlng = targetMarker.getLatLng();
@@ -771,16 +780,8 @@ function clearMapFilter() {
         if (marker.feature) {
             const props = marker.feature.properties || {};
             const locType = props.loc_type?.toLowerCase() || 'unknown';
-            const color = getLocationMarkerColor(locType);
-            
-            marker.setStyle({
-                radius: 8,
-                fillColor: color,
-                color: '#ffffff',
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.8
-            });
+            marker.setOpacity(1);
+            marker.setIcon(locationTypeMapIcon(locType, { size: 18 }));
         }
     });
     
