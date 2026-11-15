@@ -1919,9 +1919,9 @@ async def api_export_config_package_segments(
 async def api_get_org_settings(request: Request) -> JSONResponse:
     """Org Settings catalog SSOT for Build/Plan (Issue #966)."""
     require_auth(request)
-    from app.core.config_package.org_settings import load_org_settings
+    from app.core.config_package.org_settings import org_settings_api_payload
 
-    return JSONResponse(content={"ok": True, "settings": load_org_settings()})
+    return JSONResponse(content={"ok": True, **org_settings_api_payload()})
 
 
 @router.patch("/api/org/settings")
@@ -1931,7 +1931,10 @@ async def api_patch_org_settings(
 ) -> JSONResponse:
     """Update org Settings (resource types, timezone). Packages assemble-only."""
     require_auth(request)
-    from app.core.config_package.org_settings import save_org_settings
+    from app.core.config_package.org_settings import (
+        org_settings_api_payload,
+        save_org_settings,
+    )
 
     try:
         patch: Dict[str, Any] = {}
@@ -1939,8 +1942,8 @@ async def api_patch_org_settings(
             patch["resources"] = [r.model_dump() for r in body.resources]
         if body.display_timezone is not None:
             patch["display_timezone"] = body.display_timezone
-        settings = save_org_settings(patch)
-        return JSONResponse(content={"ok": True, "settings": settings})
+        save_org_settings(patch)
+        return JSONResponse(content={"ok": True, **org_settings_api_payload()})
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

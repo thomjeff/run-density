@@ -162,9 +162,26 @@
         );
     }
 
+    function fillTimezoneSelect(selectEl, choices, selected) {
+        if (!selectEl) return;
+        const list = Array.isArray(choices) && choices.length ? choices.slice() : [];
+        const current = String(selected || '').trim();
+        if (current && list.indexOf(current) < 0) list.unshift(current);
+        if (!list.length) list.push('America/Halifax');
+        selectEl.innerHTML = '';
+        list.forEach(function (tz) {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            opt.textContent = tz;
+            if (tz === current) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+        if (!selectEl.value && list.length) selectEl.value = list[0];
+    }
+
     async function loadOrgSettingsPanel() {
         const status = document.getElementById('org-settings-status');
-        const tzInput = document.getElementById('org-settings-timezone');
+        const tzSelect = document.getElementById('org-settings-timezone');
         if (status) status.textContent = 'Loading…';
         try {
             const resp = await fetch('/api/org/settings', { credentials: 'same-origin' });
@@ -190,7 +207,11 @@
                 ];
             }
             renderOrgSettingsResourcesList();
-            if (tzInput) tzInput.value = settings.display_timezone || '';
+            fillTimezoneSelect(
+                tzSelect,
+                data.timezone_choices,
+                settings.display_timezone || 'America/Halifax'
+            );
             applyOrgResourcesToWorkspace(orgSettingsResourcesDraft);
             if (status) status.textContent = '';
         } catch (err) {
@@ -200,7 +221,7 @@
 
     async function saveOrgSettingsPanel() {
         const status = document.getElementById('org-settings-status');
-        const tzInput = document.getElementById('org-settings-timezone');
+        const tzSelect = document.getElementById('org-settings-timezone');
         const saveBtn = document.getElementById('org-settings-save');
         if (saveBtn) saveBtn.disabled = true;
         if (status) status.textContent = 'Saving…';
@@ -213,7 +234,7 @@
                     resources: orgSettingsResourcesDraft.map(function (r) {
                         return { code: r.code, label: r.label || r.code.toUpperCase() };
                     }),
-                    display_timezone: tzInput ? tzInput.value.trim() : undefined,
+                    display_timezone: tzSelect ? tzSelect.value : undefined,
                 }),
             });
             const data = await resp.json().catch(function () {
@@ -232,6 +253,11 @@
                 }
             );
             renderOrgSettingsResourcesList();
+            fillTimezoneSelect(
+                tzSelect,
+                data.timezone_choices,
+                settings.display_timezone || (tzSelect && tzSelect.value)
+            );
             applyOrgResourcesToWorkspace(orgSettingsResourcesDraft);
             if (status) status.textContent = 'Saved.';
         } catch (err) {

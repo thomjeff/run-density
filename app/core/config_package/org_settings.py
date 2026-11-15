@@ -14,6 +14,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
+from zoneinfo import ZoneInfo, available_timezones
 
 from app.core.locations.schema import (
     DEFAULT_PACKAGE_RESOURCES,
@@ -36,6 +37,20 @@ logger = logging.getLogger(__name__)
 SETTINGS_FILENAME = "settings.json"
 SCHEMA_VERSION = 1
 
+# Preferred zones appear first in the Settings dropdown.
+_PREFERRED_TIMEZONES = (
+    "America/Halifax",
+    "America/Toronto",
+    "America/Moncton",
+    "America/St_Johns",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Vancouver",
+    "UTC",
+)
+
 
 def get_org_settings_path() -> Path:
     return get_runflow_root() / "org" / SETTINGS_FILENAME
@@ -43,6 +58,25 @@ def get_org_settings_path() -> Path:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def iana_timezone_choices() -> List[str]:
+    """Sorted IANA zone names for Settings dropdown (preferred first)."""
+    available = sorted(available_timezones())
+    preferred = [tz for tz in _PREFERRED_TIMEZONES if tz in available]
+    rest = [tz for tz in available if tz not in preferred]
+    return preferred + rest
+
+
+def normalize_display_timezone(raw: Any) -> str:
+    tz = str(raw or "").strip() or DISPLAY_TIMEZONE
+    try:
+        ZoneInfo(tz)
+    except Exception as exc:
+        raise ValueError(f"Invalid display_timezone: {tz}") from exc
+    if tz not in available_timezones():
+        raise ValueError(f"Unknown IANA timezone: {tz}")
+    return tz
 
 
 def _choice_dicts(values: Sequence[Any]) -> List[Dict[str, str]]:
@@ -140,9 +174,9 @@ def save_org_settings(patch: Mapping[str, Any]) -> Dict[str, Any]:
     if "resources" in patch:
         merged["resources"] = normalize_resource_registry(patch.get("resources"))
     if "display_timezone" in patch and patch.get("display_timezone") is not None:
-        tz = str(patch.get("display_timezone") or "").strip()
-        if tz:
-            merged["display_timezone"] = tz
+        merged["display_timezone"] = normalize_display_timezone(
+            patch.get("display_timezone")
+        )
     for key in (
         "location_types",
         "event_choices",
@@ -177,3 +211,12 @@ def org_resource_registry() -> List[Dict[str, str]]:
 
 def org_resource_codes() -> List[str]:
     return [str(r["code"]) for r in org_resource_registry()]
+
+
+def org_settings_api_payload() -> Dict[str, Any]:
+    """Settings document plus dropdown metadata (not persisted)."""
+    settings = load_org_settings()
+    return {
+        "settings": settings,
+        "timezone_choices": iana_timezone_choices(),
+    }

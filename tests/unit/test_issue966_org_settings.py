@@ -92,6 +92,8 @@ def test_org_settings_api(org_root):
     body = listed.json()
     assert body["ok"] is True
     assert "resources" in body["settings"]
+    assert "America/Halifax" in body["timezone_choices"]
+    assert body["timezone_choices"][0] == "America/Halifax"
 
     patched = client.patch(
         "/api/org/settings",
@@ -99,12 +101,21 @@ def test_org_settings_api(org_root):
             "resources": [
                 {"code": "fpf", "label": "FPF"},
                 {"code": "awp", "label": "AWP"},
-            ]
+            ],
+            "display_timezone": "America/Toronto",
         },
     )
     assert patched.status_code == 200, patched.text
     codes = [r["code"] for r in patched.json()["settings"]["resources"]]
     assert codes == ["fpf", "awp"]
+    assert patched.json()["settings"]["display_timezone"] == "America/Toronto"
+    assert "timezone_choices" in patched.json()
+
+    bad = client.patch(
+        "/api/org/settings",
+        json={"display_timezone": "Not/A_Zone"},
+    )
+    assert bad.status_code == 400
 
 
 def test_incident_catalog_filters_by_day_plan_resources():

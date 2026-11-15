@@ -99,15 +99,15 @@
                             <button type="button" id="org-settings-resource-add" class="course-btn">Add</button>
                         </div>
                         <div style="margin-top: 1rem; display: flex; gap: 0.75rem; align-items: center;">
-                            <button type="button" id="org-settings-save" class="course-btn primary">Save resources</button>
+                            <button type="button" id="org-settings-save" class="course-btn primary">Save</button>
                             <span id="org-settings-status" class="card-help" style="margin: 0;"></span>
                         </div>
                     </div>
                     <div class="content-card">
                         <h4 class="card-title" style="margin: 0 0 0.5rem 0;">Display timezone</h4>
                         <label for="org-settings-timezone" class="visually-hidden">Display timezone</label>
-                        <input type="text" id="org-settings-timezone" class="config-package-input" maxlength="64" style="max-width: 20rem;" />
-                        <p class="card-help" style="margin: 0.5rem 0 0 0;">IANA zone used for Build/Plan timestamps (e.g. America/Halifax).</p>
+                        <select id="org-settings-timezone" class="config-package-input" style="max-width: 24rem;"></select>
+                        <p class="card-help" style="margin: 0.5rem 0 0 0;">IANA zone used for Build/Plan timestamps.</p>
                     </div>
                 </div>
 
@@ -440,5 +440,5 @@
 <script src="/static/js/runner_datasets.js?v=957-958"></script>
 <script src="/static/js/map/junctions_authoring.js?v=955"></script>
 <script src="/static/js/plan_run_analysis.js?v=906"></script>
-<script src="/static/js/race_configuration.js?v=966"></script>
+<script src="/static/js/race_configuration.js?v=966b"></script>
 {% endblock %}
