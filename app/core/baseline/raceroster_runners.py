@@ -298,9 +298,7 @@ def convert_raceroster_workbook(
                 "provenance": {
                     "source": "raceroster",
                     "anonymized": bool(anonymize),
-                    "source_filenames": [
-                        str(n) for n in (source_filenames or []) if n
-                    ],
+                    "source_filenames": [str(n) for n in (source_filenames or []) if n],
                     "sheet_event_map": {},
                     "skipped_by_event": {},
                 },

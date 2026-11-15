@@ -213,9 +213,7 @@ def sample_new_runners(
 
     # Sample start_offset from baseline distribution
     if len(baseline_start_offsets) > 0:
-        start_offsets = rng.choice(
-            baseline_start_offsets, size=n_runners, replace=True
-        )
+        start_offsets = rng.choice(baseline_start_offsets, size=n_runners, replace=True)
     else:
         start_offsets = np.zeros(n_runners, dtype=int)
 
@@ -302,9 +300,7 @@ def generate_runner_file(
     Issue: #676 - Runner file generation
     """
     # Deterministic seed so preview and create produce the same paces (Issue #958)
-    seed_payload = (
-        f"{event_name}|{new_participants}|{sorted((k, control_vars.get(k)) for k in sorted(control_vars))}"
-    )
+    seed_payload = f"{event_name}|{new_participants}|{sorted((k, control_vars.get(k)) for k in sorted(control_vars))}"
     seed = int(hashlib.sha256(seed_payload.encode("utf-8")).hexdigest()[:8], 16)
     rng = np.random.default_rng(seed)
 

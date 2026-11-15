@@ -488,7 +488,9 @@ def collect_all_runner_ids() -> set[str]:
             if "runner_id" not in df.columns:
                 continue
             used.update(
-                str(v).strip() for v in df["runner_id"].dropna().tolist() if str(v).strip()
+                str(v).strip()
+                for v in df["runner_id"].dropna().tolist()
+                if str(v).strip()
             )
     return used
 
@@ -604,7 +606,10 @@ def preview_raceroster_import(
 
 def packages_using_dataset(dataset_id: str) -> List[Dict[str, str]]:
     """Packages whose ``runners_dataset_id`` points at this dataset."""
-    from app.core.config_package.storage import list_config_packages, load_config_manifest
+    from app.core.config_package.storage import (
+        list_config_packages,
+        load_config_manifest,
+    )
 
     did = validate_dataset_id(dataset_id)
     users: List[Dict[str, str]] = []
@@ -664,9 +669,7 @@ def set_runner_dataset_archived(dataset_id: str, archived: bool) -> Dict[str, An
     users = packages_using_dataset(did)
     if archived and users:
         names = ", ".join(u["label"] for u in users)
-        raise ValueError(
-            f"Cannot archive dataset while packages still use it: {names}"
-        )
+        raise ValueError(f"Cannot archive dataset while packages still use it: {names}")
     dataset_dir = get_dataset_dir(did)
     if not dataset_dir.is_dir():
         raise FileNotFoundError(f"Runner dataset not found: {did}")
@@ -684,9 +687,7 @@ def delete_runner_dataset(dataset_id: str) -> Dict[str, Any]:
     users = packages_using_dataset(did)
     if users:
         names = ", ".join(u["label"] for u in users)
-        raise ValueError(
-            f"Cannot delete dataset while packages still use it: {names}"
-        )
+        raise ValueError(f"Cannot delete dataset while packages still use it: {names}")
     dataset_dir = get_dataset_dir(did)
     if not dataset_dir.is_dir():
         raise FileNotFoundError(f"Runner dataset not found: {did}")
