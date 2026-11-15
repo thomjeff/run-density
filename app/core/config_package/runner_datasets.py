@@ -577,7 +577,6 @@ def preview_raceroster_import(
     # Preview uses a disposable id pool so we don't need real collisions here;
     # anonymize still runs so counts match create.
     preview_events: Dict[str, Any] = {}
-    sheets: List[Dict[str, Any]] = []
     filenames: List[str] = []
     for filename, data in workbooks:
         if not data:
