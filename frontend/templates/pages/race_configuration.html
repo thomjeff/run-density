@@ -396,6 +396,7 @@
             <nav class="subnav-tabs" role="tablist" aria-label="Package authoring">
                 <button type="button" class="subnav-tab active" data-tab="course" role="tab" aria-selected="true">Courses</button>
                 <button type="button" class="subnav-tab" data-tab="junctions" role="tab" aria-selected="false">Junctions</button>
+                <button type="button" class="subnav-tab" data-tab="clearance" role="tab" aria-selected="false">Clearance</button>
                 <button type="button" class="subnav-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
             </nav>
         </div>
@@ -407,6 +408,10 @@
 
             <div id="race-config-tab-junctions" role="tabpanel" style="display: none;">
                 {% include 'partials/junctions_workspace.html' %}
+            </div>
+
+            <div id="race-config-tab-clearance" role="tabpanel" style="display: none;">
+                {% include 'partials/clearance_workspace.html' %}
             </div>
 
             <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
@@ -442,6 +447,7 @@
 <script src="/static/js/runners_baseline.js?v=756k"></script>
 <script src="/static/js/runner_datasets.js?v=957-958"></script>
 <script src="/static/js/map/junctions_authoring.js?v=955"></script>
+<script src="/static/js/map/clearance_authoring.js?v=832"></script>
 <script src="/static/js/plan_run_analysis.js?v=906"></script>
 <script src="/static/js/race_configuration.js?v=966c"></script>
 {% endblock %}
