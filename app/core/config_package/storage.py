@@ -645,14 +645,16 @@ def update_config_package_metadata(
     label: str,
     description: str = "",
     event_day: str = "",
+    *,
+    package_events: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Update package name, description, and optional event day in config.json
+    Update package name, description, event day, and optional events in config.json
     (and course.json when present).
 
     Raises:
         FileNotFoundError: Package or config.json missing
-        ValueError: Invalid label/description/event_day
+        ValueError: Invalid label/description/event_day/package_events
     """
     cid = validate_config_id(config_id)
     clean_label = (label or "").strip()
@@ -667,6 +669,11 @@ def update_config_package_metadata(
 
         if clean_event_day not in DAY_SHORT_CODES:
             raise ValueError(f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}")
+    clean_events: Optional[List[str]] = None
+    if package_events is not None:
+        clean_events = normalize_package_events(package_events, allow_legacy=False)
+        if not clean_events:
+            raise ValueError("Select at least one event for this configuration")
 
     package_path = resolve_config_package_path(cid)
     manifest_path = package_path / CONFIG_MANIFEST_NAME
@@ -680,6 +687,8 @@ def update_config_package_metadata(
     manifest["label"] = clean_label
     manifest["description"] = clean_description
     manifest["event_day"] = clean_event_day
+    if clean_events is not None:
+        manifest["package_events"] = clean_events
     save_config_manifest(package_path, manifest)
 
     course_path = package_path / COURSE_WORKSPACE_NAME

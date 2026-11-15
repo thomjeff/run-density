@@ -307,7 +307,9 @@
                 <option value="{{ day }}">{{ day | upper }}</option>
                 {% endfor %}
             </select>
-            <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
+            <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
+            <div id="race-config-edit-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
+            <p id="race-config-edit-events-note" class="card-help" style="margin: 0.35rem 0 1rem 0;"></p>
             <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
             <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
             <p class="card-help" style="margin: 0 0 1rem 0;">Resource types come from Build → Settings. Packages assemble courses and runners only.</p>
@@ -440,5 +442,5 @@
 <script src="/static/js/runner_datasets.js?v=957-958"></script>
 <script src="/static/js/map/junctions_authoring.js?v=955"></script>
 <script src="/static/js/plan_run_analysis.js?v=906"></script>
-<script src="/static/js/race_configuration.js?v=966b"></script>
+<script src="/static/js/race_configuration.js?v=966c"></script>
 {% endblock %}

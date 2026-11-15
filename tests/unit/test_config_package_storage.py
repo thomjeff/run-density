@@ -120,15 +120,26 @@ def test_update_config_package_metadata(tmp_path, monkeypatch):
         "Original", "First desc", event_day="sun", package_events=["full"]
     )
     config_id = result["config_id"]
-    updated = update_config_package_metadata(config_id, "Renamed", "New desc", "sun")
+    updated = update_config_package_metadata(
+        config_id,
+        "Renamed",
+        "New desc",
+        "sun",
+        package_events=["full", "half", "10k"],
+    )
     assert updated["label"] == "Renamed"
     manifest = load_config_manifest(config_id)
     assert manifest["label"] == "Renamed"
     assert manifest["description"] == "New desc"
     assert manifest["event_day"] == "sun"
+    assert manifest["package_events"] == ["full", "half", "10k"]
 
     with pytest.raises(ValueError, match="event_day must be one of"):
         update_config_package_metadata(config_id, "Renamed", "New desc", "tuesday")
+    with pytest.raises(ValueError, match="at least one event"):
+        update_config_package_metadata(
+            config_id, "Renamed", "New desc", "sun", package_events=[]
+        )
     course = json.loads((tmp_path / config_id / "course.json").read_text())
     assert course["name"] == "Renamed"
     assert course["description"] == "New desc"
@@ -213,4 +224,6 @@ def test_upload_runner_files_to_package_validates_and_saves(tmp_path, monkeypatc
     assert "1001" in (tmp_path / target / "10k_runners.csv").read_text(encoding="utf-8")
 
     with pytest.raises(ValueError, match="_runners.csv"):
-        upload_runner_files_to_package(target, [("bad.csv", _RUNNERS_CSV.encode("utf-8"))])
+        upload_runner_files_to_package(
+            target, [("bad.csv", _RUNNERS_CSV.encode("utf-8"))]
+        )

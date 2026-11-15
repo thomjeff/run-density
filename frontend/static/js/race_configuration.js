@@ -655,6 +655,13 @@
             const data = await resp.json();
             const manifest = data.manifest || {};
             if (!data.manifest_editable) {
+                renderEditPackageEventChoices([]);
+                const editEvents = document.getElementById('race-config-edit-events');
+                if (editEvents) {
+                    editEvents.querySelectorAll('input').forEach(function (cb) {
+                        cb.disabled = true;
+                    });
+                }
                 if (eventsNote) {
                     eventsNote.textContent =
                         'Legacy package — metadata cannot be edited here.';
@@ -665,11 +672,10 @@
                 if (descInput) descInput.value = manifest.description || '';
                 if (dayInput) dayInput.value = manifest.event_day || '';
                 const events = manifest.package_events || [];
+                renderEditPackageEventChoices(events);
                 if (eventsNote) {
-                    eventsNote.textContent = events.length
-                        ? 'Events (set at create): ' +
-                          events.map(formatEventLabel).join(', ')
-                        : 'Events were not recorded for this package.';
+                    eventsNote.textContent =
+                        'Select at least one event (Full, Half, 10K, …).';
                 }
                 if (saveBtn) saveBtn.disabled = false;
             }
@@ -728,8 +734,13 @@
         const label = labelInput && labelInput.value.trim();
         const description = descInput && descInput.value.trim();
         const eventDay = dayInput && dayInput.value.trim();
+        const packageEvents = selectedEditPackageEvents();
         if (!label) {
             alert('Enter a name.');
+            return;
+        }
+        if (!packageEvents.length) {
+            alert('Select at least one event.');
             return;
         }
         if (saveBtn) saveBtn.disabled = true;
@@ -744,6 +755,7 @@
                         label: label,
                         description: description || '',
                         event_day: eventDay,
+                        package_events: packageEvents,
                     }),
                 }
             );
@@ -752,7 +764,7 @@
             closeEditPackageModal();
             if (currentConfigId === editingPackageId) {
                 const m = data.manifest || {};
-                const events = m.package_events || [];
+                const events = m.package_events || packageEvents;
                 window.CONFIG_PACKAGE_EVENTS = events;
                 if (window.syncConfigPackageDetailsCard) {
                     window.syncConfigPackageDetailsCard(
@@ -803,14 +815,55 @@
         }
     }
 
-    function selectedNewPackageEvents() {
+    function selectedPackageEvents(hostSelector) {
         const packageEvents = [];
         document
-            .querySelectorAll('#race-config-new-events input[type="checkbox"]:checked')
+            .querySelectorAll(hostSelector + ' input[type="checkbox"]:checked')
             .forEach(function (cb) {
                 packageEvents.push(String(cb.value || '').toLowerCase());
             });
         return packageEvents;
+    }
+
+    function selectedNewPackageEvents() {
+        return selectedPackageEvents('#race-config-new-events');
+    }
+
+    function selectedEditPackageEvents() {
+        return selectedPackageEvents('#race-config-edit-events');
+    }
+
+    function renderPackageEventChoices(hostId, selectedEvents) {
+        const host = document.getElementById(hostId);
+        if (!host) return;
+        const selected = {};
+        (selectedEvents || []).forEach(function (eventId) {
+            selected[String(eventId || '').toLowerCase()] = true;
+        });
+        host.innerHTML = '';
+        eventChoiceList()
+            .filter(function (choice) {
+                return !choice.legacy;
+            })
+            .forEach(function (choice) {
+                const id = hostId + '-' + choice.value;
+                const label = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.id = id;
+                cb.value = choice.value;
+                cb.name = 'package_events';
+                if (selected[String(choice.value).toLowerCase()]) cb.checked = true;
+                if (hostId === 'race-config-new-events') {
+                    cb.addEventListener('change', renderNewPackageDatasetChoices);
+                }
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(choice.label));
+                host.appendChild(label);
+            });
+        if (hostId === 'race-config-new-events') {
+            renderNewPackageDatasetChoices();
+        }
     }
 
     function datasetCoversEvents(dataset, requiredEvents) {
@@ -887,25 +940,11 @@
     }
 
     function renderNewPackageEventChoices() {
-        const host = document.getElementById('race-config-new-events');
-        if (!host) return;
-        host.innerHTML = '';
-        eventChoiceList().filter(function (choice) {
-            return !choice.legacy;
-        }).forEach(function (choice) {
-            const id = 'race-config-ev-' + choice.value;
-            const label = document.createElement('label');
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.id = id;
-            cb.value = choice.value;
-            cb.name = 'package_events';
-            cb.addEventListener('change', renderNewPackageDatasetChoices);
-            label.appendChild(cb);
-            label.appendChild(document.createTextNode(choice.label));
-            host.appendChild(label);
-        });
-        renderNewPackageDatasetChoices();
+        renderPackageEventChoices('race-config-new-events', []);
+    }
+
+    function renderEditPackageEventChoices(selectedEvents) {
+        renderPackageEventChoices('race-config-edit-events', selectedEvents || []);
     }
 
     function openNewModal() {

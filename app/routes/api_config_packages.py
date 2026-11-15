@@ -137,6 +137,10 @@ class UpdateConfigPackageRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field("", max_length=255)
     event_day: str = Field("", max_length=16)
+    package_events: Optional[List[str]] = Field(
+        default=None,
+        description="Event ids for this package (e.g. full, half, 10k); omit to leave unchanged",
+    )
 
 
 class ImportRunnersRequest(BaseModel):
@@ -390,7 +394,11 @@ async def api_update_config_package(
     require_auth(request)
     try:
         result = update_config_package_metadata(
-            config_id, body.label, body.description, body.event_day
+            config_id,
+            body.label,
+            body.description,
+            body.event_day,
+            package_events=body.package_events,
         )
         return JSONResponse(content={"ok": True, **result})
     except FileNotFoundError as e:
