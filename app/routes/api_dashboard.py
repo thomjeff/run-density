@@ -437,45 +437,27 @@ async def get_runs_list():
             except Exception as e:
                 logger.warning(f"Could not load analysis.json for {run_id}: {e}")
 
-            # Load root metadata.json for total_elapsed_minutes (Issue #638 follow-up)
+            # Load root metadata.json for Run Time (Issue #638 / #964)
             # Issue #682: Use centralized get_run_directory() for correct path
             run_dir = get_run_directory(run_id)
             metadata_path = run_dir / "metadata.json"
             total_elapsed_minutes = None
+            total_elapsed_seconds = None
             if metadata_path.exists():
                 try:
+                    from app.core.v2.run_time_display import resolve_run_time_display
+
                     with open(metadata_path, "r", encoding="utf-8") as f:
                         metadata_data = json.load(f)
                         performance = metadata_data.get("performance", {})
-                        stored_format = performance.get("total_elapsed_minutes")
-                        total_elapsed_seconds = performance.get("total_elapsed_seconds")
-
-                        # Issue #638: Reformat if stored in old hh:mm format
-                        # Use total_elapsed_seconds to calculate correct mm:ss format
-                        if total_elapsed_seconds is not None and stored_format:
-                            # Check if stored format is legacy hh:mm (e.g., "00:05")
-                            if ":" in str(stored_format):
-                                parts = str(stored_format).split(":")
-                                if (
-                                    len(parts) == 2
-                                    and parts[0] == "00"
-                                    and int(parts[1]) < 60
-                                ):
-                                    # Legacy hh:mm format - reformat using total_elapsed_seconds
-                                    total_minutes_int = int(total_elapsed_seconds // 60)
-                                    seconds = int(total_elapsed_seconds % 60)
-                                    total_elapsed_minutes = (
-                                        f"{total_minutes_int:02d}:{seconds:02d}"
-                                    )
-                                else:
-                                    # Already in mm:ss format or other format
-                                    total_elapsed_minutes = stored_format
-                            else:
-                                # Not a time format, use as-is (decimal format)
-                                total_elapsed_minutes = stored_format
-                        else:
-                            # Fallback to stored format
-                            total_elapsed_minutes = stored_format
+                        total_elapsed_minutes, total_elapsed_seconds = (
+                            resolve_run_time_display(
+                                total_elapsed_seconds=performance.get(
+                                    "total_elapsed_seconds"
+                                ),
+                                stored_format=performance.get("total_elapsed_minutes"),
+                            )
+                        )
                 except Exception as e:
                     logger.warning(f"Could not load metadata.json for {run_id}: {e}")
 
@@ -490,7 +472,8 @@ async def get_runs_list():
                 "formatted_date": formatted_date,
                 "event_summary": run.get("event_summary", {}),
                 "status": run.get("status", "complete"),
-                "total_elapsed_minutes": total_elapsed_minutes,  # Issue #638: Add Run Time column
+                "total_elapsed_minutes": total_elapsed_minutes,  # mm:ss for Run Time column
+                "total_elapsed_seconds": total_elapsed_seconds,  # Issue #964: sort/display source
             }
             runs_list.append(run_entry)
 

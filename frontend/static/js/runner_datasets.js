@@ -1,5 +1,5 @@
 /**
- * Org runner datasets — Build hub catalog and Package picker (Issue #879).
+ * Org runner datasets — Build hub catalog and Package picker (Issues #879 / #957 / #958).
  */
 (function () {
     function escapeHtml(str) {
@@ -16,7 +16,7 @@
         try {
             const d = new Date(iso);
             const m = ('0' + (d.getMonth() + 1)).slice(-2);
-            const day = ('0' + d.getDate()).slice(-2);
+            const day = ('0' + (d.getDate())).slice(-2);
             const h = ('0' + d.getHours()).slice(-2);
             const min = ('0' + d.getMinutes()).slice(-2);
             return m + '-' + day + ' ' + h + ':' + min;
@@ -34,6 +34,39 @@
             return event + ' ' + (n == null ? '—' : n);
         });
         return parts.length ? parts.join(' · ') : '—';
+    }
+
+    function usedByLabel(dataset) {
+        const used = (dataset && dataset.used_by) || [];
+        if (!used.length) return '—';
+        return used.map(function (u) { return u.label || u.config_id; }).join(', ');
+    }
+
+    function lineageLabel(dataset, byId) {
+        const sourceId = dataset && dataset.source_dataset_id;
+        if (!sourceId) return 'Actuals';
+        const src = byId[sourceId];
+        const srcName = src ? src.label : sourceId;
+        const lineage = dataset.lineage || {};
+        const events = lineage.events || {};
+        const bits = [];
+        Object.keys(events).forEach(function (event) {
+            const row = events[event] || {};
+            const dN = row.participants_delta;
+            const dP50 = row.p50_delta;
+            let part = event;
+            if (dN != null) {
+                part += ' ' + (dN >= 0 ? '+' : '') + dN;
+                if (row.participants_delta_pct != null) {
+                    part += ' (' + (row.participants_delta_pct * 100).toFixed(0) + '%)';
+                }
+            }
+            if (dP50 != null) {
+                part += ' P50 ' + (dP50 >= 0 ? '+' : '') + Number(dP50).toFixed(2);
+            }
+            bits.push(part);
+        });
+        return bits.length ? srcName + ' → ' + bits.join('; ') : srcName;
     }
 
     const PACE_METRIC_ROWS = [
@@ -146,13 +179,6 @@
         renderPackageDatasetMetrics(dataset);
     }
 
-    function sourceLabel(dataset, byId) {
-        const sourceId = dataset && dataset.source_dataset_id;
-        if (!sourceId) return 'Actuals';
-        const src = byId[sourceId];
-        return src ? src.label : sourceId;
-    }
-
     function parsePercentToDecimal(inputValue) {
         if (!inputValue || String(inputValue).trim() === '') return 0;
         const cleaned = String(inputValue).trim().replace(/%$/, '');
@@ -188,12 +214,14 @@
     let scenarioSourceId = null;
     let hubListenersBound = false;
     let packageListenersBound = false;
+    let racerosterEvents = [];
+    let racerosterFiles = [];
 
     async function loadHubDatasets() {
         const tbody = document.getElementById('race-config-runners-tbody');
         if (!tbody) return;
         tbody.innerHTML =
-            '<tr><td colspan="6" class="placeholder">Loading runner datasets…</td></tr>';
+            '<tr><td colspan="7" class="placeholder">Loading runner datasets…</td></tr>';
         try {
             const resp = await fetch('/api/org/runners', { credentials: 'same-origin' });
             const data = await resp.json().catch(function () { return {}; });
@@ -202,7 +230,7 @@
             renderHubTable();
         } catch (err) {
             tbody.innerHTML =
-                '<tr><td colspan="6" class="placeholder">' +
+                '<tr><td colspan="7" class="placeholder">' +
                 escapeHtml(err.message || String(err)) +
                 '</td></tr>';
         }
@@ -213,7 +241,7 @@
         if (!tbody) return;
         if (!hubDatasets.length) {
             tbody.innerHTML =
-                '<tr><td colspan="6" class="placeholder">No runner datasets yet. Import actuals to create the first dataset.</td></tr>';
+                '<tr><td colspan="7" class="placeholder">No runner datasets yet. Import Race Roster or CSV actuals to create the first dataset.</td></tr>';
             return;
         }
         const byId = {};
@@ -223,24 +251,44 @@
         tbody.innerHTML = '';
         hubDatasets.forEach(function (row) {
             const tr = document.createElement('tr');
+            if (row.archived) tr.classList.add('is-archived');
             const events = (row.events || []).join(', ') || '—';
+            const name = (row.label || row.dataset_id) + (row.archived ? ' (archived)' : '');
             tr.innerHTML =
-                '<td>' + escapeHtml(row.label || row.dataset_id) + '</td>' +
+                '<td>' + escapeHtml(name) + '</td>' +
                 '<td>' + escapeHtml(events) + '</td>' +
-                '<td>' + escapeHtml(sourceLabel(row, byId)) + '</td>' +
+                '<td>' + escapeHtml(lineageLabel(row, byId)) + '</td>' +
                 '<td>' + escapeHtml(participantsLabel(row)) + '</td>' +
+                '<td>' + escapeHtml(usedByLabel(row)) + '</td>' +
                 '<td>' + escapeHtml(formatSavedOn(row.created)) + '</td>' +
                 '<td class="course-map-action-cell"></td>';
             const actions = tr.querySelector('.course-map-action-cell');
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'course-btn';
-            btn.textContent = 'Create scenario';
-            btn.addEventListener('click', function (ev) {
-                ev.preventDefault();
-                openScenarioPanel(row);
-            });
-            actions.appendChild(btn);
+            const ta = window.TableActions;
+            if (ta && actions) {
+                actions.appendChild(ta.createIconButton('copy', 'Create scenario', function (ev) {
+                    ev.preventDefault();
+                    openScenarioPanel(row);
+                }));
+                actions.appendChild(ta.createIconButton('edit', 'Edit name / description', function (ev) {
+                    ev.preventDefault();
+                    openEditModal(row);
+                }));
+                if (row.archived) {
+                    actions.appendChild(ta.createIconButton('restore', 'Restore dataset', function (ev) {
+                        ev.preventDefault();
+                        archiveDataset(row, false);
+                    }));
+                } else {
+                    actions.appendChild(ta.createIconButton('archive', 'Archive dataset', function (ev) {
+                        ev.preventDefault();
+                        archiveDataset(row, true);
+                    }));
+                }
+                actions.appendChild(ta.createIconButton('delete', 'Delete dataset', function (ev) {
+                    ev.preventDefault();
+                    deleteDataset(row);
+                }));
+            }
             tbody.appendChild(tr);
         });
     }
@@ -307,6 +355,390 @@
         }
     }
 
+    function openRaceRosterModal() {
+        const modal = document.getElementById('runner-dataset-raceroster-modal');
+        const label = document.getElementById('runner-dataset-raceroster-label');
+        const desc = document.getElementById('runner-dataset-raceroster-description');
+        const files = document.getElementById('runner-dataset-raceroster-files');
+        const mapping = document.getElementById('runner-dataset-raceroster-mapping');
+        const preview = document.getElementById('runner-dataset-raceroster-preview');
+        if (label) label.value = '';
+        if (desc) desc.value = '';
+        if (files) files.value = '';
+        if (mapping) mapping.innerHTML = '';
+        if (preview) preview.innerHTML = '';
+        racerosterFiles = [];
+        racerosterEvents = [];
+        const previewBtn = document.getElementById('runner-dataset-raceroster-preview-btn');
+        const saveBtn = document.getElementById('runner-dataset-raceroster-save');
+        if (previewBtn) previewBtn.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
+        setStatus(document.getElementById('runner-dataset-raceroster-status'), '', false);
+        if (modal) modal.classList.add('open');
+        if (label) label.focus();
+    }
+
+    function closeRaceRosterModal() {
+        const modal = document.getElementById('runner-dataset-raceroster-modal');
+        if (modal) modal.classList.remove('open');
+    }
+
+    function collectSheetEventMap() {
+        const selects = document.querySelectorAll('#runner-dataset-raceroster-mapping select[data-rr-sheet]');
+        const map = {};
+        selects.forEach(function (sel) {
+            const sheet = sel.getAttribute('data-rr-sheet');
+            const event = (sel.value || '').trim();
+            if (sheet && event) map[sheet] = event;
+        });
+        return map;
+    }
+
+    function renderSheetMapping(workbooks, events) {
+        const host = document.getElementById('runner-dataset-raceroster-mapping');
+        if (!host) return;
+        racerosterEvents = events || [];
+        let html = '';
+        (workbooks || []).forEach(function (wb) {
+            html += '<p class="card-help" style="margin:0 0 0.35rem 0;font-weight:600;">' +
+                escapeHtml(wb.filename || 'Workbook') + '</p>';
+            html += '<table class="table-sticky-header" style="width:100%;font-size:0.875rem;margin-bottom:0.75rem;"><thead><tr>';
+            html += '<th>Sheet</th><th>Event</th></tr></thead><tbody>';
+            (wb.sheets || []).forEach(function (row) {
+                const sheet = row.sheet || '';
+                const suggested = row.suggested_event || '';
+                html += '<tr><td>' + escapeHtml(sheet) + '</td><td>';
+                html += '<select data-rr-sheet="' + escapeHtml(sheet) + '" style="min-width:8rem;padding:0.25rem;">';
+                html += '<option value="">— skip —</option>';
+                racerosterEvents.forEach(function (ev) {
+                    const selected = ev.id === suggested ? ' selected' : '';
+                    html += '<option value="' + escapeHtml(ev.id) + '"' + selected + '>' +
+                        escapeHtml(ev.long_label || ev.label || ev.id) + '</option>';
+                });
+                html += '</select></td></tr>';
+            });
+            html += '</tbody></table>';
+        });
+        host.innerHTML = html || '<p class="card-help">No sheets found.</p>';
+        const previewBtn = document.getElementById('runner-dataset-raceroster-preview-btn');
+        const saveBtn = document.getElementById('runner-dataset-raceroster-save');
+        if (previewBtn) previewBtn.disabled = false;
+        if (saveBtn) saveBtn.disabled = false;
+    }
+
+    function renderRaceRosterPreview(eventsPreview) {
+        const host = document.getElementById('runner-dataset-raceroster-preview');
+        if (!host) return;
+        const events = Object.keys(eventsPreview || {});
+        if (!events.length) {
+            host.innerHTML = '<p class="card-help">No mapped events to preview.</p>';
+            return;
+        }
+        let html = '<table class="table-sticky-header" style="width:100%;font-size:0.8rem;"><thead><tr>';
+        html += '<th>Event</th><th>Runners</th><th>Skipped</th><th>P00</th><th>P50</th><th>P100</th><th>Offset</th></tr></thead><tbody>';
+        events.forEach(function (event) {
+            const row = eventsPreview[event] || {};
+            html += '<tr><td>' + escapeHtml(event) + '</td>';
+            html += '<td>' + escapeHtml(String(row.participants != null ? row.participants : '—')) + '</td>';
+            html += '<td>' + escapeHtml(String(row.skipped_no_chip != null ? row.skipped_no_chip : '—')) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(row.p00)) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(row.p50)) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(row.p100)) + '</td>';
+            html += '<td>' + escapeHtml(
+                (row.start_offset_min != null && row.start_offset_max != null)
+                    ? (row.start_offset_min + '–' + row.start_offset_max + 's')
+                    : '—'
+            ) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        host.innerHTML = html;
+    }
+
+    async function inspectRaceRoster() {
+        const filesEl = document.getElementById('runner-dataset-raceroster-files');
+        const files = filesEl && filesEl.files ? Array.from(filesEl.files) : [];
+        if (!files.length) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Select a workbook.', true);
+            return;
+        }
+        racerosterFiles = files;
+        const fd = new FormData();
+        files.forEach(function (file) {
+            fd.append('files', file, file.name);
+        });
+        setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Reading sheets…', false);
+        try {
+            const resp = await fetch('/api/org/runners/raceroster/inspect', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd,
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Inspect failed'));
+            renderSheetMapping(data.workbooks || [], data.events || []);
+            const preview = document.getElementById('runner-dataset-raceroster-preview');
+            if (preview) preview.innerHTML = '';
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Map sheets to events, then Preview.', false);
+        } catch (err) {
+            setStatus(
+                document.getElementById('runner-dataset-raceroster-status'),
+                err.message || String(err),
+                true
+            );
+        }
+    }
+
+    async function previewRaceRoster() {
+        const map = collectSheetEventMap();
+        if (!Object.keys(map).length) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Map at least one sheet to an event.', true);
+            return;
+        }
+        const files = racerosterFiles.length
+            ? racerosterFiles
+            : (document.getElementById('runner-dataset-raceroster-files') &&
+                Array.from(document.getElementById('runner-dataset-raceroster-files').files || []));
+        if (!files.length) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Select a workbook.', true);
+            return;
+        }
+        const fd = new FormData();
+        fd.append('sheet_event_map', JSON.stringify(map));
+        files.forEach(function (file) {
+            fd.append('files', file, file.name);
+        });
+        setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Building preview…', false);
+        try {
+            const resp = await fetch('/api/org/runners/raceroster/preview', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd,
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Preview failed'));
+            renderRaceRosterPreview(data.events || {});
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Preview ready. Create when it looks right.', false);
+        } catch (err) {
+            setStatus(
+                document.getElementById('runner-dataset-raceroster-status'),
+                err.message || String(err),
+                true
+            );
+        }
+    }
+
+    async function submitRaceRoster() {
+        const labelEl = document.getElementById('runner-dataset-raceroster-label');
+        const descEl = document.getElementById('runner-dataset-raceroster-description');
+        const saveBtn = document.getElementById('runner-dataset-raceroster-save');
+        const label = labelEl && labelEl.value.trim();
+        const map = collectSheetEventMap();
+        if (!label) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Enter a name.', true);
+            return;
+        }
+        if (!Object.keys(map).length) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Map at least one sheet to an event.', true);
+            return;
+        }
+        const files = racerosterFiles.length
+            ? racerosterFiles
+            : (document.getElementById('runner-dataset-raceroster-files') &&
+                Array.from(document.getElementById('runner-dataset-raceroster-files').files || []));
+        if (!files.length) {
+            setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Select a workbook.', true);
+            return;
+        }
+        const fd = new FormData();
+        fd.append('label', label);
+        fd.append('description', (descEl && descEl.value.trim()) || '');
+        fd.append('sheet_event_map', JSON.stringify(map));
+        files.forEach(function (file) {
+            fd.append('files', file, file.name);
+        });
+        if (saveBtn) saveBtn.disabled = true;
+        setStatus(document.getElementById('runner-dataset-raceroster-status'), 'Creating dataset…', false);
+        try {
+            const resp = await fetch('/api/org/runners/raceroster', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd,
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Create failed'));
+            closeRaceRosterModal();
+            await loadHubDatasets();
+        } catch (err) {
+            setStatus(
+                document.getElementById('runner-dataset-raceroster-status'),
+                err.message || String(err),
+                true
+            );
+        } finally {
+            if (saveBtn) saveBtn.disabled = false;
+        }
+    }
+
+    function openEditModal(dataset) {
+        const modal = document.getElementById('runner-dataset-edit-modal');
+        const idEl = document.getElementById('runner-dataset-edit-id');
+        const label = document.getElementById('runner-dataset-edit-label');
+        const desc = document.getElementById('runner-dataset-edit-description');
+        if (idEl) idEl.value = dataset.dataset_id || '';
+        if (label) label.value = dataset.label || '';
+        if (desc) desc.value = dataset.description || '';
+        setStatus(document.getElementById('runner-dataset-edit-status'), '', false);
+        if (modal) modal.classList.add('open');
+        if (label) label.focus();
+    }
+
+    function closeEditModal() {
+        const modal = document.getElementById('runner-dataset-edit-modal');
+        if (modal) modal.classList.remove('open');
+    }
+
+    async function submitEdit() {
+        const idEl = document.getElementById('runner-dataset-edit-id');
+        const labelEl = document.getElementById('runner-dataset-edit-label');
+        const descEl = document.getElementById('runner-dataset-edit-description');
+        const saveBtn = document.getElementById('runner-dataset-edit-save');
+        const datasetId = idEl && idEl.value.trim();
+        const label = labelEl && labelEl.value.trim();
+        if (!datasetId || !label) {
+            setStatus(document.getElementById('runner-dataset-edit-status'), 'Name is required.', true);
+            return;
+        }
+        if (saveBtn) saveBtn.disabled = true;
+        try {
+            const resp = await fetch('/api/org/runners/' + encodeURIComponent(datasetId), {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    label: label,
+                    description: (descEl && descEl.value.trim()) || '',
+                }),
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Save failed'));
+            closeEditModal();
+            await loadHubDatasets();
+        } catch (err) {
+            setStatus(
+                document.getElementById('runner-dataset-edit-status'),
+                err.message || String(err),
+                true
+            );
+        } finally {
+            if (saveBtn) saveBtn.disabled = false;
+        }
+    }
+
+    async function archiveDataset(dataset, archived) {
+        const used = (dataset.used_by || []).map(function (u) { return u.label || u.config_id; });
+        if (archived && used.length) {
+            window.alert('Cannot archive while packages use this dataset: ' + used.join(', '));
+            return;
+        }
+        try {
+            const resp = await fetch(
+                '/api/org/runners/' + encodeURIComponent(dataset.dataset_id) + '/archive',
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ archived: archived }),
+                }
+            );
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Archive failed'));
+            await loadHubDatasets();
+        } catch (err) {
+            window.alert(err.message || String(err));
+        }
+    }
+
+    async function deleteDataset(dataset) {
+        const used = (dataset.used_by || []).map(function (u) { return u.label || u.config_id; });
+        if (used.length) {
+            window.alert('Cannot delete while packages use this dataset: ' + used.join(', '));
+            return;
+        }
+        const ta = window.TableActions;
+        if (ta && ta.doubleConfirmDelete) {
+            if (!ta.doubleConfirmDelete({
+                subject: 'dataset "' + (dataset.label || dataset.dataset_id) + '"',
+                detail: 'Runner CSVs will be permanently removed from the library.',
+            })) {
+                return;
+            }
+        } else if (!window.confirm('Delete dataset "' + (dataset.label || dataset.dataset_id) + '"?')) {
+            return;
+        }
+        try {
+            const resp = await fetch(
+                '/api/org/runners/' + encodeURIComponent(dataset.dataset_id),
+                { method: 'DELETE', credentials: 'same-origin' }
+            );
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Delete failed'));
+            await loadHubDatasets();
+        } catch (err) {
+            window.alert(err.message || String(err));
+        }
+    }
+
+    function collectScenarioControls() {
+        const controlVariables = {};
+        const inputs = document.querySelectorAll('#runner-dataset-scenario-controls input[data-rf-chg]');
+        inputs.forEach(function (input) {
+            const event = input.getAttribute('data-rf-event');
+            const key = input.getAttribute('data-rf-chg');
+            if (!event || !key) return;
+            if (!controlVariables[event]) controlVariables[event] = {};
+            controlVariables[event][key] = parsePercentToDecimal(input.value);
+        });
+        return controlVariables;
+    }
+
+    function renderScenarioPreview(preview) {
+        const host = document.getElementById('runner-dataset-scenario-preview');
+        if (!host) return;
+        const events = preview && preview.events ? preview.events : {};
+        const keys = Object.keys(events);
+        if (!keys.length) {
+            host.innerHTML = '';
+            return;
+        }
+        let html = '<p class="card-help" style="margin:0 0 0.35rem 0;">Preview (source → scenario). Nothing written yet.</p>';
+        html += '<table class="table-sticky-header" style="width:100%;font-size:0.8rem;"><thead><tr>';
+        html += '<th>Event</th><th>Participants</th><th>Δ</th><th>P00</th><th>P50</th><th>P100</th></tr></thead><tbody>';
+        keys.forEach(function (event) {
+            const row = events[event] || {};
+            const src = row.source || {};
+            const scn = row.scenario || {};
+            const dN = row.participants_delta;
+            const dPct = row.participants_delta_pct;
+            let deltaText = '—';
+            if (dN != null) {
+                deltaText = (dN >= 0 ? '+' : '') + dN;
+                if (dPct != null) deltaText += ' (' + (dPct * 100).toFixed(0) + '%)';
+            }
+            html += '<tr><td>' + escapeHtml(event) + '</td>';
+            html += '<td>' + escapeHtml(
+                (src.participants != null ? src.participants : '—') +
+                ' → ' +
+                (scn.participants != null ? scn.participants : '—')
+            ) + '</td>';
+            html += '<td>' + escapeHtml(deltaText) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(src.p00) + ' → ' + formatPace(scn.p00)) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(src.p50) + ' → ' + formatPace(scn.p50)) + '</td>';
+            html += '<td>' + escapeHtml(formatPace(src.p100) + ' → ' + formatPace(scn.p100)) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        host.innerHTML = html;
+    }
+
     function openScenarioPanel(dataset) {
         scenarioSourceId = dataset.dataset_id;
         const panel = document.getElementById('runner-dataset-scenario-panel');
@@ -314,6 +746,8 @@
         const labelEl = document.getElementById('runner-dataset-scenario-label');
         const descEl = document.getElementById('runner-dataset-scenario-description');
         const host = document.getElementById('runner-dataset-scenario-controls');
+        const previewHost = document.getElementById('runner-dataset-scenario-preview');
+        if (previewHost) previewHost.innerHTML = '';
         if (sourceEl) {
             sourceEl.textContent =
                 'Source: ' + (dataset.label || dataset.dataset_id) +
@@ -357,7 +791,7 @@
                     html += '</tr>';
                 });
                 html += '</tbody></table>';
-                html += '<p class="card-help" style="margin-top:0.5rem;">Percent change vs the source (40 = +40%). Default 0 copies the source distribution into a new dataset id.</p>';
+                html += '<p class="card-help" style="margin-top:0.5rem;">Percent change vs the source (40 = +40%). Default 0 copies the source distribution into a new dataset id. Use Preview before Create.</p>';
                 host.innerHTML = html;
             }
         }
@@ -371,6 +805,49 @@
         scenarioSourceId = null;
         const panel = document.getElementById('runner-dataset-scenario-panel');
         if (panel) panel.style.display = 'none';
+        const previewHost = document.getElementById('runner-dataset-scenario-preview');
+        if (previewHost) previewHost.innerHTML = '';
+    }
+
+    async function previewScenario() {
+        if (!scenarioSourceId) return;
+        let controlVariables;
+        try {
+            controlVariables = collectScenarioControls();
+        } catch (err) {
+            setStatus(document.getElementById('runner-dataset-scenario-status'), err.message || String(err), true);
+            return;
+        }
+        if (!Object.keys(controlVariables).length) {
+            setStatus(document.getElementById('runner-dataset-scenario-status'), 'Source has no events.', true);
+            return;
+        }
+        const btn = document.getElementById('runner-dataset-scenario-preview-btn');
+        if (btn) btn.disabled = true;
+        setStatus(document.getElementById('runner-dataset-scenario-status'), 'Building preview…', false);
+        try {
+            const resp = await fetch(
+                '/api/org/runners/' + encodeURIComponent(scenarioSourceId) + '/scenarios/preview',
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ control_variables: controlVariables }),
+                }
+            );
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok) throw new Error(apiError(data, 'Preview failed'));
+            renderScenarioPreview(data);
+            setStatus(document.getElementById('runner-dataset-scenario-status'), 'Preview ready.', false);
+        } catch (err) {
+            setStatus(
+                document.getElementById('runner-dataset-scenario-status'),
+                err.message || String(err),
+                true
+            );
+        } finally {
+            if (btn) btn.disabled = false;
+        }
     }
 
     async function submitScenario() {
@@ -383,16 +860,9 @@
             setStatus(document.getElementById('runner-dataset-scenario-status'), 'Enter a name.', true);
             return;
         }
-        const controlVariables = {};
-        const inputs = document.querySelectorAll('#runner-dataset-scenario-controls input[data-rf-chg]');
+        let controlVariables;
         try {
-            inputs.forEach(function (input) {
-                const event = input.getAttribute('data-rf-event');
-                const key = input.getAttribute('data-rf-chg');
-                if (!event || !key) return;
-                if (!controlVariables[event]) controlVariables[event] = {};
-                controlVariables[event][key] = parsePercentToDecimal(input.value);
-            });
+            controlVariables = collectScenarioControls();
         } catch (err) {
             setStatus(document.getElementById('runner-dataset-scenario-status'), err.message || String(err), true);
             return;
@@ -446,6 +916,34 @@
                 if (e.target === importModal) closeImportModal();
             });
         }
+        const rrBtn = document.getElementById('runner-dataset-raceroster-btn');
+        if (rrBtn) rrBtn.addEventListener('click', openRaceRosterModal);
+        const rrCancel = document.getElementById('runner-dataset-raceroster-cancel');
+        if (rrCancel) rrCancel.addEventListener('click', closeRaceRosterModal);
+        const rrInspect = document.getElementById('runner-dataset-raceroster-inspect');
+        if (rrInspect) rrInspect.addEventListener('click', inspectRaceRoster);
+        const rrPreview = document.getElementById('runner-dataset-raceroster-preview-btn');
+        if (rrPreview) rrPreview.addEventListener('click', previewRaceRoster);
+        const rrSave = document.getElementById('runner-dataset-raceroster-save');
+        if (rrSave) rrSave.addEventListener('click', submitRaceRoster);
+        const rrModal = document.getElementById('runner-dataset-raceroster-modal');
+        if (rrModal) {
+            rrModal.addEventListener('click', function (e) {
+                if (e.target === rrModal) closeRaceRosterModal();
+            });
+        }
+        const editCancel = document.getElementById('runner-dataset-edit-cancel');
+        if (editCancel) editCancel.addEventListener('click', closeEditModal);
+        const editSave = document.getElementById('runner-dataset-edit-save');
+        if (editSave) editSave.addEventListener('click', submitEdit);
+        const editModal = document.getElementById('runner-dataset-edit-modal');
+        if (editModal) {
+            editModal.addEventListener('click', function (e) {
+                if (e.target === editModal) closeEditModal();
+            });
+        }
+        const scenarioPreview = document.getElementById('runner-dataset-scenario-preview-btn');
+        if (scenarioPreview) scenarioPreview.addEventListener('click', previewScenario);
         const scenarioSave = document.getElementById('runner-dataset-scenario-save');
         if (scenarioSave) scenarioSave.addEventListener('click', submitScenario);
         const scenarioCancel = document.getElementById('runner-dataset-scenario-cancel');
@@ -477,7 +975,9 @@
             const required = data.required_events || [];
             const assignedId = data.runners_dataset_id || '';
             const dataset = data.dataset;
-            const compatible = data.compatible_datasets || [];
+            const compatible = (data.compatible_datasets || []).filter(function (row) {
+                return !row.archived;
+            });
             packagePickerState = {
                 compatible: compatible,
                 assigned: dataset && !dataset.missing ? dataset : null,

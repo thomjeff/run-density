@@ -9,10 +9,15 @@ from app.core.config_package.runner_datasets import (
     assign_runner_dataset_or_delete_package,
     create_runner_dataset,
     create_scenario_dataset,
+    delete_runner_dataset,
     get_package_runner_assignment,
     list_compatible_runner_datasets,
     list_runner_datasets,
     load_runner_dataset,
+    packages_using_dataset,
+    preview_scenario_dataset,
+    set_runner_dataset_archived,
+    update_runner_dataset_metadata,
 )
 from app.core.config_package.storage import (
     create_config_package,
@@ -315,3 +320,70 @@ def test_incompatible_dataset_on_create_deletes_package(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="missing required event"):
         assign_runner_dataset_or_delete_package(config_id, dataset["dataset_id"])
     assert not (tmp_path / "config" / config_id).exists()
+
+
+def test_scenario_preview_writes_nothing_and_matches_create(tmp_path, monkeypatch):
+    """Issue #958: preview is a dry-run of the same generation math as create."""
+    _patch_roots(tmp_path, monkeypatch)
+    source = create_runner_dataset(
+        "Actuals",
+        [("10k_runners.csv", _csv("10k", ["a1", "a2", "a3", "a4"]))],
+    )
+    runners_root = tmp_path / "org" / "runners"
+    before = {p.name for p in runners_root.iterdir()}
+    controls = _zero_controls("10k")
+    controls["10k"]["chg_participants"] = 0.5
+    preview = preview_scenario_dataset(source["dataset_id"], control_variables=controls)
+    after = {p.name for p in runners_root.iterdir()}
+    assert after == before
+    assert preview["scenario_summary"]["10k"]["participants"] > 4
+    assert preview["events"]["10k"]["participants_delta"] > 0
+    created = create_scenario_dataset(
+        source["dataset_id"],
+        label="Grown",
+        control_variables=controls,
+    )
+    assert created["summary"]["10k"]["participants"] == preview["scenario_summary"][
+        "10k"
+    ]["participants"]
+    assert (
+        created["lineage"]["events"]["10k"]["participants_delta"]
+        == preview["events"]["10k"]["participants_delta"]
+    )
+    assert created["summary"]["10k"]["p50"] == pytest.approx(
+        preview["scenario_summary"]["10k"]["p50"]
+    )
+
+
+def test_delete_and_archive_blocked_while_package_uses_dataset(tmp_path, monkeypatch):
+    """Issue #958: usage guards for archive/delete."""
+    _patch_roots(tmp_path, monkeypatch)
+    dataset = create_runner_dataset(
+        "Field",
+        [("10k_runners.csv", _csv("10k", ["a1"]))],
+    )
+    pkg = create_config_package(
+        "Race", "", event_day="sun", package_events=["10k"]
+    )
+    assign_runner_dataset(pkg["config_id"], dataset["dataset_id"])
+    users = packages_using_dataset(dataset["dataset_id"])
+    assert any(u["config_id"] == pkg["config_id"] for u in users)
+    with pytest.raises(ValueError, match="Cannot delete"):
+        delete_runner_dataset(dataset["dataset_id"])
+    with pytest.raises(ValueError, match="Cannot archive"):
+        set_runner_dataset_archived(dataset["dataset_id"], True)
+    # Unassign by clearing assignment via a different dataset is out of scope;
+    # delete the package reference by rewriting manifest for the test.
+    manifest = load_config_manifest(pkg["config_id"])
+    del manifest["runners_dataset_id"]
+    from app.core.config_package.storage import save_config_manifest
+
+    save_config_manifest(tmp_path / "config" / pkg["config_id"], manifest)
+    updated = update_runner_dataset_metadata(
+        dataset["dataset_id"], label="Field renamed", description="note"
+    )
+    assert updated["label"] == "Field renamed"
+    archived = set_runner_dataset_archived(dataset["dataset_id"], True)
+    assert archived["archived"] is True
+    delete_runner_dataset(dataset["dataset_id"])
+    assert not (tmp_path / "org" / "runners" / dataset["dataset_id"]).exists()

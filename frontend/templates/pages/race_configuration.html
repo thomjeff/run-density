@@ -85,13 +85,14 @@
                     <div class="card-header">
                         <h3 class="card-title visually-hidden">Runners</h3>
                         <div class="card-actions">
-                            <button type="button" id="runner-dataset-import-btn" class="course-btn primary">Import actuals</button>
+                            <button type="button" id="runner-dataset-raceroster-btn" class="course-btn primary">Import Race Roster</button>
+                            <button type="button" id="runner-dataset-import-btn" class="course-btn">Import CSV</button>
                         </div>
                     </div>
                     <p class="card-help" style="margin: 0 0 0.75rem 0;">
-                        Named, immutable runner datasets. Import race-result CSVs, or create a scenario
-                        (new dataset) from an existing one. Packages select a compatible dataset;
-                        analysis uses a frozen copy on the package.
+                        Named, immutable runner datasets. Import Race Roster results (or CSV actuals),
+                        or create a scenario (new dataset) from an existing one. Packages select a
+                        compatible dataset; analysis uses a frozen copy on the package.
                     </p>
                     <div class="scrollable-table-container">
                         <table id="race-config-runners-table" class="table-sticky-header">
@@ -101,12 +102,13 @@
                                     <th>Events</th>
                                     <th>Source</th>
                                     <th>Participants</th>
+                                    <th>Used by</th>
                                     <th>Created</th>
                                     <th class="course-map-action-cell">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="race-config-runners-tbody">
-                                <tr><td colspan="6" class="placeholder">Loading runner datasets…</td></tr>
+                                <tr><td colspan="7" class="placeholder">Loading runner datasets…</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -118,7 +120,9 @@
                         <label for="runner-dataset-scenario-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="font-weight: normal; color: #95a5a6;">(optional)</span></label>
                         <input type="text" id="runner-dataset-scenario-description" class="config-package-input" maxlength="255" style="width: 100%; max-width: 28rem; margin-bottom: 0.75rem;" />
                         <div id="runner-dataset-scenario-controls" style="overflow-x: auto; margin-bottom: 0.75rem;"></div>
+                        <div id="runner-dataset-scenario-preview" style="overflow-x: auto; margin-bottom: 0.75rem;"></div>
                         <p id="runner-dataset-scenario-status" class="card-help" style="display: none; margin: 0 0 0.75rem 0;"></p>
+                        <button type="button" id="runner-dataset-scenario-preview-btn" class="course-btn">Preview</button>
                         <button type="button" id="runner-dataset-scenario-save" class="course-btn primary">Create dataset</button>
                         <button type="button" id="runner-dataset-scenario-cancel" class="course-btn">Cancel</button>
                     </div>
@@ -126,10 +130,11 @@
 
                 <div id="runner-dataset-import-modal" class="race-config-modal" role="dialog" aria-labelledby="runner-dataset-import-title" aria-modal="true">
                     <div class="modal-panel">
-                        <h3 id="runner-dataset-import-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Import actuals</h3>
+                        <h3 id="runner-dataset-import-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Import CSV actuals</h3>
                         <p class="card-help" style="margin: 0 0 1rem 0;">
                             Files must be named <code>{event}_runners.csv</code> (e.g. <code>10k_runners.csv</code>).
                             <code>runner_id</code> values must be unique across all files in the dataset.
+                            Prefer <strong>Import Race Roster</strong> when you have a results workbook.
                         </p>
                         <label for="runner-dataset-import-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
                         <input type="text" id="runner-dataset-import-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;" placeholder="e.g. 2026 race week actuals" />
@@ -141,6 +146,48 @@
                         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                             <button type="button" id="runner-dataset-import-cancel" class="course-btn">Cancel</button>
                             <button type="button" id="runner-dataset-import-save" class="course-btn primary">Import</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="runner-dataset-raceroster-modal" class="race-config-modal" role="dialog" aria-labelledby="runner-dataset-raceroster-title" aria-modal="true">
+                    <div class="modal-panel" style="max-width: 40rem;">
+                        <h3 id="runner-dataset-raceroster-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Import Race Roster</h3>
+                        <p class="card-help" style="margin: 0 0 1rem 0;">
+                            Upload a Race Roster results workbook (.xlsx). Map each sheet to an event,
+                            preview pace and start offsets, then create an anonymized dataset
+                            (bib numbers are never stored).
+                        </p>
+                        <label for="runner-dataset-raceroster-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+                        <input type="text" id="runner-dataset-raceroster-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;" placeholder="e.g. FM2026 results" />
+                        <label for="runner-dataset-raceroster-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="font-weight: normal; color: #95a5a6;">(optional)</span></label>
+                        <textarea id="runner-dataset-raceroster-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+                        <label for="runner-dataset-raceroster-files" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Workbook (.xlsx)</label>
+                        <input type="file" id="runner-dataset-raceroster-files" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple style="display: block; margin-bottom: 1rem; max-width: 100%;" />
+                        <div id="runner-dataset-raceroster-mapping" style="margin-bottom: 1rem;"></div>
+                        <div id="runner-dataset-raceroster-preview" style="margin-bottom: 1rem;"></div>
+                        <p id="runner-dataset-raceroster-status" style="display: none; margin: 0 0 1rem 0; font-size: 0.9rem;"></p>
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
+                            <button type="button" id="runner-dataset-raceroster-cancel" class="course-btn">Cancel</button>
+                            <button type="button" id="runner-dataset-raceroster-inspect" class="course-btn">Map sheets</button>
+                            <button type="button" id="runner-dataset-raceroster-preview-btn" class="course-btn" disabled>Preview</button>
+                            <button type="button" id="runner-dataset-raceroster-save" class="course-btn primary" disabled>Create dataset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="runner-dataset-edit-modal" class="race-config-modal" role="dialog" aria-labelledby="runner-dataset-edit-title" aria-modal="true">
+                    <div class="modal-panel">
+                        <h3 id="runner-dataset-edit-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Edit dataset</h3>
+                        <input type="hidden" id="runner-dataset-edit-id" value="" />
+                        <label for="runner-dataset-edit-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+                        <input type="text" id="runner-dataset-edit-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;" />
+                        <label for="runner-dataset-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="font-weight: normal; color: #95a5a6;">(optional)</span></label>
+                        <textarea id="runner-dataset-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+                        <p id="runner-dataset-edit-status" style="display: none; margin: 0 0 1rem 0; font-size: 0.9rem;"></p>
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button type="button" id="runner-dataset-edit-cancel" class="course-btn">Cancel</button>
+                            <button type="button" id="runner-dataset-edit-save" class="course-btn primary">Save</button>
                         </div>
                     </div>
                 </div>
@@ -378,8 +425,8 @@
 <script src="/static/js/map/segment_recipes.js?v=948b"></script>
 <script src="/static/js/map/saved_courses.js?v=955"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
-<script src="/static/js/runner_datasets.js?v=878-metrics"></script>
+<script src="/static/js/runner_datasets.js?v=957-958"></script>
 <script src="/static/js/map/junctions_authoring.js?v=955"></script>
 <script src="/static/js/plan_run_analysis.js?v=906"></script>
-<script src="/static/js/race_configuration.js?v=955"></script>
+<script src="/static/js/race_configuration.js?v=957-958"></script>
 {% endblock %}

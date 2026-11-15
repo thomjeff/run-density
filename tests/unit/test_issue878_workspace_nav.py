@@ -127,11 +127,11 @@ def test_runners_hub_panel_exists():
     src = RACE_CONFIG.read_text(encoding="utf-8")
     assert 'id="race-config-hub-runners"' in src
     assert 'id="race-config-runners-tbody"' in src
-    assert "Import actuals" in src
+    assert "Import Race Roster" in src
+    assert 'id="runner-dataset-raceroster-btn"' in src
     assert 'id="package-runner-dataset-select"' in (
         REPO_ROOT / "frontend" / "templates" / "partials" / "runners_baseline_body.html"
     ).read_text(encoding="utf-8")
-    assert 'id="race-config-new-runners-dataset"' in src
     js = (REPO_ROOT / "frontend" / "static" / "js" / "runner_datasets.js").read_text(
         encoding="utf-8"
     )
